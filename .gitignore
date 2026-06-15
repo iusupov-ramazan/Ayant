@@ -1,0 +1,28 @@
+# ───── Secrets — NEVER commit ─────
+serviceAccountKey.json
+*-firebase-adminsdk-*.json
+*.p8
+*.p12
+.env
+.env.*
+
+# ───── Node ─────
+node_modules/
+functions/node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# ───── Firebase ─────
+.firebase/
+firebase-debug.log*
+.runtimeconfig.json
+
+# ───── macOS ─────
+.DS_Store
+
+# ───── Xcode ─────
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+build/
+DerivedData/
