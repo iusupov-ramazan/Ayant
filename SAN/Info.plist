@@ -4,6 +4,13 @@
 <dict>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Разреши доступ к локации, чтобы видеть расстояние до заведений рядом с тобой.</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>dgis</string>
+		<string>comgooglemaps</string>
+	</array>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>
@@ -14,6 +21,14 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>com.googleusercontent.apps.320025643761-td44kg0em59g974kk6218hbieo9lcmem</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>kg.san.app.deeplink</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>san</string>
 			</array>
 		</dict>
 	</array>

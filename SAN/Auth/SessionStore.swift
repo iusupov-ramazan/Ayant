@@ -19,7 +19,11 @@ final class SessionStore: ObservableObject {
         self.user = service.currentUser()
     }
 
+
     var isSignedIn: Bool { user != nil }
+
+    /// Гость = анонимный вход. Гостям недоступны: режим заведения, сохранения, отзывы.
+    var isGuest: Bool { user?.provider == .guest }
 
     // MARK: Email
 
@@ -76,9 +80,11 @@ final class SessionStore: ObservableObject {
     }
 
     func signOut() {
+        print("🔴 signOut called, user before: \(String(describing: user))")
         service.signOut()
         user = nil
         errorMessage = nil
+        print("🔴 signOut done, user after: \(String(describing: user)), isSignedIn: \(isSignedIn)")
     }
 
     // MARK: Общий запуск async-операции

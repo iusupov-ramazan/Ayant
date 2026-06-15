@@ -114,7 +114,7 @@ final class SnakeScene: SKScene {
         gridLayer.addChild(lines)
 
         // водяной знак по центру поля
-        let watermark = SKLabelNode(text: "Ulan loh")
+        let watermark = SKLabelNode(text: "Здесь может быть ваша реклама")
         watermark.fontName = "AvenirNext-Bold"
         watermark.fontSize = min(boardW, boardH) * 0.11
         watermark.fontColor = SKColor.gray.withAlphaComponent(0.18)

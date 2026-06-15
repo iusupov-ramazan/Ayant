@@ -19,6 +19,14 @@ enum AppConfig {
         useFirebase ? FirebaseDataRepository() : MockDataRepository()
     }
 
+    static func makeHostRepository() -> HostRepository {
+        useFirebase ? FirebaseHostRepository() : MockHostRepository()
+    }
+
+    static func makeAnalyticsService() -> AnalyticsService {
+        useFirebase ? FirebaseAnalyticsService() : MockAnalyticsService()
+    }
+
     static func makePushService() -> PushService {
         useFirebase ? FirebasePushService() : MockPushService()
     }

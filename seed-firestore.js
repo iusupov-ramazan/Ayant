@@ -26,6 +26,12 @@ function daysFromNow(n) {
   return Timestamp.fromDate(d);
 }
 
+function hoursFromNow(n) {
+  const d = new Date();
+  d.setHours(d.getHours() + n);
+  return Timestamp.fromDate(d);
+}
+
 // ─── Venues (10 заведений) ───────────────────────────────────────────────────
 
 const venues = [
@@ -336,33 +342,106 @@ const deals = [
   },
 ];
 
+// ─── Venue extra fields (рейтинг, координаты, спец, часы) ────────────────────
+// Город — Бишкек для всех. Координаты — реальные районы Бишкека.
+
+const venueExtras = {
+  navat:       { rating: 4.6, reviewCount: 213, isVerified: true,  savedByCount: 214, latitude: 42.8760, longitude: 74.6010, openHour: 10, closeHour: 23, todaySpecial: "Плов по-фергански весь день — 290 сом", photoEmojis: ["🫖","🍚","🥗","🍢"] },
+  faiza:       { rating: 4.4, reviewCount: 168, isVerified: true,  savedByCount: 156, latitude: 42.8825, longitude: 74.6300, openHour: 9,  closeHour: 22, photoEmojis: ["🥟","🍜","🥗"] },
+  sierra:      { rating: 4.7, reviewCount: 402, isVerified: true,  savedByCount: 389, latitude: 42.8745, longitude: 74.5890, openHour: 8,  closeHour: 23, todaySpecial: "Раф на кокосовом −20% до 12:00", photoEmojis: ["☕️","🍰","🥐","🧋"] },
+  bublik:      { rating: 4.3, reviewCount: 97,  isVerified: false, savedByCount: 88,  latitude: 42.8710, longitude: 74.6020, openHour: 8,  closeHour: 21, photoEmojis: ["🥐","🍞","🥨"] },
+  furusato:    { rating: 4.5, reviewCount: 254, isVerified: true,  savedByCount: 271, latitude: 42.8690, longitude: 74.6105, openHour: 11, closeHour: 23, pdfMenuURL: "https://example.com/furusato-menu.pdf", photoEmojis: ["🍣","🍱","🍤","🥢"] },
+  chickenstar: { rating: 4.2, reviewCount: 143, isVerified: false, savedByCount: 120, latitude: 42.8688, longitude: 74.6110, openHour: 10, closeHour: 24, todaySpecial: "Комбо «Стар» сегодня 350 сом", photoEmojis: ["🍗","🍟","🥤"] },
+  cyclone:     { rating: 4.1, reviewCount: 76,  isVerified: false, savedByCount: 64,  latitude: 42.8762, longitude: 74.5990, openHour: 12, closeHour: 23, photoEmojis: ["🍝","🍷","🥩"] },
+  adriano:     { rating: 4.8, reviewCount: 311, isVerified: true,  savedByCount: 342, latitude: 42.8770, longitude: 74.5805, openHour: 8,  closeHour: 22, photoEmojis: ["🍵","☕️","🍰"] },
+  arzu:        { rating: 4.0, reviewCount: 52,  isVerified: false, savedByCount: 41,  latitude: 42.8530, longitude: 74.6000, openHour: 9,  closeHour: 22, photoEmojis: ["🍲","🥘"] },
+  shaurma1:    { rating: 4.5, reviewCount: 188, isVerified: false, savedByCount: 173, latitude: 42.8900, longitude: 74.6200, openHour: 10, closeHour: 24, todaySpecial: "Вторая шаурма −50% после 18:00", photoEmojis: ["🌯","🧀","🥙"] },
+};
+
+// ─── Deal extra fields (статус, дата старта, картинки) ───────────────────────
+const dealExtras = {
+  d1:  { startDate: hoursFromNow(-20) }, d2: { startDate: daysFromNow(-5) },
+  d3:  { startDate: daysFromNow(-3) },   d4: { startDate: hoursFromNow(-30) },
+  d5:  { startDate: daysFromNow(-8) },   d6: { startDate: daysFromNow(-12) },
+  d7:  { startDate: hoursFromNow(-10) }, d8: { startDate: daysFromNow(-6) },
+  d9:  { startDate: daysFromNow(-2) },   d10:{ startDate: daysFromNow(-4) },
+  d11: { startDate: daysFromNow(-9) },   d12:{ startDate: daysFromNow(-1) },
+  d13: { startDate: daysFromNow(-7) },   d14:{ startDate: hoursFromNow(-40) },
+  d15: { startDate: daysFromNow(-5) },
+};
+
+// ─── Reviews (10 отзывов от пользователей) ───────────────────────────────────
+const reviews = [
+  { id: "r1", venueID: "navat", authorID: "u_aida", authorName: "Айда", rating: 5,
+    text: "Лучшая чайхана в центре. Манты огонь, чай наливают бесконечно.",
+    photoEmojis: ["🥟","🫖"], createdAt: daysFromNow(-3),
+    hostReply: { text: "Спасибо, Айда! Ждём снова 🫖", createdAt: daysFromNow(-2) } },
+  { id: "r2", venueID: "navat", authorID: "u_marat", authorName: "Марат", rating: 4,
+    text: "Вкусно, но в обед бывает шумно. Сервис быстрый.", photoEmojis: [], createdAt: daysFromNow(-10) },
+  { id: "r3", venueID: "sierra", authorID: "u_lena", authorName: "Лена", rating: 5,
+    text: "Мой любимый кофе в городе. Раф на кокосовом — топ.", photoEmojis: ["☕️"], createdAt: daysFromNow(-1) },
+  { id: "r4", venueID: "sierra", authorID: "u_ts", authorName: "Тимур", rating: 4,
+    text: "Отличное место для работы с ноутом, розеток хватает.", photoEmojis: [], createdAt: daysFromNow(-14) },
+  { id: "r5", venueID: "furusato", authorID: "u_dasha", authorName: "Даша", rating: 5,
+    text: "Свежие роллы, большие порции. Сет «Бишкек» берём компанией.",
+    photoEmojis: ["🍣","🍱"], createdAt: daysFromNow(-5),
+    hostReply: { text: "Рады, что понравилось! 🍣", createdAt: daysFromNow(-4) } },
+  { id: "r6", venueID: "adriano", authorID: "u_nur", authorName: "Нуржан", rating: 5,
+    text: "Матча просто космос. Десерты тоже на уровне.", photoEmojis: ["🍵"], createdAt: daysFromNow(-2) },
+  { id: "r7", venueID: "shaurma1", authorID: "u_beka", authorName: "Бека", rating: 4,
+    text: "Сытно и недорого. Вторая по акции — приятно.", photoEmojis: [], createdAt: daysFromNow(-6) },
+  { id: "r8", venueID: "faiza", authorID: "u_gulnara", authorName: "Гульнара", rating: 4,
+    text: "Лагман как у бабушки. Уютно и по-домашнему.", photoEmojis: ["🍜"], createdAt: daysFromNow(-8) },
+  { id: "r9", venueID: "chickenstar", authorID: "u_sam", authorName: "Сам", rating: 3,
+    text: "Курица вкусная, но ждали комбо долго.", photoEmojis: [], createdAt: daysFromNow(-11) },
+  { id: "r10", venueID: "bublik", authorID: "u_olya", authorName: "Оля", rating: 5,
+    text: "Круассаны утром свежайшие. Вечерняя скидка — бонус.", photoEmojis: ["🥐"], createdAt: daysFromNow(-4) },
+];
+
 // ─── Seed ────────────────────────────────────────────────────────────────────
 
 async function seed() {
   console.log("🔥 Seeding Firestore...\n");
 
-  // Venues
+  // Venues (+ enriched fields)
   const venuesBatch = db.batch();
   for (const { id, ...data } of venues) {
-    // Remove null fields to keep Firestore docs clean
+    const merged = { ...data, city: "bishkek", ...(venueExtras[id] ?? {}) };
     const clean = Object.fromEntries(
-      Object.entries(data).filter(([, v]) => v !== null)
+      Object.entries(merged).filter(([, v]) => v !== null && v !== undefined)
     );
     venuesBatch.set(db.collection("venues").doc(id), clean);
   }
   await venuesBatch.commit();
-  console.log(`✅ venues: ${venues.length} documents written`);
+  console.log(`✅ venues:  ${venues.length} documents written`);
 
-  // Deals
+  // Deals (+ status / startDate / imageEmojis)
   const dealsBatch = db.batch();
   for (const { id, ...data } of deals) {
+    const merged = {
+      ...data,
+      status: "active",
+      imageEmojis: data.emoji ? [data.emoji] : [],
+      ...(dealExtras[id] ?? {}),
+    };
     const clean = Object.fromEntries(
-      Object.entries(data).filter(([, v]) => v !== null)
+      Object.entries(merged).filter(([, v]) => v !== null && v !== undefined)
     );
     dealsBatch.set(db.collection("deals").doc(id), clean);
   }
   await dealsBatch.commit();
-  console.log(`✅ deals:  ${deals.length} documents written`);
+  console.log(`✅ deals:   ${deals.length} documents written`);
+
+  // Reviews
+  const reviewsBatch = db.batch();
+  for (const { id, ...data } of reviews) {
+    const clean = Object.fromEntries(
+      Object.entries(data).filter(([, v]) => v !== null && v !== undefined)
+    );
+    reviewsBatch.set(db.collection("reviews").doc(id), clean);
+  }
+  await reviewsBatch.commit();
+  console.log(`✅ reviews: ${reviews.length} documents written`);
 
   console.log("\n🎉 Done! Open Firebase Console to verify.");
   process.exit(0);

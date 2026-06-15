@@ -1,0 +1,55 @@
+rules_version = '2';
+
+// Правила доступа для каталога САН.
+// Чтение каталога — публичное (лента работает и для гостей).
+// Запись — только аутентифицированным (админ / хост).
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Заведения и предложения теперь хранят ownerID (uid владельца-хоста).
+    // Пока запись разрешена любому аутентифицированному (нужно для админ-панели).
+    // Когда появятся роли, можно ужесточить, напр.:
+    //   allow write: if request.auth != null &&
+    //     (request.resource.data.ownerID == request.auth.uid || isAdmin());
+    match /venues/{id} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    match /deals/{id} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    // Новая коллекция отзывов — без неё in-app чтение падало с permission-denied.
+    match /reviews/{id} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    // Очередь push-кампаний: хост создаёт документ, Cloud Function рассылает FCM.
+    // Клиенту читать не нужно; обновляет статус только бэкенд (admin SDK обходит правила).
+    match /pushCampaigns/{id} {
+      allow create: if request.auth != null;
+      allow read, update, delete: if false;
+    }
+
+    // Аналитика: любой аутентифицированный логирует события; читает владелец/админ.
+    match /analytics/{venueID}/{document=**} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+
+    // Профили хостов: хост пишет свой, админ выставляет верификацию.
+    match /hosts/{uid} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+
+    // FCM-токены пользователей (для адресной рассылки с частотным лимитом).
+    match /userTokens/{token} {
+      allow write: if request.auth != null;
+      allow read: if false;
+    }
+  }
+}

@@ -26,7 +26,33 @@ enum DealType: String, CaseIterable, Identifiable {
     }
 }
 
-// MARK: - Категории заведений (MVP: только общепит)
+// MARK: - Статус предложения (по спецификации)
+
+enum DealStatus: String, CaseIterable, Identifiable, Codable {
+    case active, paused, expired, draft
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .active: return "Активно"
+        case .paused: return "На паузе"
+        case .expired: return "Завершено"
+        case .draft: return "Черновик"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .active: return .green
+        case .paused: return .orange
+        case .expired: return .gray
+        case .draft: return .blue
+        }
+    }
+}
+
+// MARK: - Категории заведений
 
 enum VenueCategory: String, CaseIterable, Identifiable {
     case cafe = "Кафе"
@@ -50,6 +76,65 @@ enum VenueCategory: String, CaseIterable, Identifiable {
     }
 }
 
+// MARK: - Город (масштабирование на города Центральной Азии)
+
+struct City: Identifiable, Hashable {
+    let id: String        // slug, напр. "bishkek"
+    let name: String      // отображаемое имя
+    let country: String
+    let latitude: Double   // центр города — старт карты и фолбэк координат
+    let longitude: Double
+
+    static let bishkek = City(id: "bishkek", name: "Бишкек", country: "Кыргызстан",
+                              latitude: 42.8746, longitude: 74.5698)
+}
+
+// MARK: - Сегодняшний специал
+
+struct TodaySpecial: Hashable {
+    var text: String
+    var updatedAt: Date
+}
+
+// MARK: - Объект для отзыва (блюдо / услуга внутри заведения)
+
+struct VenueItem: Identifiable, Hashable, Codable {
+    var id: String
+    var name: String
+    var emoji: String
+    var kind: String   // "food" | "service" | "other"
+
+    var kindTitle: String {
+        switch kind {
+        case "service": return "Услуга"
+        case "other": return "Объект"
+        default: return "Блюдо"
+        }
+    }
+}
+
+// MARK: - Статус модерации заведения
+
+enum ModerationStatus: String, Codable {
+    case pending, approved, rejected
+
+    var title: String {
+        switch self {
+        case .pending: return "На модерации"
+        case .approved: return "Одобрено"
+        case .rejected: return "Отклонено"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .pending: return .orange
+        case .approved: return .green
+        case .rejected: return .red
+        }
+    }
+}
+
 // MARK: - Заведение
 
 struct Venue: Identifiable, Hashable {
@@ -61,6 +146,47 @@ struct Venue: Identifiable, Hashable {
     let phone: String
     let emoji: String
     let gradient: [Color]
+    let imageURL: String?
+
+    // --- Поля по спецификации (с дефолтами, чтобы не ломать существующие инициализаторы) ---
+    var rating: Double = 0          // агрегированный рейтинг 0…5
+    var reviewCount: Int = 0
+    var isVerified: Bool = false
+    var savedByCount: Int = 0
+    var citySlug: String = City.bishkek.id
+    var latitude: Double = City.bishkek.latitude
+    var longitude: Double = City.bishkek.longitude
+    var todaySpecialText: String? = nil
+    var openHour: Int = 9           // часы работы (упрощённо, одинаково по дням)
+    var closeHour: Int = 22
+    var pdfMenuURL: String? = nil
+    var photoEmojis: [String] = []  // галерея (для MVP — эмодзи-плейсхолдеры)
+    var ownerID: String = ""        // uid хоста-владельца ("" = площадка/seed)
+    var items: [VenueItem] = []     // блюда/услуги для отзывов
+    var statusRaw: String = ModerationStatus.approved.rawValue  // модерация
+    var isPaused: Bool = false      // на паузе — скрыто из пользовательской ленты
+
+    var moderation: ModerationStatus { ModerationStatus(rawValue: statusRaw) ?? .approved }
+    var isApproved: Bool { moderation == .approved }
+
+    /// Открыто ли заведение прямо сейчас.
+    var isOpenNow: Bool {
+        let hour = Calendar.current.component(.hour, from: .now)
+        if closeHour > openHour {
+            return hour >= openHour && hour < closeHour
+        } else {                    // напр. 18:00 → 02:00
+            return hour >= openHour || hour < closeHour
+        }
+    }
+
+    /// «Открыто · до 22:00» / «Закрыто».
+    var hoursStatusText: String {
+        isOpenNow ? "Открыто · до \(String(format: "%02d:00", closeHour))" : "Закрыто"
+    }
+
+    var hasTodaySpecial: Bool {
+        (todaySpecialText?.trimmingCharacters(in: .whitespaces).isEmpty == false)
+    }
 }
 
 // MARK: - Предложение
@@ -77,8 +203,51 @@ struct Deal: Identifiable, Hashable {
     let discountPercent: Int?
     let validUntil: Date
 
-    /// Протухшие акции автоматически скрываются из ленты
-    var isActive: Bool { validUntil >= .now }
+    // --- Поля по спецификации ---
+    var status: DealStatus = .active
+    var startDate: Date? = nil
+    var imageEmojis: [String] = []   // до 5 изображений (плейсхолдеры)
+
+    /// Протухшие/на паузе/черновики не показываются в пользовательской ленте.
+    var isActive: Bool { status == .active && validUntil >= .now }
+
+    /// Добавлено в последние 48ч — буст в ранжировании.
+    var isFresh: Bool {
+        guard let start = startDate else { return false }
+        return start >= Calendar.current.date(byAdding: .hour, value: -48, to: .now)!
+    }
+}
+
+// MARK: - Отзыв и ответ владельца
+
+struct HostReply: Hashable, Codable {
+    var text: String
+    var createdAt: Date
+    var updatedAt: Date
+}
+
+struct Review: Identifiable, Hashable, Codable {
+    let id: String
+    let venueID: String
+    var authorID: String
+    var authorName: String
+    var rating: Int            // 1…5
+    var text: String
+    var photoEmojis: [String]  // до 3 (для MVP — эмодзи)
+    var createdAt: Date
+    var updatedAt: Date
+    var hostReply: HostReply?
+    var itemID: String? = nil    // объект отзыва (блюдо/услуга), если выбран
+    var itemName: String? = nil
+
+    var initial: String { String(authorName.prefix(1)).uppercased() }
+
+    var dateText: String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "ru_RU")
+        f.dateFormat = "d MMM yyyy"
+        return f.string(from: createdAt)
+    }
 }
 
 // MARK: - Хелперы

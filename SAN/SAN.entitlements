@@ -8,5 +8,10 @@
 	<array>
 		<string>Default</string>
 	</array>
+	<!-- Universal Links: замени san.kg на свой домен (нужен размещённый AASA-файл). -->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:san.kg</string>
+	</array>
 </dict>
 </plist>
