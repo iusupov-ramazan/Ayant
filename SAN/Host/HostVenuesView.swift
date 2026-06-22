@@ -1,4 +1,5 @@
 import SwiftUI
+import MapKit
 
 // MARK: - Tab 1 — Мои заведения
 
@@ -28,6 +29,7 @@ struct HostVenuesView: View {
                 }
             }
             .navigationTitle("Мои заведения")
+            .refreshable { await host.sync() }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showAddVenue = true } label: { Image(systemName: "plus") }
@@ -47,12 +49,9 @@ struct HostVenuesView: View {
 
     private func venueRow(_ v: HostVenueDTO) -> some View {
         HStack(spacing: 12) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 12).fill(LinearGradient(colors: [.sanAccent, .orange],
-                    startPoint: .topLeading, endPoint: .bottomTrailing))
-                Text(v.emoji).font(.title2)
-            }
-            .frame(width: 52, height: 52)
+            VenuePhoto(urlString: v.imageURL)
+                .frame(width: 52, height: 52)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 5) {
                     Text(v.name).font(.subheadline.weight(.semibold))
@@ -116,11 +115,8 @@ struct HostVenueDetailView: View {
 
     private func header(_ v: HostVenueDTO) -> some View {
         VStack(spacing: 0) {
-            ZStack {
-                LinearGradient(colors: [.sanAccent, .orange], startPoint: .topLeading, endPoint: .bottomTrailing)
-                Text(v.emoji).font(.system(size: 60))
-            }
-            .frame(height: 130).clipShape(RoundedRectangle(cornerRadius: 16))
+            VenuePhoto(urlString: v.imageURL)
+                .frame(height: 130).clipShape(RoundedRectangle(cornerRadius: 16))
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(v.name).font(.headline)
@@ -170,7 +166,7 @@ struct HostVenueDetailView: View {
             } else {
                 ForEach(v.items) { item in
                     HStack(spacing: 10) {
-                        Text(item.emoji)
+                        ItemThumb(item: item, size: 40)
                         VStack(alignment: .leading, spacing: 1) {
                             Text(item.name).font(.subheadline)
                             Text(item.kindTitle).font(.caption2).foregroundStyle(.secondary)
@@ -237,16 +233,20 @@ struct HostVenueDetailView: View {
     }
 
     private func dealCell(_ d: HostDealDTO, gradient: [Color]) -> some View {
-        ZStack(alignment: .bottomLeading) {
-            LinearGradient(colors: gradient, startPoint: .topLeading, endPoint: .bottomTrailing)
-            Text(d.emoji).font(.system(size: 30)).frame(maxWidth: .infinity, maxHeight: .infinity)
-            Text(d.status.title)
-                .font(.system(size: 8).weight(.bold)).foregroundStyle(.white)
-                .padding(.horizontal, 5).padding(.vertical, 2)
-                .background(d.status.color, in: Capsule()).padding(5)
-        }
-        .aspectRatio(1, contentMode: .fill)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        // Color.clear задаёт квадрат по ширине колонки — размер не зависит от картинки.
+        Color.clear
+            .aspectRatio(1, contentMode: .fit)
+            .overlay {
+                CoverImage(urlString: d.imageURL.isEmpty ? nil : d.imageURL,
+                           gradient: gradient, emoji: d.emoji, emojiSize: 30)
+            }
+            .overlay(alignment: .bottomLeading) {
+                Text(d.status.title)
+                    .font(.system(size: 8).weight(.bold)).foregroundStyle(.white)
+                    .padding(.horizontal, 5).padding(.vertical, 2)
+                    .background(d.status.color, in: Capsule()).padding(5)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
     private func actions(_ v: HostVenueDTO) -> some View {
@@ -298,18 +298,22 @@ struct HostItemFormView: View {
     @State private var name = ""
     @State private var emoji = "🍽"
     @State private var kind = "food"
+    @State private var imageURL = ""
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("Объект для отзывов") {
                     TextField("Название (напр. Лагман)", text: $name)
-                    TextField("Эмодзи", text: $emoji)
+                    TextField("Эмодзи (если без фото)", text: $emoji)
                     Picker("Тип", selection: $kind) {
                         Text("Блюдо").tag("food")
                         Text("Услуга").tag("service")
                         Text("Объект").tag("other")
                     }
+                }
+                Section("Фото объекта") {
+                    ImagePickerField(imageURL: $imageURL)
                 }
             }
             .navigationTitle("Новый объект")
@@ -318,7 +322,8 @@ struct HostItemFormView: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Отмена") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Добавить") {
-                        host.addItem(venueID: venueID, name: name, emoji: emoji, kind: kind)
+                        host.addItem(venueID: venueID, name: name, emoji: emoji, kind: kind,
+                                     imageURL: imageURL.trimmingCharacters(in: .whitespaces))
                         dismiss()
                     }
                     .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -346,6 +351,9 @@ struct HostVenueFormView: View {
     @State private var openHour: Int
     @State private var closeHour: Int
     @State private var imageURL: String
+    @State private var weekHours: [DayHours]
+    @State private var pdfMenuURL: String
+    @State private var showingMapPicker = false
 
     init(existing: HostVenueDTO?) {
         self.existing = existing
@@ -360,6 +368,9 @@ struct HostVenueFormView: View {
         _openHour = State(initialValue: existing?.openHour ?? 9)
         _closeHour = State(initialValue: existing?.closeHour ?? 22)
         _imageURL = State(initialValue: existing?.imageURL ?? "")
+        _pdfMenuURL = State(initialValue: existing?.pdfMenuURL ?? "")
+        let wh = existing?.weekHours ?? []
+        _weekHours = State(initialValue: wh.count == 7 ? wh : Venue.defaultWeek())
     }
 
     var body: some View {
@@ -375,23 +386,68 @@ struct HostVenueFormView: View {
                     TextField("Адрес", text: $address)
                     TextField("Телефон", text: $phone).keyboardType(.phonePad)
                 }
-                Section("Обложка") {
-                    TextField("Ссылка на фото (https://…)", text: $imageURL)
-                        .keyboardType(.URL).autocapitalization(.none)
-                    if let url = URL(string: imageURL), !imageURL.isEmpty {
-                        AsyncImage(url: url) { img in
-                            img.resizable().scaledToFill()
-                        } placeholder: { Color(.systemGray6) }
-                        .frame(height: 120).clipped().clipShape(RoundedRectangle(cornerRadius: 10))
+                Section("Фото заведения") {
+                    ImagePickerField(imageURL: $imageURL)
+                }
+                Section("Прайс-лист / каталог (PDF)") {
+                    PDFPickerField(urlString: $pdfMenuURL)
+                    Text("Список блюд или услуг. Гости откроют его на странице заведения.")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+                Section("Местоположение") {
+                    Button {
+                        showingMapPicker = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "mappin.and.ellipse")
+                            Text("Выбрать точку на карте")
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    if let coord = currentCoordinate {
+                        Map(initialPosition: .region(MKCoordinateRegion(
+                            center: coord,
+                            span: MKCoordinateSpan(latitudeDelta: 0.008, longitudeDelta: 0.008)))) {
+                            Marker("", coordinate: coord).tint(.red)
+                        }
+                        .frame(height: 140)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .allowsHitTesting(false)
+                        .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
+                    }
+                    DisclosureGroup("Ввести координаты вручную") {
+                        TextField("Широта", text: $latitude).keyboardType(.decimalPad)
+                        TextField("Долгота", text: $longitude).keyboardType(.decimalPad)
                     }
                 }
-                Section("Координаты (Бишкек по умолчанию)") {
-                    TextField("Широта", text: $latitude).keyboardType(.decimalPad)
-                    TextField("Долгота", text: $longitude).keyboardType(.decimalPad)
-                }
                 Section("Часы работы") {
-                    Stepper("Открытие: \(openHour):00", value: $openHour, in: 0...24)
-                    Stepper("Закрытие: \(closeHour):00", value: $closeHour, in: 0...24)
+                    ForEach(0..<7, id: \.self) { i in
+                        VStack(spacing: 6) {
+                            Toggle(isOn: Binding(
+                                get: { !weekHours[i].closed },
+                                set: { weekHours[i].closed = !$0 }
+                            )) {
+                                Text(Venue.weekdayLong[i]).font(.subheadline)
+                            }
+                            if !weekHours[i].closed {
+                                HStack {
+                                    DatePicker("с", selection: timeBinding(i, \.open),
+                                               displayedComponents: .hourAndMinute)
+                                    DatePicker("до", selection: timeBinding(i, \.close),
+                                               displayedComponents: .hourAndMinute)
+                                }
+                                .font(.caption)
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
+                    Button("Применить понедельник ко всем дням") {
+                        let mon = weekHours[0]
+                        weekHours = Array(repeating: mon, count: 7)
+                    }
+                    .font(.caption)
                 }
             }
             .navigationTitle(existing == nil ? "Новое заведение" : "Изменить заведение")
@@ -402,7 +458,40 @@ struct HostVenueFormView: View {
                     Button("Сохранить") { save() }.disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
+            .sheet(isPresented: $showingMapPicker) {
+                VenueLocationPicker(initial: currentCoordinate ?? bishkekCoordinate) { coord in
+                    latitude = String(coord.latitude)
+                    longitude = String(coord.longitude)
+                }
+            }
         }
+    }
+
+    /// Биндинг «минуты ↔ Date» для DatePicker часов работы.
+    private func timeBinding(_ i: Int, _ key: WritableKeyPath<DayHours, Int>) -> Binding<Date> {
+        Binding(
+            get: {
+                let mins = weekHours[i][keyPath: key]
+                return Calendar.current.date(bySettingHour: mins / 60, minute: mins % 60, second: 0, of: Date()) ?? Date()
+            },
+            set: { newDate in
+                let c = Calendar.current.dateComponents([.hour, .minute], from: newDate)
+                weekHours[i][keyPath: key] = (c.hour ?? 0) * 60 + (c.minute ?? 0)
+            }
+        )
+    }
+
+    /// Координаты из введённых строк, если они валидны.
+    private var currentCoordinate: CLLocationCoordinate2D? {
+        guard let lat = Double(latitude.replacingOccurrences(of: ",", with: ".")),
+              let lng = Double(longitude.replacingOccurrences(of: ",", with: ".")),
+              CLLocationCoordinate2DIsValid(CLLocationCoordinate2D(latitude: lat, longitude: lng))
+        else { return nil }
+        return CLLocationCoordinate2D(latitude: lat, longitude: lng)
+    }
+
+    private var bishkekCoordinate: CLLocationCoordinate2D {
+        CLLocationCoordinate2D(latitude: City.bishkek.latitude, longitude: City.bishkek.longitude)
     }
 
     private func save() {
@@ -413,12 +502,16 @@ struct HostVenueFormView: View {
             dto.address = address; dto.phone = phone; dto.emoji = emoji
             dto.latitude = lat; dto.longitude = lng; dto.openHour = openHour; dto.closeHour = closeHour
             dto.imageURL = imageURL.trimmingCharacters(in: .whitespaces)
+            dto.weekHours = weekHours
+            dto.pdfMenuURL = pdfMenuURL.trimmingCharacters(in: .whitespaces)
             host.updateVenue(dto)
         } else {
             host.addVenue(name: name, category: category, district: district, address: address,
                           phone: phone, emoji: emoji, latitude: lat, longitude: lng,
                           openHour: openHour, closeHour: closeHour,
-                          imageURL: imageURL.trimmingCharacters(in: .whitespaces))
+                          imageURL: imageURL.trimmingCharacters(in: .whitespaces),
+                          weekHours: weekHours,
+                          pdfMenuURL: pdfMenuURL.trimmingCharacters(in: .whitespaces))
         }
         dismiss()
     }
@@ -474,8 +567,7 @@ struct HostDealFormView: View {
                     TextField("Процент скидки", text: $discount).keyboardType(.numberPad)
                 }
                 Section("Фото (необязательно)") {
-                    TextField("Ссылка на фото (https://…)", text: $imageURL)
-                        .keyboardType(.URL).autocapitalization(.none)
+                    ImagePickerField(imageURL: $imageURL)
                 }
                 Section("Срок") {
                     Toggle("Есть дата окончания", isOn: $hasEnd)

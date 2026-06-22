@@ -29,7 +29,7 @@ enum NotificationManager {
 
         let content = UNMutableNotificationContent()
         content.title = "Бонусы ждут 🎁"
-        content.body = "Залипни в САН на 30 активных минут и забери +50 бонусов"
+        content.body = "Залипни в Ayta на 30 активных минут и забери +50 бонусов"
         content.sound = .default
 
         // Повторяющийся триггер каждые 4 часа

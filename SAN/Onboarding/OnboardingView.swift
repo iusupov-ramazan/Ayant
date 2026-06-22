@@ -8,17 +8,14 @@ struct OnboardingView: View {
     var onFinished: () -> Void
 
     @State private var step = 0
-    @State private var citySearch = ""
-    @State private var chosenCity: String?
 
-    // Пока доступен только Бишкек — выбор города отключён.
+    // Пока доступен только Бишкек — выбор города отключён (2 шага).
     private let stepCount = 2
 
     var body: some View {
         VStack(spacing: 0) {
             progressDots
             TabView(selection: $step) {
-                // cityStep.tag(0)   // ⛔️ выбор города отключён — только Бишкек
                 locationStep.tag(0)
                 notificationStep.tag(1)
             }
@@ -43,69 +40,7 @@ struct OnboardingView: View {
         .padding(.top, 16)
     }
 
-    // MARK: Шаг 1 — Город (обязательно)
-
-    private var cityStep: some View {
-        VStack(spacing: 0) {
-            VStack(spacing: 8) {
-                Image(systemName: "mappin.and.ellipse")
-                    .font(.system(size: 44)).foregroundStyle(Color.sanAccent)
-                Text("Выбери свой город")
-                    .font(.title2.weight(.bold))
-                Text("Покажем заведения и акции рядом с тобой.")
-                    .font(.subheadline).foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-            .padding(.top, 24)
-            .padding(.horizontal, 24)
-
-            List {
-                ForEach(filteredCities) { city in
-                    Button {
-                        chosenCity = city.id
-                    } label: {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(city.name).foregroundStyle(.primary)
-                                Text(city.country).font(.caption).foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            if chosenCity == city.id {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(Color.sanAccent)
-                            }
-                        }
-                    }
-                }
-            }
-            .listStyle(.plain)
-            .searchable(text: $citySearch, prompt: "Найти город")
-
-            Button {
-                if let chosenCity { store.selectedCitySlug = chosenCity }
-                withAnimation { step = 1 }
-            } label: {
-                Text("Продолжить")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(.sanAccent)
-            .disabled(chosenCity == nil)
-            .padding(16)
-        }
-    }
-
-    private var filteredCities: [City] {
-        guard !citySearch.isEmpty else { return MockData.cities }
-        return MockData.cities.filter {
-            $0.name.localizedCaseInsensitiveContains(citySearch)
-            || $0.country.localizedCaseInsensitiveContains(citySearch)
-        }
-    }
-
-    // MARK: Шаг 2 — Геолокация
+    // MARK: Шаг 1 — Геолокация
 
     private var locationStep: some View {
         prePrompt(

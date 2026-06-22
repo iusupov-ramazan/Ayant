@@ -36,7 +36,7 @@ struct AuthView: View {
 
     private var logo: some View {
         VStack(spacing: 8) {
-            Text("САН")
+            Text("Ayta")
                 .font(.system(size: 64, weight: .heavy))
                 .foregroundStyle(.white)
             Text("скидки • акции • новинки")

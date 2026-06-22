@@ -117,7 +117,8 @@ struct SignedInRootView: View {
     }
 }
 
-/// Пользовательская навигация (по спецификации): Главная · Поиск · Сохранённое · Профиль.
+/// Пользовательская навигация: Главная · Поиск · Бонусы (центр) · Сохранённое · Профиль.
+/// «Бонусы» — 3-я из 5 вкладок (центральная), index 2.
 struct RootView: View {
     var body: some View {
         TabView {
@@ -125,10 +126,10 @@ struct RootView: View {
                 .tabItem { Label("Главная", systemImage: "house.fill") }
             SearchView()
                 .tabItem { Label("Поиск", systemImage: "magnifyingglass") }
-            SavedView()
-                .tabItem { Label("Сохранённое", systemImage: "bookmark.fill") }
             BonusHubView()
                 .tabItem { Label("Бонусы", systemImage: "gift.fill") }
+            SavedView()
+                .tabItem { Label("Сохранённое", systemImage: "bookmark.fill") }
             ProfileView()
                 .tabItem { Label("Профиль", systemImage: "person.fill") }
         }

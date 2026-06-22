@@ -167,7 +167,7 @@ struct ProfileView: View {
     private var aboutSection: some View {
         Section("О приложении") {
             LabeledContent("Версия", value: "0.2 (MVP)")
-            Text("САН — заведения, акции и отзывы твоего города. Сначала Бишкек, дальше — вся Центральная Азия.")
+            Text("Ayta — заведения, акции и отзывы твоего города. Сначала Бишкек, дальше — вся Центральная Азия.")
                 .font(.caption).foregroundStyle(.secondary)
         }
     }

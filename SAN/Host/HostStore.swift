@@ -45,6 +45,8 @@ struct HostVenueDTO: Codable, Identifiable {
     var status: String = ModerationStatus.pending.rawValue   // модерация
     var items: [VenueItem] = []                              // блюда/услуги
     var imageURL: String = ""                                // ссылка на обложку
+    var weekHours: [DayHours] = Venue.defaultWeek()          // часы по дням недели
+    var pdfMenuURL: String = ""                              // прайс-лист / каталог (PDF)
 
     var category: VenueCategory { VenueCategory(rawValue: categoryRaw) ?? .cafe }
     var moderation: ModerationStatus { ModerationStatus(rawValue: status) ?? .pending }
@@ -57,7 +59,8 @@ struct HostVenueDTO: Codable, Identifiable {
             rating: 0, reviewCount: 0, isVerified: isVerified, savedByCount: 0,
             citySlug: City.bishkek.id, latitude: latitude, longitude: longitude,
             todaySpecialText: (todaySpecial?.isEmpty == false) ? todaySpecial : nil,
-            openHour: openHour, closeHour: closeHour, pdfMenuURL: nil,
+            openHour: openHour, closeHour: closeHour, weekHours: weekHours,
+            pdfMenuURL: pdfMenuURL.isEmpty ? nil : pdfMenuURL,
             photoEmojis: [emoji], items: items, statusRaw: status, isPaused: isPaused
         )
     }
@@ -241,13 +244,16 @@ final class HostStore: ObservableObject {
     @discardableResult
     func addVenue(name: String, category: VenueCategory, district: String, address: String,
                   phone: String, emoji: String, latitude: Double, longitude: Double,
-                  openHour: Int, closeHour: Int, imageURL: String = "") -> HostVenueDTO {
+                  openHour: Int, closeHour: Int, imageURL: String = "",
+                  weekHours: [DayHours] = Venue.defaultWeek(), pdfMenuURL: String = "") -> HostVenueDTO {
         var dto = HostVenueDTO(
             id: "hv_\(UUID().uuidString.prefix(8))", name: name, categoryRaw: category.rawValue,
             district: district, address: address, phone: phone, emoji: emoji,
             latitude: latitude, longitude: longitude, openHour: openHour, closeHour: closeHour,
             todaySpecial: nil, isPaused: false, isVerified: false)
         dto.imageURL = imageURL
+        dto.weekHours = weekHours
+        dto.pdfMenuURL = pdfMenuURL
         venueDTOs.append(dto)
         persistVenues()
         remoteSaveVenue(dto)
@@ -285,11 +291,11 @@ final class HostStore: ObservableObject {
 
     // MARK: Объекты для отзывов (блюда/услуги)
 
-    func addItem(venueID: String, name: String, emoji: String, kind: String) {
+    func addItem(venueID: String, name: String, emoji: String, kind: String, imageURL: String = "") {
         guard let i = venueDTOs.firstIndex(where: { $0.id == venueID }) else { return }
         let item = VenueItem(id: "it_\(UUID().uuidString.prefix(8))",
                              name: name.trimmingCharacters(in: .whitespaces),
-                             emoji: emoji.isEmpty ? "🍽" : emoji, kind: kind)
+                             emoji: emoji.isEmpty ? "🍽" : emoji, kind: kind, imageURL: imageURL)
         venueDTOs[i].items.append(item)
         persistVenues()
         remoteSaveVenue(venueDTOs[i])
@@ -364,10 +370,6 @@ final class HostStore: ObservableObject {
     }
 
     func campaignID() -> String { "ad_\(UUID().uuidString.prefix(8))" }
-
-    // MARK: Сброс
-
-    func leaveHostAccount() { /* для будущего: выход без удаления данных */ }
 
     // MARK: Persistence
 

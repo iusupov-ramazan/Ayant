@@ -11,16 +11,14 @@ struct WriteReviewView: View {
 
     @State private var rating: Int
     @State private var text: String
-    @State private var photos: [String]
+    @State private var photos: [String]   // URL-фото
     @State private var selectedItemID: String?   // nil = о заведении в целом
-
-    private let photoChoices = ["📷", "🍽", "🥗", "☕️", "🍰", "🍜", "🥟", "🍣"]
 
     init(venue: Venue, existing: Review?, preselectItemID: String? = nil) {
         self.venue = venue
         _rating = State(initialValue: existing?.rating ?? 0)
         _text = State(initialValue: existing?.text ?? "")
-        _photos = State(initialValue: existing?.photoEmojis ?? [])
+        _photos = State(initialValue: existing?.photos ?? [])
         // Отзыв всегда про конкретный объект: по умолчанию — первый объект заведения.
         _selectedItemID = State(initialValue: existing?.itemID ?? preselectItemID ?? venue.items.first?.id)
     }
@@ -47,7 +45,7 @@ struct WriteReviewView: View {
                             let existing = store.myReview(venueID: venue.id, itemID: newID)
                             rating = existing?.rating ?? 0
                             text = existing?.text ?? ""
-                            photos = existing?.photoEmojis ?? []
+                            photos = existing?.photos ?? []
                         }
                     }
                 }
@@ -70,23 +68,7 @@ struct WriteReviewView: View {
                 }
 
                 Section("Фото (до 3)") {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 10) {
-                            ForEach(photoChoices, id: \.self) { p in
-                                let isOn = photos.contains(p)
-                                Text(p)
-                                    .font(.system(size: 28))
-                                    .frame(width: 48, height: 48)
-                                    .background(isOn ? Color.sanAccent.opacity(0.2) : Color(.systemGray6),
-                                                in: RoundedRectangle(cornerRadius: 12))
-                                    .overlay(RoundedRectangle(cornerRadius: 12)
-                                        .stroke(isOn ? Color.sanAccent : .clear, lineWidth: 2))
-                                    .onTapGesture { togglePhoto(p) }
-                            }
-                        }
-                    }
-                    Text("В MVP фото — эмодзи-плейсхолдеры.")
-                        .font(.caption2).foregroundStyle(.secondary)
+                    MultiImagePickerField(urls: $photos, maxCount: 3)
                 }
             }
             .navigationTitle(store.myReview(for: venue) == nil ? "Новый отзыв" : "Изменить отзыв")
@@ -109,10 +91,6 @@ struct WriteReviewView: View {
         }
     }
 
-    private func togglePhoto(_ p: String) {
-        if let idx = photos.firstIndex(of: p) { photos.remove(at: idx) }
-        else if photos.count < 3 { photos.append(p) }
-    }
 }
 
 // MARK: - Полноэкранный просмотр фото с жалобой
@@ -130,7 +108,16 @@ struct PhotoViewerView: View {
             Color.black.ignoresSafeArea()
             TabView(selection: $index) {
                 ForEach(Array(photos.enumerated()), id: \.offset) { i, p in
-                    Text(p).font(.system(size: 140)).tag(i)
+                    Group {
+                        if p.hasPrefix("http"), let url = URL(string: p) {
+                            AsyncImage(url: url) { img in
+                                img.resizable().scaledToFit()
+                            } placeholder: { ProgressView().tint(.white) }
+                        } else {
+                            Text(p).font(.system(size: 140))
+                        }
+                    }
+                    .tag(i)
                 }
             }
             .tabViewStyle(.page)
@@ -180,7 +167,7 @@ struct PDFMenuView: View {
                     ContentUnavailableView("Не удалось открыть меню", systemImage: "doc")
                 }
             }
-            .navigationTitle("Меню")
+            .navigationTitle("Прайс-лист")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) { Button("Готово") { dismiss() } }
@@ -230,12 +217,13 @@ struct ReviewRow: View {
             if !review.text.isEmpty {
                 Text(review.text).font(.subheadline)
             }
-            if !review.photoEmojis.isEmpty {
+            let reviewPhotos = review.photos + review.photoEmojis
+            if !reviewPhotos.isEmpty {
                 HStack(spacing: 8) {
-                    ForEach(review.photoEmojis, id: \.self) { p in
-                        Text(p).font(.title)
-                            .frame(width: 48, height: 48)
-                            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 10))
+                    ForEach(reviewPhotos, id: \.self) { p in
+                        GalleryImage(value: p, emojiSize: 24)
+                            .frame(width: 56, height: 56)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
                     }
                 }
             }

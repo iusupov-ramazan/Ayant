@@ -89,13 +89,6 @@ struct City: Identifiable, Hashable {
                               latitude: 42.8746, longitude: 74.5698)
 }
 
-// MARK: - Сегодняшний специал
-
-struct TodaySpecial: Hashable {
-    var text: String
-    var updatedAt: Date
-}
-
 // MARK: - Объект для отзыва (блюдо / услуга внутри заведения)
 
 struct VenueItem: Identifiable, Hashable, Codable {
@@ -103,6 +96,7 @@ struct VenueItem: Identifiable, Hashable, Codable {
     var name: String
     var emoji: String
     var kind: String   // "food" | "service" | "other"
+    var imageURL: String = ""   // фото объекта (фолбэк — эмодзи)
 
     var kindTitle: String {
         switch kind {
@@ -111,6 +105,39 @@ struct VenueItem: Identifiable, Hashable, Codable {
         default: return "Блюдо"
         }
     }
+}
+
+// MARK: - Часы работы по дням недели
+
+/// Часы работы одного дня. Время — минуты от полуночи (напр. 9:30 = 570).
+struct DayHours: Codable, Hashable {
+    var closed: Bool = false
+    var open: Int = 9 * 60
+    var close: Int = 22 * 60
+
+    var label: String {
+        closed ? "Выходной" : "\(DayHours.time(open)) – \(DayHours.time(close))"
+    }
+
+    static func time(_ minutes: Int) -> String {
+        String(format: "%02d:%02d", (minutes / 60) % 24, minutes % 60)
+    }
+}
+
+extension Venue {
+    static let weekdayShort = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+    static let weekdayLong = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
+    static func defaultWeek() -> [DayHours] { (0..<7).map { _ in DayHours() } }
+
+    /// 0 = Понедельник … 6 = Воскресенье.
+    static var todayIndex: Int { (Calendar.current.component(.weekday, from: .now) + 5) % 7 }
+
+    /// Часы конкретного дня (с фолбэком на legacy openHour/closeHour).
+    func hours(for index: Int) -> DayHours {
+        if weekHours.count == 7 { return weekHours[index] }
+        return DayHours(closed: false, open: openHour * 60, close: closeHour * 60)
+    }
+    var todayHours: DayHours { hours(for: Venue.todayIndex) }
 }
 
 // MARK: - Статус модерации заведения
@@ -157,8 +184,9 @@ struct Venue: Identifiable, Hashable {
     var latitude: Double = City.bishkek.latitude
     var longitude: Double = City.bishkek.longitude
     var todaySpecialText: String? = nil
-    var openHour: Int = 9           // часы работы (упрощённо, одинаково по дням)
+    var openHour: Int = 9           // legacy-фолбэк (одинаково по дням)
     var closeHour: Int = 22
+    var weekHours: [DayHours] = []  // часы по дням недели (Пн…Вс); пусто = legacy
     var pdfMenuURL: String? = nil
     var photoEmojis: [String] = []  // галерея (для MVP — эмодзи-плейсхолдеры)
     var ownerID: String = ""        // uid хоста-владельца ("" = площадка/seed)
@@ -169,19 +197,21 @@ struct Venue: Identifiable, Hashable {
     var moderation: ModerationStatus { ModerationStatus(rawValue: statusRaw) ?? .approved }
     var isApproved: Bool { moderation == .approved }
 
-    /// Открыто ли заведение прямо сейчас.
+    /// Открыто ли заведение прямо сейчас (по часам текущего дня недели).
     var isOpenNow: Bool {
-        let hour = Calendar.current.component(.hour, from: .now)
-        if closeHour > openHour {
-            return hour >= openHour && hour < closeHour
-        } else {                    // напр. 18:00 → 02:00
-            return hour >= openHour || hour < closeHour
-        }
+        let d = todayHours
+        guard !d.closed else { return false }
+        let now = Calendar.current
+        let cur = now.component(.hour, from: .now) * 60 + now.component(.minute, from: .now)
+        if d.close > d.open { return cur >= d.open && cur < d.close }
+        return cur >= d.open || cur < d.close   // через полночь
     }
 
-    /// «Открыто · до 22:00» / «Закрыто».
+    /// «Открыто · до 22:00» / «Сегодня закрыто» / «Закрыто».
     var hoursStatusText: String {
-        isOpenNow ? "Открыто · до \(String(format: "%02d:00", closeHour))" : "Закрыто"
+        let d = todayHours
+        if d.closed { return "Сегодня выходной" }
+        return isOpenNow ? "Открыто · до \(DayHours.time(d.close))" : "Закрыто"
     }
 
     var hasTodaySpecial: Bool {
@@ -240,6 +270,7 @@ struct Review: Identifiable, Hashable, Codable {
     var hostReply: HostReply?
     var itemID: String? = nil    // объект отзыва (блюдо/услуга), если выбран
     var itemName: String? = nil
+    var photos: [String] = []    // реальные фото (URL); photoEmojis — легаси-фолбэк
 
     var initial: String { String(authorName.prefix(1)).uppercased() }
 

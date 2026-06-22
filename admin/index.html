@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>САН — Админ-панель</title>
+<title>Ayta — Админ-панель</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -155,7 +155,7 @@
 <!-- ══ APP ════════════════════════════════════════════════════════════════ -->
 <div id="app">
   <nav>
-    <h1>САН Админ</h1>
+    <h1>Ayta Админ</h1>
     <button onclick="showPage('venues')" id="navVenues" class="active">Заведения</button>
     <button onclick="showPage('deals')"  id="navDeals">Предложения</button>
     <button onclick="showPage('hosts')"  id="navHosts">Хосты</button>
@@ -260,8 +260,11 @@
         <input id="vGradientTo" type="color" value="#F9D423" />
       </div>
       <div class="field span2">
-        <label>Обложка — ссылка на фото (необяз.)</label>
-        <input id="vImageURL" placeholder="https://…/photo.jpg" />
+        <label>Обложка — загрузить фото или вставить ссылку</label>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input id="vImageURL" placeholder="https://…/photo.jpg" style="flex:1;min-width:200px" />
+          <input type="file" accept="image/*" onchange="uploadImage(this,'vImageURL')" style="width:auto" />
+        </div>
       </div>
       <div class="field span2">
         <label>Сегодняшний специал (todaySpecial) — пусто = убрать</label>
@@ -295,7 +298,15 @@
         </select>
       </div>
       <div class="field">
-        <label>Статус</label>
+        <label>Модерация</label>
+        <select id="vModeration">
+          <option value="pending">На модерации</option>
+          <option value="approved">Одобрено ✓</option>
+          <option value="rejected">Отклонено</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Видимость</label>
         <select id="vActive">
           <option value="true">Активно</option>
           <option value="false">На паузе</option>
@@ -304,7 +315,7 @@
       <div class="field span2">
         <label>Объекты для отзывов (блюда / услуги)</label>
         <div id="vItemsList" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
           <input id="vItemEmoji" placeholder="🍽" maxlength="4" style="width:64px" />
           <input id="vItemName" placeholder="Название (напр. Лагман)" style="flex:1;min-width:140px" />
           <select id="vItemKind" style="width:130px">
@@ -312,6 +323,8 @@
             <option value="service">Услуга</option>
             <option value="other">Объект</option>
           </select>
+          <input id="vItemImageURL" placeholder="фото-ссылка (необяз.)" style="flex:1;min-width:140px" />
+          <input type="file" accept="image/*" onchange="uploadImage(this,'vItemImageURL')" style="width:auto" />
           <button type="button" class="btn btn-secondary btn-sm" onclick="addVenueItem()">+ Объект</button>
         </div>
         <small style="color:var(--muted)">Пользователи оставляют отзывы только на эти объекты.</small>
@@ -350,8 +363,11 @@
         <textarea id="dDetails" placeholder="С 11:00 до 15:00 на все виды мантов."></textarea>
       </div>
       <div class="field span2">
-        <label>Фото — ссылка (необяз.)</label>
-        <input id="dImageURL" placeholder="https://…/photo.jpg" />
+        <label>Фото — загрузить или вставить ссылку</label>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input id="dImageURL" placeholder="https://…/photo.jpg" style="flex:1;min-width:200px" />
+          <input type="file" accept="image/*" onchange="uploadImage(this,'dImageURL')" style="width:auto" />
+        </div>
       </div>
       <div class="field">
         <label>Emoji</label>
@@ -443,11 +459,16 @@ function renderVenueItems() {
     return;
   }
   const kindLabel = { food:'Блюдо', service:'Услуга', other:'Объект' };
-  box.innerHTML = currentItems.map(it => `
+  box.innerHTML = currentItems.map(it => {
+    const thumb = it.imageURL
+      ? `<img src="${it.imageURL}" style="width:20px;height:20px;object-fit:cover;border-radius:4px" />`
+      : (it.emoji || '🍽');
+    return `
     <span class="badge" style="background:#eef;color:#334;display:inline-flex;gap:6px;align-items:center">
-      ${it.emoji || '🍽'} ${it.name} <small style="color:var(--muted)">${kindLabel[it.kind] || ''}</small>
+      ${thumb} ${it.name} <small style="color:var(--muted)">${kindLabel[it.kind] || ''}</small>
       <span style="cursor:pointer;color:var(--danger);font-weight:700" onclick="removeVenueItem('${it.id}')">×</span>
-    </span>`).join('');
+    </span>`;
+  }).join('');
 }
 
 window.addVenueItem = () => {
@@ -455,15 +476,43 @@ window.addVenueItem = () => {
   if (!name) return;
   const emoji = document.getElementById('vItemEmoji').value.trim() || '🍽';
   const kind = document.getElementById('vItemKind').value;
-  currentItems.push({ id: 'it_' + Math.random().toString(36).slice(2, 10), name, emoji, kind });
+  const imageURL = document.getElementById('vItemImageURL').value.trim();
+  currentItems.push({ id: 'it_' + Math.random().toString(36).slice(2, 10), name, emoji, kind, imageURL });
   document.getElementById('vItemName').value = '';
   document.getElementById('vItemEmoji').value = '';
+  document.getElementById('vItemImageURL').value = '';
   renderVenueItems();
 };
 
 window.removeVenueItem = (id) => {
   currentItems = currentItems.filter(it => it.id !== id);
   renderVenueItems();
+};
+
+// ── Загрузка фото в Cloudinary (unsigned) ───────────────────────────────────
+const CLOUDINARY_CLOUD = 'dsb14gwxw';
+const CLOUDINARY_PRESET = 'Ayta_ios';
+window.uploadImage = async (input, targetId) => {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  if (!file.type.startsWith('image/')) { toast('Только изображения', 'error'); input.value=''; return; }
+  if (file.size > 5 * 1024 * 1024) { toast('Файл больше 5 МБ — выберите меньше', 'error'); input.value=''; return; }
+  toast('Загрузка фото…');
+  try {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('upload_preset', CLOUDINARY_PRESET);
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`,
+      { method: 'POST', body: form });
+    const json = await res.json();
+    if (json.secure_url) {
+      document.getElementById(targetId).value = json.secure_url;
+      toast('Фото загружено', 'success');
+    } else {
+      toast('Ошибка: ' + (json.error?.message || 'не удалось загрузить'), 'error');
+    }
+  } catch (e) { toast('Ошибка: ' + e.message, 'error'); }
+  input.value = '';
 };
 
 // ── DEMO SEED (через веб-SDK, под текущим логином — без service account) ──────
@@ -725,6 +774,7 @@ window.openVenueModal = (id) => {
   document.getElementById('vCloseHour').value    = v?.closeHour ?? '';
   document.getElementById('vPdfMenuURL').value   = v?.pdfMenuURL ?? '';
   document.getElementById('vVerified').value     = String(v?.isVerified ?? false);
+  document.getElementById('vModeration').value   = v?.status ?? 'approved';
   document.getElementById('vActive').value       = String((v?.isPaused ? false : (v?.active ?? true)));
   currentItems = Array.isArray(v?.items) ? v.items.map(it => ({ ...it })) : [];
   renderVenueItems();
@@ -746,6 +796,7 @@ window.saveVenue = async () => {
     isVerified:   document.getElementById('vVerified').value === 'true',
     active:       document.getElementById('vActive').value === 'true',
     isPaused:     document.getElementById('vActive').value !== 'true',
+    status:       document.getElementById('vModeration').value,
     items:        currentItems,
     imageURL:     document.getElementById('vImageURL').value.trim(),
     todaySpecial: document.getElementById('vTodaySpecial').value.trim(),

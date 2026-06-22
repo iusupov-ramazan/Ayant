@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>САН — Админ-панель</title>
+<title>Ayta — Админ-панель</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -71,6 +71,10 @@
   .badge-discount { background:#fce4ec; color:#c62828; }
   .badge-promo    { background:#ede7f6; color:#4527a0; }
   .badge-novelty  { background:#e0f7fa; color:#006064; }
+  .badge-pending  { background:#fff3e0; color:#e65100; }
+  .badge-approved { background:#e8f5e9; color:#2e7d32; }
+  .badge-rejected { background:#ffebee; color:#c62828; }
+  .btn-success { background: var(--success); color:#fff; }
   .row-actions { display: flex; gap: 8px; }
 
   /* ── BUTTONS ── */
@@ -151,9 +155,10 @@
 <!-- ══ APP ════════════════════════════════════════════════════════════════ -->
 <div id="app">
   <nav>
-    <h1>САН Админ</h1>
+    <h1>Ayta Админ</h1>
     <button onclick="showPage('venues')" id="navVenues" class="active">Заведения</button>
     <button onclick="showPage('deals')"  id="navDeals">Предложения</button>
+    <button onclick="showPage('hosts')"  id="navHosts">Хосты</button>
     <button id="signOutBtn" onclick="signOut()">Выйти</button>
   </nav>
 
@@ -161,6 +166,7 @@
   <div class="page active" id="pageVenues">
     <div class="toolbar">
       <h2>Заведения</h2>
+      <button class="btn btn-secondary" onclick="seedDemo()">⬆️ Демо-данные</button>
       <button class="btn btn-primary" onclick="openVenueModal()">+ Добавить</button>
     </div>
     <div class="table-wrap">
@@ -168,10 +174,23 @@
         <thead>
           <tr>
             <th></th><th>Название</th><th>Категория</th>
-            <th>Район</th><th>Телефон</th><th></th>
+            <th>Район</th><th>Статус</th><th></th>
           </tr>
         </thead>
         <tbody id="venuesBody"><tr><td colspan="6" class="spinner">Загрузка…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- HOSTS PAGE -->
+  <div class="page" id="pageHosts">
+    <div class="toolbar"><h2>Хосты и верификация</h2></div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Бизнес</th><th>Контакты</th><th>Верификация</th><th></th></tr>
+        </thead>
+        <tbody id="hostsBody"><tr><td colspan="4" class="spinner">Загрузка…</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -241,8 +260,74 @@
         <input id="vGradientTo" type="color" value="#F9D423" />
       </div>
       <div class="field span2">
-        <label>Ссылка на фото (URL, необяз.)</label>
-        <input id="vImageURL" type="url" placeholder="https://example.com/photo.jpg" />
+        <label>Обложка — загрузить фото или вставить ссылку</label>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input id="vImageURL" placeholder="https://…/photo.jpg" style="flex:1;min-width:200px" />
+          <input type="file" accept="image/*" onchange="uploadImage(this,'vImageURL')" style="width:auto" />
+        </div>
+      </div>
+      <div class="field span2">
+        <label>Сегодняшний специал (todaySpecial) — пусто = убрать</label>
+        <input id="vTodaySpecial" placeholder="Плов по-фергански весь день — 290 сом" maxlength="100" />
+      </div>
+      <div class="field">
+        <label>Широта (latitude)</label>
+        <input id="vLatitude" type="number" step="any" placeholder="42.8746" />
+      </div>
+      <div class="field">
+        <label>Долгота (longitude)</label>
+        <input id="vLongitude" type="number" step="any" placeholder="74.5698" />
+      </div>
+      <div class="field">
+        <label>Открытие (час)</label>
+        <input id="vOpenHour" type="number" min="0" max="24" placeholder="9" />
+      </div>
+      <div class="field">
+        <label>Закрытие (час)</label>
+        <input id="vCloseHour" type="number" min="0" max="24" placeholder="22" />
+      </div>
+      <div class="field span2">
+        <label>PDF-меню (URL, необяз.)</label>
+        <input id="vPdfMenuURL" placeholder="https://…/menu.pdf" />
+      </div>
+      <div class="field">
+        <label>Проверенное</label>
+        <select id="vVerified">
+          <option value="false">Нет</option>
+          <option value="true">Да ✓</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Модерация</label>
+        <select id="vModeration">
+          <option value="pending">На модерации</option>
+          <option value="approved">Одобрено ✓</option>
+          <option value="rejected">Отклонено</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Видимость</label>
+        <select id="vActive">
+          <option value="true">Активно</option>
+          <option value="false">На паузе</option>
+        </select>
+      </div>
+      <div class="field span2">
+        <label>Объекты для отзывов (блюда / услуги)</label>
+        <div id="vItemsList" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+          <input id="vItemEmoji" placeholder="🍽" maxlength="4" style="width:64px" />
+          <input id="vItemName" placeholder="Название (напр. Лагман)" style="flex:1;min-width:140px" />
+          <select id="vItemKind" style="width:130px">
+            <option value="food">Блюдо</option>
+            <option value="service">Услуга</option>
+            <option value="other">Объект</option>
+          </select>
+          <input id="vItemImageURL" placeholder="фото-ссылка (необяз.)" style="flex:1;min-width:140px" />
+          <input type="file" accept="image/*" onchange="uploadImage(this,'vItemImageURL')" style="width:auto" />
+          <button type="button" class="btn btn-secondary btn-sm" onclick="addVenueItem()">+ Объект</button>
+        </div>
+        <small style="color:var(--muted)">Пользователи оставляют отзывы только на эти объекты.</small>
       </div>
     </div>
     <div class="modal-footer">
@@ -277,6 +362,13 @@
         <label>Описание</label>
         <textarea id="dDetails" placeholder="С 11:00 до 15:00 на все виды мантов."></textarea>
       </div>
+      <div class="field span2">
+        <label>Фото — загрузить или вставить ссылку</label>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input id="dImageURL" placeholder="https://…/photo.jpg" style="flex:1;min-width:200px" />
+          <input type="file" accept="image/*" onchange="uploadImage(this,'dImageURL')" style="width:auto" />
+        </div>
+      </div>
       <div class="field">
         <label>Emoji</label>
         <input id="dEmoji" placeholder="🥟" maxlength="4" />
@@ -293,9 +385,18 @@
         <label>Новая цена (сом, необяз.)</label>
         <input id="dNewPrice" type="number" placeholder="" />
       </div>
-      <div class="field span2">
+      <div class="field">
         <label>Процент скидки (необяз.)</label>
         <input id="dDiscountPercent" type="number" placeholder="" />
+      </div>
+      <div class="field">
+        <label>Статус</label>
+        <select id="dStatus">
+          <option value="active">Активно</option>
+          <option value="paused">На паузе</option>
+          <option value="expired">Завершено</option>
+          <option value="draft">Черновик</option>
+        </select>
       </div>
     </div>
     <div class="modal-footer">
@@ -324,16 +425,18 @@
 import { initializeApp }           from 'https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js';
 import { getAuth, signInWithEmailAndPassword, signOut as fbSignOut, onAuthStateChanged }
   from 'https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js';
-import { getFirestore, collection, getDocs, doc, setDoc, addDoc, deleteDoc, Timestamp }
+import { getFirestore, collection, getDocs, doc, setDoc, addDoc, deleteDoc, deleteField,
+         query, where, writeBatch, Timestamp }
   from 'https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js';
 
+// ── PASTE YOUR FIREBASE CONFIG HERE ──────────────────────────────────────
 const firebaseConfig = {
-  apiKey:            "AIzaSyCqVAmHXL_E0KJvOwgcBEyIKPmoVp8uHoI",
+  apiKey:            "AIzaSyC3nHjZ-qZpvZ1iK846A4cYTqd5dKhtcbw",
   authDomain:        "san-25d32.firebaseapp.com",
   projectId:         "san-25d32",
   storageBucket:     "san-25d32.firebasestorage.app",
   messagingSenderId: "320025643761",
-  appId:             "1:320025643761:web:55aec5c26667d6c108f750",
+  appId:             "1:320025643761:ios:cf053e2b5347d14208f750",
 };
 // ─────────────────────────────────────────────────────────────────────────
 
@@ -347,6 +450,127 @@ let deals  = [];
 let editingVenueId = null;
 let editingDealId  = null;
 let pendingDeleteFn = null;
+let currentItems = [];   // объекты для отзывов в открытом модале заведения
+
+function renderVenueItems() {
+  const box = document.getElementById('vItemsList');
+  if (!currentItems.length) {
+    box.innerHTML = '<small style="color:var(--muted)">Объектов нет</small>';
+    return;
+  }
+  const kindLabel = { food:'Блюдо', service:'Услуга', other:'Объект' };
+  box.innerHTML = currentItems.map(it => {
+    const thumb = it.imageURL
+      ? `<img src="${it.imageURL}" style="width:20px;height:20px;object-fit:cover;border-radius:4px" />`
+      : (it.emoji || '🍽');
+    return `
+    <span class="badge" style="background:#eef;color:#334;display:inline-flex;gap:6px;align-items:center">
+      ${thumb} ${it.name} <small style="color:var(--muted)">${kindLabel[it.kind] || ''}</small>
+      <span style="cursor:pointer;color:var(--danger);font-weight:700" onclick="removeVenueItem('${it.id}')">×</span>
+    </span>`;
+  }).join('');
+}
+
+window.addVenueItem = () => {
+  const name = document.getElementById('vItemName').value.trim();
+  if (!name) return;
+  const emoji = document.getElementById('vItemEmoji').value.trim() || '🍽';
+  const kind = document.getElementById('vItemKind').value;
+  const imageURL = document.getElementById('vItemImageURL').value.trim();
+  currentItems.push({ id: 'it_' + Math.random().toString(36).slice(2, 10), name, emoji, kind, imageURL });
+  document.getElementById('vItemName').value = '';
+  document.getElementById('vItemEmoji').value = '';
+  document.getElementById('vItemImageURL').value = '';
+  renderVenueItems();
+};
+
+window.removeVenueItem = (id) => {
+  currentItems = currentItems.filter(it => it.id !== id);
+  renderVenueItems();
+};
+
+// ── Загрузка фото в Cloudinary (unsigned) ───────────────────────────────────
+const CLOUDINARY_CLOUD = 'dsb14gwxw';
+const CLOUDINARY_PRESET = 'Ayta_ios';
+window.uploadImage = async (input, targetId) => {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  if (!file.type.startsWith('image/')) { toast('Только изображения', 'error'); input.value=''; return; }
+  if (file.size > 5 * 1024 * 1024) { toast('Файл больше 5 МБ — выберите меньше', 'error'); input.value=''; return; }
+  toast('Загрузка фото…');
+  try {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('upload_preset', CLOUDINARY_PRESET);
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`,
+      { method: 'POST', body: form });
+    const json = await res.json();
+    if (json.secure_url) {
+      document.getElementById(targetId).value = json.secure_url;
+      toast('Фото загружено', 'success');
+    } else {
+      toast('Ошибка: ' + (json.error?.message || 'не удалось загрузить'), 'error');
+    }
+  } catch (e) { toast('Ошибка: ' + e.message, 'error'); }
+  input.value = '';
+};
+
+// ── DEMO SEED (через веб-SDK, под текущим логином — без service account) ──────
+const daysAgoTS  = n => Timestamp.fromDate(new Date(Date.now() - n * 86400000));
+const hoursAgoTS = n => Timestamp.fromDate(new Date(Date.now() - n * 3600000));
+
+const SEED_VENUE_EXTRAS = {
+  navat:       { rating: 4.6, reviewCount: 213, isVerified: true,  savedByCount: 214, latitude: 42.8760, longitude: 74.6010, openHour: 10, closeHour: 23, todaySpecial: "Плов по-фергански весь день — 290 сом", photoEmojis: ["🫖","🍚","🥗","🍢"] },
+  faiza:       { rating: 4.4, reviewCount: 168, isVerified: true,  savedByCount: 156, latitude: 42.8825, longitude: 74.6300, openHour: 9,  closeHour: 22, photoEmojis: ["🥟","🍜","🥗"] },
+  sierra:      { rating: 4.7, reviewCount: 402, isVerified: true,  savedByCount: 389, latitude: 42.8745, longitude: 74.5890, openHour: 8,  closeHour: 23, todaySpecial: "Раф на кокосовом −20% до 12:00", photoEmojis: ["☕️","🍰","🥐","🧋"] },
+  bublik:      { rating: 4.3, reviewCount: 97,  isVerified: false, savedByCount: 88,  latitude: 42.8710, longitude: 74.6020, openHour: 8,  closeHour: 21, photoEmojis: ["🥐","🍞","🥨"] },
+  furusato:    { rating: 4.5, reviewCount: 254, isVerified: true,  savedByCount: 271, latitude: 42.8690, longitude: 74.6105, openHour: 11, closeHour: 23, pdfMenuURL: "https://example.com/furusato-menu.pdf", photoEmojis: ["🍣","🍱","🍤","🥢"] },
+  chickenstar: { rating: 4.2, reviewCount: 143, isVerified: false, savedByCount: 120, latitude: 42.8688, longitude: 74.6110, openHour: 10, closeHour: 24, todaySpecial: "Комбо «Стар» сегодня 350 сом", photoEmojis: ["🍗","🍟","🥤"] },
+  cyclone:     { rating: 4.1, reviewCount: 76,  isVerified: false, savedByCount: 64,  latitude: 42.8762, longitude: 74.5990, openHour: 12, closeHour: 23, photoEmojis: ["🍝","🍷","🥩"] },
+  adriano:     { rating: 4.8, reviewCount: 311, isVerified: true,  savedByCount: 342, latitude: 42.8770, longitude: 74.5805, openHour: 8,  closeHour: 22, photoEmojis: ["🍵","☕️","🍰"] },
+  arzu:        { rating: 4.0, reviewCount: 52,  isVerified: false, savedByCount: 41,  latitude: 42.8530, longitude: 74.6000, openHour: 9,  closeHour: 22, photoEmojis: ["🍲","🥘"] },
+  shaurma1:    { rating: 4.5, reviewCount: 188, isVerified: false, savedByCount: 173, latitude: 42.8900, longitude: 74.6200, openHour: 10, closeHour: 24, todaySpecial: "Вторая шаурма −50% после 18:00", photoEmojis: ["🌯","🧀","🥙"] },
+};
+
+const SEED_DEAL_START = {
+  d1: hoursAgoTS(20), d2: daysAgoTS(5), d3: daysAgoTS(3), d4: hoursAgoTS(30),
+  d5: daysAgoTS(8), d6: daysAgoTS(12), d7: hoursAgoTS(10), d8: daysAgoTS(6),
+  d9: daysAgoTS(2), d10: daysAgoTS(4), d11: daysAgoTS(9), d12: daysAgoTS(1),
+  d13: daysAgoTS(7), d14: hoursAgoTS(40), d15: daysAgoTS(5),
+};
+
+const SEED_REVIEWS = [
+  { id: "r1", venueID: "navat", authorID: "u_aida", authorName: "Айда", rating: 5, text: "Лучшая чайхана в центре. Манты огонь, чай наливают бесконечно.", photoEmojis: ["🥟","🫖"], createdAt: daysAgoTS(3), updatedAt: daysAgoTS(3), hostReply: { text: "Спасибо, Айда! Ждём снова 🫖", createdAt: daysAgoTS(2) } },
+  { id: "r2", venueID: "navat", authorID: "u_marat", authorName: "Марат", rating: 4, text: "Вкусно, но в обед бывает шумно. Сервис быстрый.", photoEmojis: [], createdAt: daysAgoTS(10), updatedAt: daysAgoTS(10) },
+  { id: "r3", venueID: "sierra", authorID: "u_lena", authorName: "Лена", rating: 5, text: "Мой любимый кофе в городе. Раф на кокосовом — топ.", photoEmojis: ["☕️"], createdAt: daysAgoTS(1), updatedAt: daysAgoTS(1) },
+  { id: "r4", venueID: "sierra", authorID: "u_ts", authorName: "Тимур", rating: 4, text: "Отличное место для работы с ноутом, розеток хватает.", photoEmojis: [], createdAt: daysAgoTS(14), updatedAt: daysAgoTS(14) },
+  { id: "r5", venueID: "furusato", authorID: "u_dasha", authorName: "Даша", rating: 5, text: "Свежие роллы, большие порции. Сет «Бишкек» берём компанией.", photoEmojis: ["🍣","🍱"], createdAt: daysAgoTS(5), updatedAt: daysAgoTS(5), hostReply: { text: "Рады, что понравилось! 🍣", createdAt: daysAgoTS(4) } },
+  { id: "r6", venueID: "adriano", authorID: "u_nur", authorName: "Нуржан", rating: 5, text: "Матча просто космос. Десерты тоже на уровне.", photoEmojis: ["🍵"], createdAt: daysAgoTS(2), updatedAt: daysAgoTS(2) },
+  { id: "r7", venueID: "shaurma1", authorID: "u_beka", authorName: "Бека", rating: 4, text: "Сытно и недорого. Вторая по акции — приятно.", photoEmojis: [], createdAt: daysAgoTS(6), updatedAt: daysAgoTS(6) },
+  { id: "r8", venueID: "faiza", authorID: "u_gulnara", authorName: "Гульнара", rating: 4, text: "Лагман как у бабушки. Уютно и по-домашнему.", photoEmojis: ["🍜"], createdAt: daysAgoTS(8), updatedAt: daysAgoTS(8) },
+  { id: "r9", venueID: "chickenstar", authorID: "u_sam", authorName: "Сам", rating: 3, text: "Курица вкусная, но ждали комбо долго.", photoEmojis: [], createdAt: daysAgoTS(11), updatedAt: daysAgoTS(11) },
+  { id: "r10", venueID: "bublik", authorID: "u_olya", authorName: "Оля", rating: 5, text: "Круассаны утром свежайшие. Вечерняя скидка — бонус.", photoEmojis: ["🥐"], createdAt: daysAgoTS(4), updatedAt: daysAgoTS(4) },
+];
+
+window.seedDemo = async () => {
+  if (!confirm('Дополнить заведения/предложения новыми полями и добавить демо-отзывы?')) return;
+  try {
+    for (const [id, ex] of Object.entries(SEED_VENUE_EXTRAS)) {
+      await setDoc(doc(db, 'venues', id), { city: 'bishkek', ...ex }, { merge: true });
+    }
+    for (const d of deals) {
+      const patch = { status: d.status ?? 'active' };
+      if (SEED_DEAL_START[d.id]) patch.startDate = SEED_DEAL_START[d.id];
+      if (d.emoji) patch.imageEmojis = [d.emoji];
+      await setDoc(doc(db, 'deals', d.id), patch, { merge: true });
+    }
+    for (const { id, ...data } of SEED_REVIEWS) {
+      await setDoc(doc(db, 'reviews', id), data, { merge: true });
+    }
+    await loadAll();
+    toast('Демо-данные обновлены ✓', 'success');
+  } catch (e) { toast('Ошибка: ' + e.message, 'error'); }
+};
 
 // ── AUTH ──────────────────────────────────────────────────────────────────
 onAuthStateChanged(auth, user => {
@@ -376,16 +600,86 @@ window.signOut = () => fbSignOut(auth);
 
 // ── LOAD ──────────────────────────────────────────────────────────────────
 async function loadAll() {
-  await Promise.all([loadVenues(), loadDeals()]);
+  // allSettled: сбой одной коллекции (напр. нет правил) не ломает остальные.
+  await Promise.allSettled([loadVenues(), loadDeals(), loadHosts()]);
 }
+
+let hosts = [];
+async function loadHosts() {
+  try {
+    const snap = await getDocs(collection(db, 'hosts'));
+    hosts = snap.docs.map(d => ({ uid: d.id, ...d.data() }));
+    const rank = v => (v === 'pending' ? 0 : v === 'rejected' ? 1 : 2);
+    hosts.sort((a, b) => rank(a.verification) - rank(b.verification));
+    renderHosts();
+  } catch (e) {
+    document.getElementById('hostsBody').innerHTML =
+      `<tr><td colspan="4" class="empty">Нет доступа к коллекции hosts. Опубликуй правила: firebase deploy --only firestore:rules<br><small>${e.message}</small></td></tr>`;
+  }
+}
+
+function renderHosts() {
+  const tbody = document.getElementById('hostsBody');
+  if (!hosts.length) {
+    tbody.innerHTML = '<tr><td colspan="4" class="empty">Хостов нет</td></tr>';
+    return;
+  }
+  const map = { pending:['На рассмотрении','pending'], verified:['Подтверждён','approved'], rejected:['Отклонён','rejected'], none:['Не запрошена','pending'] };
+  tbody.innerHTML = hosts.map(h => {
+    const v = h.verification || 'none';
+    const [label, cls] = map[v] || [v, 'pending'];
+    const btns = v === 'verified'
+      ? `<button class="btn btn-secondary btn-sm" onclick="rejectHost('${h.uid}')">Снять</button>`
+      : `<button class="btn btn-success btn-sm" onclick="approveHost('${h.uid}')">✓ Верифицировать</button>
+         <button class="btn btn-secondary btn-sm" onclick="rejectHost('${h.uid}')">Отклонить</button>`;
+    return `
+    <tr>
+      <td><strong>${h.businessName || '—'}</strong></td>
+      <td>${h.email || ''}<br><small style="color:var(--muted)">${h.phone || ''}</small></td>
+      <td><span class="badge badge-${cls}">${label}</span></td>
+      <td><div class="row-actions">${btns}</div></td>
+    </tr>`;
+  }).join('');
+}
+
+async function setHostVerification(uid, status, verified) {
+  await setDoc(doc(db, 'hosts', uid), { verification: status }, { merge: true });
+  // Венесы хоста получают/теряют галочку «Проверено».
+  const snap = await getDocs(query(collection(db, 'venues'), where('ownerID', '==', uid)));
+  if (!snap.empty) {
+    const batch = writeBatch(db);
+    snap.forEach(d => batch.update(d.ref, { isVerified: verified }));
+    await batch.commit();
+  }
+  await Promise.all([loadHosts(), loadVenues()]);
+}
+
+window.approveHost = async (uid) => {
+  try { await setHostVerification(uid, 'verified', true); toast('Хост верифицирован', 'success'); }
+  catch (e) { toast('Ошибка: ' + e.message, 'error'); }
+};
+window.rejectHost = async (uid) => {
+  try { await setHostVerification(uid, 'rejected', false); toast('Верификация отклонена', 'success'); }
+  catch (e) { toast('Ошибка: ' + e.message, 'error'); }
+};
 
 async function loadVenues() {
   const snap = await getDocs(collection(db, 'venues'));
   venues = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  venues.sort((a, b) => a.name.localeCompare(b.name));
+  // На модерации — выше, затем по имени.
+  const rank = s => ((s || 'approved') === 'pending' ? 0 : (s === 'rejected' ? 1 : 2));
+  venues.sort((a, b) => rank(a.status) - rank(b.status) || a.name.localeCompare(b.name));
   renderVenues();
   populateVenueSelect();
 }
+
+window.setVenueStatus = async (id, status) => {
+  try {
+    await setDoc(doc(db, 'venues', id), { status }, { merge: true });
+    await loadVenues();
+    toast(status === 'approved' ? 'Заведение одобрено' : 'Статус обновлён', 'success');
+  } catch (e) { toast('Ошибка: ' + e.message, 'error'); }
+};
 
 async function loadDeals() {
   const snap = await getDocs(collection(db, 'deals'));
@@ -401,20 +695,29 @@ function renderVenues() {
     tbody.innerHTML = '<tr><td colspan="6" class="empty">Заведений нет</td></tr>';
     return;
   }
-  tbody.innerHTML = venues.map(v => `
+  tbody.innerHTML = venues.map(v => {
+    const status = v.status || 'approved';
+    const statusLabel = { pending:'На модерации', approved:'Одобрено', rejected:'Отклонено' }[status] || status;
+    const modBtns =
+      status !== 'approved'
+        ? `<button class="btn btn-success btn-sm" onclick="setVenueStatus('${v.id}','approved')">✓ Одобрить</button>`
+        : `<button class="btn btn-secondary btn-sm" onclick="setVenueStatus('${v.id}','rejected')">⨯ Отклонить</button>`;
+    return `
     <tr>
       <td class="emoji-cell">${v.emoji ?? '🍽'}</td>
       <td><strong>${v.name}</strong><br><small style="color:var(--muted)">${v.address ?? ''}</small></td>
       <td><span class="badge badge-${v.category}">${categoryLabel(v.category)}</span></td>
       <td>${v.district ?? ''}</td>
-      <td>${v.phone ?? ''}</td>
+      <td><span class="badge badge-${status}">${statusLabel}</span></td>
       <td>
         <div class="row-actions">
-          <button class="btn btn-secondary btn-sm" onclick="openVenueModal('${v.id}')">✏️ Изменить</button>
+          ${modBtns}
+          <button class="btn btn-secondary btn-sm" onclick="openVenueModal('${v.id}')">✏️</button>
           <button class="btn btn-danger btn-sm"    onclick="askDelete('venue','${v.id}','${v.name}')">🗑</button>
         </div>
       </td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
 }
 
 // ── RENDER DEALS ──────────────────────────────────────────────────────────
@@ -464,10 +767,22 @@ window.openVenueModal = (id) => {
   document.getElementById('vGradientFrom').value = v?.gradientFrom ?? '#E65C00';
   document.getElementById('vGradientTo').value   = v?.gradientTo ?? '#F9D423';
   document.getElementById('vImageURL').value     = v?.imageURL ?? '';
+  document.getElementById('vTodaySpecial').value = v?.todaySpecial ?? '';
+  document.getElementById('vLatitude').value     = v?.latitude ?? '';
+  document.getElementById('vLongitude').value    = v?.longitude ?? '';
+  document.getElementById('vOpenHour').value     = v?.openHour ?? '';
+  document.getElementById('vCloseHour').value    = v?.closeHour ?? '';
+  document.getElementById('vPdfMenuURL').value   = v?.pdfMenuURL ?? '';
+  document.getElementById('vVerified').value     = String(v?.isVerified ?? false);
+  document.getElementById('vModeration').value   = v?.status ?? 'approved';
+  document.getElementById('vActive').value       = String((v?.isPaused ? false : (v?.active ?? true)));
+  currentItems = Array.isArray(v?.items) ? v.items.map(it => ({ ...it })) : [];
+  renderVenueItems();
   document.getElementById('venueModal').classList.remove('hidden');
 };
 
 window.saveVenue = async () => {
+  const num = v => { const n = Number(v); return v === '' || isNaN(n) ? null : n; };
   const data = {
     name:         document.getElementById('vName').value.trim(),
     category:     document.getElementById('vCategory').value,
@@ -477,14 +792,38 @@ window.saveVenue = async () => {
     emoji:        document.getElementById('vEmoji').value.trim(),
     gradientFrom: document.getElementById('vGradientFrom').value,
     gradientTo:   document.getElementById('vGradientTo').value,
-    active:       true,
-    ...(document.getElementById('vImageURL').value.trim()
-        ? { imageURL: document.getElementById('vImageURL').value.trim() } : {}),
+    city:         'bishkek',
+    isVerified:   document.getElementById('vVerified').value === 'true',
+    active:       document.getElementById('vActive').value === 'true',
+    isPaused:     document.getElementById('vActive').value !== 'true',
+    status:       document.getElementById('vModeration').value,
+    items:        currentItems,
+    imageURL:     document.getElementById('vImageURL').value.trim(),
+    todaySpecial: document.getElementById('vTodaySpecial').value.trim(),
+    latitude:     num(document.getElementById('vLatitude').value),
+    longitude:    num(document.getElementById('vLongitude').value),
+    openHour:     num(document.getElementById('vOpenHour').value),
+    closeHour:    num(document.getElementById('vCloseHour').value),
+    pdfMenuURL:   document.getElementById('vPdfMenuURL').value.trim(),
   };
   if (!data.name) return toast('Укажи название', 'error');
+  // Пустые координаты по умолчанию — центр Бишкека.
+  if (data.latitude === null)  data.latitude  = 42.8746;
+  if (data.longitude === null) data.longitude = 74.5698;
+  // Пустой специал/PDF — удаляем поле, чтобы убрать его из карточки.
+  const toDelete = [];
+  if (!data.todaySpecial) { delete data.todaySpecial; toDelete.push('todaySpecial'); }
+  if (!data.pdfMenuURL)   { delete data.pdfMenuURL;   toDelete.push('pdfMenuURL'); }
+  // Убираем оставшиеся null-поля (необязательные часы).
+  Object.keys(data).forEach(k => data[k] === null && delete data[k]);
   try {
     if (editingVenueId) {
       await setDoc(doc(db, 'venues', editingVenueId), data, { merge: true });
+      // Явно стираем очищенные поля.
+      if (toDelete.length) {
+        const patch = Object.fromEntries(toDelete.map(k => [k, deleteField()]));
+        await setDoc(doc(db, 'venues', editingVenueId), patch, { merge: true });
+      }
     } else {
       await addDoc(collection(db, 'venues'), data);
     }
@@ -507,6 +846,8 @@ window.openDealModal = (id) => {
   document.getElementById('dOldPrice').value        = d?.oldPrice ?? '';
   document.getElementById('dNewPrice').value        = d?.newPrice ?? '';
   document.getElementById('dDiscountPercent').value = d?.discountPercent ?? '';
+  document.getElementById('dImageURL').value        = d?.imageURL ?? '';
+  document.getElementById('dStatus').value          = d?.status ?? 'active';
   const until = d?.validUntil?.toDate ? d.validUntil.toDate() : new Date();
   if (!id) until.setDate(until.getDate() + 14);
   document.getElementById('dValidUntil').value = until.toISOString().slice(0, 10);
@@ -526,6 +867,8 @@ window.saveDeal = async () => {
     venueID:         document.getElementById('dVenueID').value,
     details:         document.getElementById('dDetails').value.trim(),
     emoji:           document.getElementById('dEmoji').value.trim(),
+    status:          document.getElementById('dStatus').value,
+    imageURL:        document.getElementById('dImageURL').value.trim(),
     validUntil:      Timestamp.fromDate(new Date(until + 'T23:59:59')),
     oldPrice:        num(document.getElementById('dOldPrice').value),
     newPrice:        num(document.getElementById('dNewPrice').value),

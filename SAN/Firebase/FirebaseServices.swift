@@ -269,6 +269,7 @@ extension Venue {
             todaySpecialText: d["todaySpecial"] as? String,
             openHour: (d["openHour"] as? NSNumber)?.intValue ?? 9,
             closeHour: (d["closeHour"] as? NSNumber)?.intValue ?? 22,
+            weekHours: DayHours.parseArray(d["weekHours"]),
             pdfMenuURL: d["pdfMenuURL"] as? String,
             photoEmojis: d["photoEmojis"] as? [String] ?? [],
             ownerID: d["ownerID"] as? String ?? "",
@@ -276,6 +277,18 @@ extension Venue {
             statusRaw: d["status"] as? String ?? ModerationStatus.approved.rawValue,
             isPaused: d["isPaused"] as? Bool ?? false
         )
+    }
+}
+
+extension DayHours {
+    var firestoreMap: [String: Any] { ["closed": closed, "open": open, "close": close] }
+    static func parseArray(_ raw: Any?) -> [DayHours] {
+        guard let arr = raw as? [[String: Any]], arr.count == 7 else { return [] }
+        return arr.map { m in
+            DayHours(closed: m["closed"] as? Bool ?? false,
+                     open: (m["open"] as? NSNumber)?.intValue ?? 540,
+                     close: (m["close"] as? NSNumber)?.intValue ?? 1320)
+        }
     }
 }
 
@@ -287,11 +300,12 @@ extension VenueItem {
             guard let id = m["id"] as? String, let name = m["name"] as? String else { return nil }
             return VenueItem(id: id, name: name,
                              emoji: m["emoji"] as? String ?? "🍽",
-                             kind: m["kind"] as? String ?? "food")
+                             kind: m["kind"] as? String ?? "food",
+                             imageURL: m["imageURL"] as? String ?? "")
         }
     }
     var firestoreMap: [String: Any] {
-        ["id": id, "name": name, "emoji": emoji, "kind": kind]
+        ["id": id, "name": name, "emoji": emoji, "kind": kind, "imageURL": imageURL]
     }
 }
 
@@ -337,6 +351,7 @@ extension Review {
         ]
         if let itemID { d["itemID"] = itemID }
         if let itemName { d["itemName"] = itemName }
+        if !photos.isEmpty { d["photos"] = photos }
         if let hostReply {
             d["hostReply"] = [
                 "text": hostReply.text,
@@ -370,7 +385,8 @@ extension Review {
             updatedAt: (d["updatedAt"] as? Timestamp)?.dateValue() ?? created,
             hostReply: reply,
             itemID: d["itemID"] as? String,
-            itemName: d["itemName"] as? String
+            itemName: d["itemName"] as? String,
+            photos: d["photos"] as? [String] ?? []
         )
     }
 }
@@ -432,6 +448,8 @@ extension HostVenueDTO {
             "status": status,
             "items": items.map(\.firestoreMap),
             "imageURL": imageURL,
+            "weekHours": weekHours.map(\.firestoreMap),
+            "pdfMenuURL": pdfMenuURL,
             "todaySpecial": todaySpecial ?? ""
         ]
         if (todaySpecial ?? "").isEmpty { d["todaySpecial"] = "" }
@@ -458,7 +476,9 @@ extension HostVenueDTO {
             isVerified: d["isVerified"] as? Bool ?? false,
             status: d["status"] as? String ?? ModerationStatus.approved.rawValue,
             items: VenueItem.parse(d["items"]),
-            imageURL: d["imageURL"] as? String ?? "")
+            imageURL: d["imageURL"] as? String ?? "",
+            weekHours: { let w = DayHours.parseArray(d["weekHours"]); return w.isEmpty ? Venue.defaultWeek() : w }(),
+            pdfMenuURL: d["pdfMenuURL"] as? String ?? "")
     }
 }
 

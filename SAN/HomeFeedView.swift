@@ -5,13 +5,14 @@ struct HomeFeedView: View {
     @EnvironmentObject private var store: AppStore
     @EnvironmentObject private var location: LocationManager
     @State private var category: VenueCategory?
+    @State private var path = NavigationPath()
 
-    private var feed: [Venue] {
-        store.rankedFeed(category: category, userCoord: location.lastLocation)
+    private var feed: [Deal] {
+        store.feedDeals(category: category)
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             ScrollView {
                 LazyVStack(spacing: 18) {
                     categoryRow
@@ -23,9 +24,10 @@ struct HomeFeedView: View {
                 .padding(.vertical, 10)
             }
             .refreshable { await store.load() }
-            .navigationTitle("САН · \(store.selectedCity.name)")
+            .navigationTitle("Ayta · \(store.selectedCity.name)")
             .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(for: Venue.self) { VenueDetailView(venue: $0) }
+            .navigationDestination(for: Deal.self) { DealDetailView(deal: $0, isPushed: true) }
         }
     }
 
@@ -104,13 +106,9 @@ struct HomeFeedView: View {
         } else if feed.isEmpty {
             emptyCategory
         } else {
-            ForEach(Array(feed.enumerated()), id: \.element.id) { index, venue in
-                NavigationLink(value: venue) {
-                    VenueCard(venue: venue,
-                              distanceKm: location.distanceKm(to: venue.latitude, venue.longitude))
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 16)
+            ForEach(Array(feed.enumerated()), id: \.element.id) { index, deal in
+                DealCard(deal: deal) { path.append(deal) }
+                    .padding(.horizontal, 16)
 
                 // Каждая 5-я позиция — рекламный слот (пока плейсхолдер).
                 if (index + 1) % 5 == 0 {
@@ -133,9 +131,9 @@ struct HomeFeedView: View {
     private var emptyCategory: some View {
         VStack(spacing: 12) {
             ContentUnavailableView {
-                Label("Нет заведений в категории", systemImage: "tray")
+                Label("Нет предложений в категории", systemImage: "tray")
             } description: {
-                Text("В категории «\(category?.rawValue ?? "")» в городе \(store.selectedCity.name) пока пусто.")
+                Text("В категории «\(category?.rawValue ?? "")» в городе \(store.selectedCity.name) пока нет акций.")
             }
             Button("Сбросить фильтр") { category = nil }
                 .buttonStyle(.bordered)

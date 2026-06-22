@@ -4,43 +4,60 @@ import SwiftUI
 
 struct DealDetailView: View {
     let deal: Deal
+    var isPushed: Bool = false   // true — экран в навигационном стеке (push), без «Готово»
     @EnvironmentObject private var store: AppStore
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
+    @State private var showMapOptions = false
 
     private var venue: Venue? { store.venue(for: deal) }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    hero
-                    VStack(alignment: .leading, spacing: 10) {
-                        DealTypeBadge(type: deal.type)
-                        Text(deal.title).font(.title2.weight(.bold))
-                        Text(deal.details).font(.body).foregroundStyle(.secondary)
-                        PriceLabel(deal: deal)
-                        Label("Действует до \(deal.validUntil.sanShort)", systemImage: "clock")
-                            .font(.subheadline).foregroundStyle(.secondary)
-                    }
-                    .padding(.horizontal, 16)
-                    showAtVenue
-                    if venue != nil { venueSection }
-                }
-                .padding(.bottom, 24)
+        if isPushed {
+            content
+        } else {
+            NavigationStack {
+                content
+                    .navigationDestination(for: Venue.self) { VenueDetailView(venue: $0) }
             }
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) { Button("Готово") { dismiss() } }
-                ToolbarItem(placement: .topBarLeading) {
-                    Button { store.toggleFavorite(deal) } label: {
-                        Image(systemName: store.isFavorite(deal) ? "bookmark.fill" : "bookmark")
-                    }
+        }
+    }
+
+    private var content: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                hero
+                VStack(alignment: .leading, spacing: 10) {
+                    DealTypeBadge(type: deal.type)
+                    Text(deal.title).font(.title2.weight(.bold))
+                    Text(deal.details).font(.body).foregroundStyle(.secondary)
+                    PriceLabel(deal: deal)
+                    Label("Действует до \(deal.validUntil.sanShort)", systemImage: "clock")
+                        .font(.subheadline).foregroundStyle(.secondary)
                 }
-                ToolbarItem(placement: .topBarLeading) {
-                    ShareLink(item: DeepLinkRouter.dealURL(deal.id),
-                              subject: Text(deal.title),
-                              message: Text("\(deal.title) — \(venue?.name ?? ""). Нашёл в САН!")) {
-                        Image(systemName: "square.and.arrow.up")
-                    }
+                .padding(.horizontal, 16)
+                showAtVenue
+                if venue != nil { venueSection }
+            }
+            .padding(.bottom, 24)
+        }
+        .navigationTitle(venue?.name ?? "Предложение")
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear { store.log(AnalyticsMetric.dealTaps, for: deal.venueID) }
+        .toolbar {
+            if !isPushed {
+                ToolbarItem(placement: .topBarLeading) { Button("Готово") { dismiss() } }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { store.toggleFavorite(deal) } label: {
+                    Image(systemName: store.isFavorite(deal) ? "bookmark.fill" : "bookmark")
+                }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                ShareLink(item: DeepLinkRouter.dealURL(deal.id),
+                          subject: Text(deal.title),
+                          message: Text("\(deal.title) — \(venue?.name ?? ""). Нашёл в Ayta!")) {
+                    Image(systemName: "square.and.arrow.up")
                 }
             }
         }
@@ -68,7 +85,7 @@ struct DealDetailView: View {
             Image(systemName: "qrcode.viewfinder").font(.title).foregroundStyle(Color.sanAccent)
             VStack(alignment: .leading, spacing: 2) {
                 Text("Покажи этот экран сотруднику").font(.subheadline.weight(.semibold))
-                Text("Код: САН-\(deal.id.uppercased())").font(.caption).foregroundStyle(.secondary)
+                Text("Код: AYTA-\(deal.id.uppercased())").font(.caption).foregroundStyle(.secondary)
             }
         }
         .padding(14)
@@ -82,15 +99,35 @@ struct DealDetailView: View {
         if let venue {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Заведение").font(.headline)
-                HStack(spacing: 12) {
-                    VenueAvatar(venue: venue, size: 48)
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(venue.name).font(.subheadline.weight(.semibold))
-                        Text("\(venue.category.rawValue) • \(venue.district)")
-                            .font(.caption).foregroundStyle(.secondary)
+                NavigationLink(value: venue) {
+                    HStack(spacing: 12) {
+                        VenueAvatar(venue: venue, size: 48)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(venue.name).font(.subheadline.weight(.semibold)).foregroundStyle(.primary)
+                            Text("\(venue.category.rawValue) • \(venue.district)")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
                     }
                 }
-                Label(venue.address, systemImage: "mappin.and.ellipse").font(.subheadline)
+                .buttonStyle(.plain)
+                Button {
+                    store.log(AnalyticsMetric.maps, for: venue.id)
+                    showMapOptions = true
+                } label: {
+                    HStack {
+                        Label(venue.address, systemImage: "mappin.and.ellipse").font(.subheadline)
+                        Spacer()
+                        Image(systemName: "map.fill").foregroundStyle(Color.sanAccent)
+                    }
+                }
+                .buttonStyle(.plain)
+                .confirmationDialog("Открыть на карте", isPresented: $showMapOptions, titleVisibility: .visible) {
+                    Button("2GIS") { openURL(Directions.dgis(lat: venue.latitude, lng: venue.longitude)) }
+                    Button("Google Maps") { openURL(Directions.google(lat: venue.latitude, lng: venue.longitude)) }
+                    Button("Отмена", role: .cancel) {}
+                }
                 if let url = URL(string: "tel:\(venue.phone.filter { !$0.isWhitespace })") {
                     Link(destination: url) {
                         Label(venue.phone, systemImage: "phone.fill").font(.subheadline)
@@ -116,14 +153,21 @@ struct VenueDetailView: View {
     @State private var photoViewerIndex: Int?
     @State private var reportingReview: Review?
     @State private var showGuestPrompt = false
+    @State private var showMapOptions = false
 
     private var deals: [Deal] { store.deals(for: venue) }
     private var agg: (rating: Double, count: Int) { store.aggregate(for: venue) }
     private var venueReviews: [Review] { store.reviews(for: venue) }
 
-    /// Фото заведения + фото из отзывов.
+    /// Реальные фото (обложка, объекты, фото из отзывов) + легаси-эмодзи как фолбэк.
     private var galleryPhotos: [String] {
-        venue.photoEmojis + venueReviews.flatMap(\.photoEmojis)
+        var out: [String] = []
+        if let cover = venue.imageURL, !cover.isEmpty { out.append(cover) }
+        out += venue.items.compactMap { $0.imageURL.isEmpty ? nil : $0.imageURL }
+        out += venueReviews.flatMap(\.photos)
+        out += venue.photoEmojis
+        out += venueReviews.flatMap(\.photoEmojis)
+        return out
     }
 
     var body: some View {
@@ -156,7 +200,7 @@ struct VenueDetailView: View {
                 WriteReviewView(venue: venue,
                                 existing: store.myReview(venueID: venue.id, itemID: itemID),
                                 preselectItemID: itemID)
-            case .pdf: if let pdf = venue.pdfMenuURL { PDFMenuView(urlString: pdf) }
+            case .pdf: if let pdf = venue.pdfMenuURL, !pdf.isEmpty { PDFMenuView(urlString: pdf) }
             }
         }
         .fullScreenCover(item: Binding(
@@ -172,7 +216,7 @@ struct VenueDetailView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 0) {
             ZStack(alignment: .bottomLeading) {
-                CoverImage(urlString: venue.imageURL, gradient: venue.gradient, emoji: venue.emoji, emojiSize: 70)
+                VenuePhoto(urlString: venue.imageURL, gradient: venue.gradient)
                     .frame(height: 190).clipped()
                 VenueAvatar(venue: venue, size: 64)
                     .overlay(Circle().stroke(Color(.systemBackground), lineWidth: 3))
@@ -221,7 +265,7 @@ struct VenueDetailView: View {
             }
             ShareLink(item: DeepLinkRouter.venueURL(venue.id),
                       subject: Text(venue.name),
-                      message: Text("\(venue.name), \(venue.address). Нашёл в САН!")) {
+                      message: Text("\(venue.name), \(venue.address). Нашёл в Ayta!")) {
                 actionLabel("Поделиться", "square.and.arrow.up")
             }
             .buttonStyle(.plain)
@@ -263,12 +307,21 @@ struct VenueDetailView: View {
 
     private var infoSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 8) {
-                Label(venue.address, systemImage: "mappin.and.ellipse").font(.subheadline)
-                HStack(spacing: 10) {
-                    mapLinkButton("2GIS") { openURL(Directions.dgis(lat: venue.latitude, lng: venue.longitude)) }
-                    mapLinkButton("Google Maps") { openURL(Directions.google(lat: venue.latitude, lng: venue.longitude)) }
+            Button {
+                store.log(AnalyticsMetric.maps, for: venue.id)
+                showMapOptions = true
+            } label: {
+                HStack {
+                    Label(venue.address, systemImage: "mappin.and.ellipse").font(.subheadline)
+                    Spacer()
+                    Image(systemName: "map.fill").foregroundStyle(Color.sanAccent)
                 }
+            }
+            .buttonStyle(.plain)
+            .confirmationDialog("Открыть на карте", isPresented: $showMapOptions, titleVisibility: .visible) {
+                Button("2GIS") { openURL(Directions.dgis(lat: venue.latitude, lng: venue.longitude)) }
+                Button("Google Maps") { openURL(Directions.google(lat: venue.latitude, lng: venue.longitude)) }
+                Button("Отмена", role: .cancel) {}
             }
             if let url = URL(string: "tel:\(venue.phone.filter { !$0.isWhitespace })") {
                 Link(destination: url) { Label(venue.phone, systemImage: "phone.fill").font(.subheadline) }
@@ -286,20 +339,25 @@ struct VenueDetailView: View {
             .buttonStyle(.plain)
             if hoursExpanded {
                 VStack(alignment: .leading, spacing: 4) {
-                    ForEach(weekdays, id: \.self) { day in
+                    ForEach(0..<7, id: \.self) { i in
+                        let isToday = i == Venue.todayIndex
                         HStack {
-                            Text(day).font(.caption).foregroundStyle(.secondary)
-                            Spacer()
-                            Text(String(format: "%02d:00 – %02d:00", venue.openHour, venue.closeHour))
+                            Text(Venue.weekdayLong[i])
                                 .font(.caption)
+                                .fontWeight(isToday ? .semibold : .regular)
+                                .foregroundStyle(isToday ? .primary : .secondary)
+                            Spacer()
+                            Text(venue.hours(for: i).label)
+                                .font(.caption)
+                                .foregroundStyle(venue.hours(for: i).closed ? .secondary : .primary)
                         }
                     }
                 }
                 .padding(.leading, 28)
             }
-            if venue.pdfMenuURL != nil {
+            if let pdf = venue.pdfMenuURL, !pdf.isEmpty {
                 Button { activeSheet = .pdf } label: {
-                    Label("Меню (PDF)", systemImage: "doc.text").font(.subheadline)
+                    Label("Прайс-лист / каталог (PDF)", systemImage: "doc.text").font(.subheadline)
                 }
                 .buttonStyle(.plain)
             }
@@ -307,19 +365,6 @@ struct VenueDetailView: View {
         .padding(.horizontal, 16)
     }
 
-    private var weekdays: [String] {
-        ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
-    }
-
-    private func mapLinkButton(_ title: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title).font(.caption.weight(.semibold))
-                .padding(.horizontal, 12).padding(.vertical, 6)
-                .background(Color.sanAccent.opacity(0.12), in: Capsule())
-                .foregroundStyle(Color.sanAccent)
-        }
-        .buttonStyle(.plain)
-    }
 
     // MARK: Карта (статичный тайл → маршрут)
 
@@ -347,20 +392,23 @@ struct VenueDetailView: View {
             Text("Предложения").font(.headline).padding(.horizontal, 16)
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
                 ForEach(deals) { deal in
-                    Button { store.log(AnalyticsMetric.dealTaps, for: venue.id); activeSheet = .deal(deal) } label: {
-                        ZStack(alignment: .bottomLeading) {
-                            CoverImage(urlString: deal.imageURL, gradient: venue.gradient,
-                                       emoji: deal.emoji, emojiSize: 34)
-                            if let pct = deal.discountPercent {
-                                Text("−\(pct)%")
-                                    .font(.caption2.weight(.bold)).foregroundStyle(.white)
-                                    .padding(.horizontal, 6).padding(.vertical, 3)
-                                    .background(.black.opacity(0.4), in: Capsule())
-                                    .padding(6)
+                    Button { activeSheet = .deal(deal) } label: {
+                        Color.clear
+                            .aspectRatio(1, contentMode: .fit)
+                            .overlay {
+                                CoverImage(urlString: deal.imageURL, gradient: venue.gradient,
+                                           emoji: deal.emoji, emojiSize: 34)
                             }
-                        }
-                        .aspectRatio(1, contentMode: .fill)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .overlay(alignment: .bottomLeading) {
+                                if let pct = deal.discountPercent {
+                                    Text("−\(pct)%")
+                                        .font(.caption2.weight(.bold)).foregroundStyle(.white)
+                                        .padding(.horizontal, 6).padding(.vertical, 3)
+                                        .background(.black.opacity(0.4), in: Capsule())
+                                        .padding(6)
+                                }
+                            }
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
                     }
                     .buttonStyle(.plain)
                 }
@@ -378,9 +426,9 @@ struct VenueDetailView: View {
                 HStack(spacing: 8) {
                     ForEach(Array(galleryPhotos.enumerated()), id: \.offset) { i, p in
                         Button { photoViewerIndex = i } label: {
-                            Text(p).font(.system(size: 40))
+                            GalleryImage(value: p, emojiSize: 40)
                                 .frame(width: 90, height: 90)
-                                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
                         }
                         .buttonStyle(.plain)
                     }
@@ -403,9 +451,7 @@ struct VenueDetailView: View {
                             else { activeSheet = .writeReview(item.id) }
                         } label: {
                             VStack(spacing: 6) {
-                                Text(item.emoji).font(.system(size: 34))
-                                    .frame(width: 70, height: 70)
-                                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 14))
+                                ItemThumb(item: item, size: 70)
                                 Text(item.name).font(.caption).lineLimit(1)
                                     .frame(maxWidth: 80)
                             }

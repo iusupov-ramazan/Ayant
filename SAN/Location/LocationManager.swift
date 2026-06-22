@@ -1,6 +1,5 @@
 import Foundation
 import CoreLocation
-import UIKit
 
 /// Управляет «while using» геолокацией. Публикует только последнюю позицию —
 /// история не хранится (по спецификации). Если доступ не выдан — расстояния скрыты.
@@ -86,27 +85,17 @@ extension Double {
 // MARK: - Deep-link маршрутов (2GIS → Google Maps фолбэк)
 
 enum Directions {
-    /// URL для построения маршрута. 2GIS если установлен, иначе Google Maps.
-    static func url(lat: Double, lng: Double) -> URL {
-        let dgis = URL(string: "dgis://2gis.ru/routeSearch/to/\(lng),\(lat)/go")
-        if let dgis, UIApplicationOpenChecker.canOpen(dgis) { return dgis }
-        return URL(string: "https://www.google.com/maps/dir/?api=1&destination=\(lat),\(lng)")!
-    }
-
-    /// Прямая ссылка на 2GIS (кнопка «2GIS»).
+    /// 2GIS: формат 2gis.kg/geo/<lng>,<lat>. Универсальная ссылка — открывает
+    /// приложение 2GIS, если установлено, иначе веб. Координаты в порядке «долгота,широта».
     static func dgis(lat: Double, lng: Double) -> URL {
-        URL(string: "dgis://2gis.ru/routeSearch/to/\(lng),\(lat)/go")
-            ?? URL(string: "https://2gis.ru")!
+        URL(string: "https://2gis.kg/geo/\(lng),\(lat)?m=\(lng),\(lat)/16")!
     }
 
-    /// Прямая ссылка на Google Maps (кнопка «Google Maps»).
+    /// Google Maps: маршрут до точки.
     static func google(lat: Double, lng: Double) -> URL {
         URL(string: "https://www.google.com/maps/dir/?api=1&destination=\(lat),\(lng)")!
     }
-}
 
-enum UIApplicationOpenChecker {
-    static func canOpen(_ url: URL) -> Bool {
-        UIApplication.shared.canOpenURL(url)
-    }
+    /// По умолчанию — 2GIS (доминирует в Центральной Азии).
+    static func url(lat: Double, lng: Double) -> URL { dgis(lat: lat, lng: lng) }
 }

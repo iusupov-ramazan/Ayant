@@ -73,12 +73,13 @@ struct BonusHubView: View {
     // MARK: Игры
 
     @State private var showSnake = false
+    @State private var showTetris = false
 
     private var gamesSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Игры").font(.headline)
             // Открываем как полноэкранную модалку: у неё нет свайпа «назад»,
-            // поэтому горизонтальные свайпы управляют только змейкой.
+            // поэтому горизонтальные свайпы управляют только игрой.
             Button { showSnake = true } label: {
                 gameRow(emoji: "🐍", title: "Змейка",
                         subtitle: "1 яблоко = 2 бонуса", gradient: [.green, .teal])
@@ -88,9 +89,14 @@ struct BonusHubView: View {
                 SnakeGameView()
             }
 
-            gameRow(emoji: "🧱", title: "Тетрис",
-                    subtitle: "Скоро", gradient: [.purple, .indigo])
-                .opacity(0.5)
+            Button { showTetris = true } label: {
+                gameRow(emoji: "🧱", title: "Тетрис",
+                        subtitle: "1 линия = 20 бонусов", gradient: [.purple, .indigo])
+            }
+            .buttonStyle(.plain)
+            .fullScreenCover(isPresented: $showTetris) {
+                TetrisGameView()
+            }
         }
     }
 

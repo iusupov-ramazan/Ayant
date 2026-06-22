@@ -105,10 +105,6 @@ final class AppStore: ObservableObject {
 
     var selectedCity: City { MockData.city(slug: selectedCitySlug) }
 
-    var hasSelectedCity: Bool {
-        UserDefaults.standard.string(forKey: Self.cityKey) != nil
-    }
-
     func venuesInSelectedCity() -> [Venue] {
         // Только одобренные модерацией и не на паузе — на пользовательской стороне.
         venues.filter { $0.citySlug == selectedCitySlug && $0.isApproved && !$0.isPaused }
@@ -122,6 +118,16 @@ final class AppStore: ObservableObject {
 
     func deals(for venue: Venue) -> [Deal] {
         deals.filter { $0.venueID == venue.id && $0.isActive }
+    }
+
+    /// Лента предложений: активные акции заведений выбранного города
+    /// (одобренные, не на паузе), с фильтром по категории. Свежие — выше.
+    func feedDeals(category: VenueCategory?) -> [Deal] {
+        let cityVenues = venuesInSelectedCity()
+            .filter { category == nil || $0.category == category }
+        let ids = Set(cityVenues.map(\.id))
+        return deals.filter { $0.isActive && ids.contains($0.venueID) }
+            .sorted { ($0.startDate ?? .distantPast) > ($1.startDate ?? .distantPast) }
     }
 
     func allDeals(for venue: Venue) -> [Deal] {
@@ -304,16 +310,16 @@ final class AppStore: ObservableObject {
         }) {
             reviews[idx].rating = rating
             reviews[idx].text = text
-            reviews[idx].photoEmojis = photos
+            reviews[idx].photos = photos        // URL-фото
             reviews[idx].itemName = itemName
             reviews[idx].updatedAt = .now
             saved = reviews[idx]
         } else {
             let r = Review(id: "ur_\(UUID().uuidString.prefix(8))", venueID: venueID,
                            authorID: currentUserID, authorName: currentUserName,
-                           rating: rating, text: text, photoEmojis: photos,
+                           rating: rating, text: text, photoEmojis: [],
                            createdAt: .now, updatedAt: .now, hostReply: nil,
-                           itemID: itemID, itemName: itemName)
+                           itemID: itemID, itemName: itemName, photos: photos)
             reviews.append(r)
             saved = r
         }

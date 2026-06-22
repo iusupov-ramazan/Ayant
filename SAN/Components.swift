@@ -12,22 +12,46 @@ struct VenueAvatar: View {
                 .fill(LinearGradient(colors: venue.gradient,
                                      startPoint: .topLeading,
                                      endPoint: .bottomTrailing))
-            if let urlString = venue.imageURL, let url = URL(string: urlString) {
+            if let urlString = venue.imageURL, !urlString.isEmpty, let url = URL(string: urlString) {
                 AsyncImage(url: url) { phase in
                     switch phase {
                     case .success(let image):
                         image.resizable().scaledToFill()
                     default:
-                        Text(venue.emoji).font(.system(size: size * 0.5))
+                        Image(systemName: "storefront.fill").font(.system(size: size * 0.42)).foregroundStyle(.white)
                     }
                 }
                 .clipShape(Circle())
             } else {
-                Text(venue.emoji).font(.system(size: size * 0.5))
+                Image(systemName: "storefront.fill").font(.system(size: size * 0.42)).foregroundStyle(.white)
             }
         }
         .frame(width: size, height: size)
         .clipShape(Circle())
+    }
+}
+
+// MARK: - Обложка заведения (фото или градиент со значком — без эмодзи)
+
+struct VenuePhoto: View {
+    let urlString: String?
+    var gradient: [Color] = [.sanAccent, .orange]
+
+    var body: some View {
+        ZStack {
+            LinearGradient(colors: gradient, startPoint: .topLeading, endPoint: .bottomTrailing)
+            if let s = urlString, !s.isEmpty, let url = URL(string: s) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image): image.resizable().scaledToFill()
+                    case .empty: ProgressView().tint(.white)
+                    default: Image(systemName: "storefront.fill").font(.largeTitle).foregroundStyle(.white.opacity(0.85))
+                    }
+                }
+            } else {
+                Image(systemName: "storefront.fill").font(.largeTitle).foregroundStyle(.white.opacity(0.85))
+            }
+        }
     }
 }
 
@@ -74,101 +98,103 @@ struct DealCard: View {
     let deal: Deal
     var onTap: () -> Void = {}
     @EnvironmentObject private var store: AppStore
+    @State private var showGuestAlert = false
 
     private var venue: Venue? { store.venue(for: deal) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            header
-            visual
+            // Основная область открывает предложение; кнопки ниже работают отдельно.
+            Button(action: onTap) {
+                VStack(alignment: .leading, spacing: 0) {
+                    header
+                    visual
+                    caption
+                }
+            }
+            .buttonStyle(.plain)
             actions
-            caption
         }
         .background(Color(.systemBackground))
-        .contentShape(Rectangle())
-        .onTapGesture(perform: onTap)
+        .clipShape(RoundedRectangle(cornerRadius: 18))
+        .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color(.systemGray5), lineWidth: 1))
+        .alert("Войдите в аккаунт", isPresented: $showGuestAlert) {
+            Button("Понятно", role: .cancel) {}
+        } message: {
+            Text("Гостям доступен только просмотр. Войдите в профиле, чтобы сохранять.")
+        }
     }
 
     private var header: some View {
         HStack(spacing: 10) {
             if let venue { VenueAvatar(venue: venue) }
             VStack(alignment: .leading, spacing: 1) {
-                Text(venue?.name ?? "")
-                    .font(.subheadline.weight(.semibold))
+                HStack(spacing: 4) {
+                    Text(venue?.name ?? "").font(.subheadline.weight(.semibold))
+                    if venue?.isVerified == true {
+                        Image(systemName: "checkmark.seal.fill").font(.caption2).foregroundStyle(.blue)
+                    }
+                }
                 Text("\(venue?.category.rawValue ?? "") • \(venue?.district ?? "")")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
             DealTypeBadge(type: deal.type)
         }
-        .padding(.horizontal, 16)
-        .padding(.bottom, 10)
+        .padding(12)
     }
 
     private var visual: some View {
         ZStack {
-            LinearGradient(colors: venue?.gradient ?? [.sanAccent, .orange],
-                           startPoint: .topLeading,
-                           endPoint: .bottomTrailing)
-            Text(deal.emoji)
-                .font(.system(size: 90))
-                .shadow(radius: 8)
-
+            CoverImage(urlString: deal.imageURL, gradient: venue?.gradient ?? [.sanAccent, .orange],
+                       emoji: deal.emoji, emojiSize: 90)
             if let percent = deal.discountPercent {
                 Text("−\(percent)%")
                     .font(.title2.weight(.heavy))
                     .foregroundStyle(.white)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, 14).padding(.vertical, 8)
                     .background(.black.opacity(0.35), in: Capsule())
-                    .frame(maxWidth: .infinity, maxHeight: .infinity,
-                           alignment: .topLeading)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     .padding(12)
             }
         }
-        .frame(height: 280)
+        .frame(height: 240)
         .clipped()
     }
 
     private var actions: some View {
         HStack(spacing: 18) {
             Button {
-                store.toggleFavorite(deal)
+                if store.isGuest { showGuestAlert = true } else { store.toggleFavorite(deal) }
             } label: {
-                Image(systemName: store.isFavorite(deal) ? "heart.fill" : "heart")
-                    .font(.title2)
+                Image(systemName: store.isFavorite(deal) ? "bookmark.fill" : "bookmark")
+                    .font(.title3)
                     .foregroundStyle(store.isFavorite(deal) ? Color.sanAccent : .primary)
             }
             .buttonStyle(.plain)
 
-            ShareLink(item: "\(deal.title) — \(venue?.name ?? ""), \(venue?.address ?? ""). Нашёл в САН!") {
-                Image(systemName: "paperplane")
-                    .font(.title2)
-                    .foregroundStyle(.primary)
+            ShareLink(item: DeepLinkRouter.dealURL(deal.id),
+                      subject: Text(deal.title),
+                      message: Text("\(deal.title) — \(venue?.name ?? ""). Нашёл в Ayta!")) {
+                Image(systemName: "square.and.arrow.up").font(.title3).foregroundStyle(.primary)
             }
 
             Spacer()
 
             Label("до \(deal.validUntil.sanShort)", systemImage: "clock")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(.caption).foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(12)
     }
 
     private var caption: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(deal.title)
-                .font(.headline)
-            Text(deal.details)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
+            Text(deal.title).font(.headline)
+            Text(deal.details).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
             PriceLabel(deal: deal)
         }
-        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding([.horizontal, .bottom], 12)
     }
 }
 
@@ -198,6 +224,30 @@ struct CoverImage: View {
                 Text(emoji).font(.system(size: emojiSize)).shadow(radius: 6)
             }
         }
+    }
+}
+
+// MARK: - Миниатюра объекта (фото или эмодзи-фолбэк)
+
+struct ItemThumb: View {
+    let item: VenueItem
+    var size: CGFloat = 70
+
+    var body: some View {
+        Group {
+            if !item.imageURL.isEmpty, let url = URL(string: item.imageURL) {
+                AsyncImage(url: url) { img in
+                    img.resizable().scaledToFill()
+                } placeholder: { Color(.systemGray6) }
+            } else {
+                ZStack {
+                    Color(.systemGray6)
+                    Text(item.emoji).font(.system(size: size * 0.45))
+                }
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 }
 
@@ -303,7 +353,7 @@ struct VenueCard: View {
 
     private var cover: some View {
         ZStack(alignment: .topLeading) {
-            CoverImage(urlString: venue.imageURL, gradient: venue.gradient, emoji: venue.emoji)
+            VenuePhoto(urlString: venue.imageURL, gradient: venue.gradient)
 
             HStack {
                 if isSponsored {
@@ -365,7 +415,7 @@ struct VenueCard: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 if dealCount > 0 {
-                    Label("\(dealCount) САН", systemImage: "tag.fill")
+                    Label("\(dealCount) акц.", systemImage: "tag.fill")
                         .font(.caption.weight(.semibold))
                         .padding(.horizontal, 8).padding(.vertical, 3)
                         .background(Color.sanAccent.opacity(0.12), in: Capsule())
@@ -394,7 +444,7 @@ struct AdPlaceholderCard: View {
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
                 .foregroundStyle(.primary)
-            Text("Заведения — продвигайтесь в САН")
+            Text("Заведения — продвигайтесь в Ayta")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
