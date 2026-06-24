@@ -107,6 +107,16 @@ struct VenueItem: Identifiable, Hashable, Codable {
     }
 }
 
+// MARK: - Филиал (дополнительный адрес заведения)
+
+struct Branch: Identifiable, Hashable, Codable {
+    var id: String
+    var address: String
+    var latitude: Double
+    var longitude: Double
+    var phone: String = ""
+}
+
 // MARK: - Часы работы по дням недели
 
 /// Часы работы одного дня. Время — минуты от полуночи (напр. 9:30 = 570).
@@ -193,6 +203,28 @@ struct Venue: Identifiable, Hashable {
     var items: [VenueItem] = []     // блюда/услуги для отзывов
     var statusRaw: String = ModerationStatus.approved.rawValue  // модерация
     var isPaused: Bool = false      // на паузе — скрыто из пользовательской ленты
+    var whatsapp: String = ""       // номер для WhatsApp
+    var instagram: String = ""      // ник или ссылка Instagram
+    var telegram: String = ""       // ник или ссылка Telegram
+    var branches: [Branch] = []     // дополнительные адреса (филиалы)
+
+    /// Ссылка WhatsApp (wa.me) или nil.
+    var whatsappURL: URL? {
+        let digits = whatsapp.filter(\.isNumber)
+        return digits.isEmpty ? nil : URL(string: "https://wa.me/\(digits)")
+    }
+    /// Ссылка Instagram или nil.
+    var instagramURL: URL? {
+        guard !instagram.isEmpty else { return nil }
+        if instagram.hasPrefix("http") { return URL(string: instagram) }
+        return URL(string: "https://instagram.com/\(instagram.replacingOccurrences(of: "@", with: ""))")
+    }
+    /// Ссылка Telegram или nil.
+    var telegramURL: URL? {
+        guard !telegram.isEmpty else { return nil }
+        if telegram.hasPrefix("http") { return URL(string: telegram) }
+        return URL(string: "https://t.me/\(telegram.replacingOccurrences(of: "@", with: ""))")
+    }
 
     var moderation: ModerationStatus { ModerationStatus(rawValue: statusRaw) ?? .approved }
     var isApproved: Bool { moderation == .approved }

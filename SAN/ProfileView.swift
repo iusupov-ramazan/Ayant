@@ -8,8 +8,6 @@ struct ProfileView: View {
     @EnvironmentObject private var host: HostStore
     @AppStorage("san.hostMode") private var hostMode = false
 
-    @AppStorage("san.notify.deals") private var notifyDeals = true
-    @AppStorage("san.notify.replies") private var notifyReplies = true
     @AppStorage("san.language") private var language = "ru"
 
     @State private var activeSheet: ProfileSheet?
@@ -127,13 +125,6 @@ struct ProfileView: View {
                 Label("Язык", systemImage: "globe")
             }
 
-            Toggle(isOn: $notifyDeals) {
-                Label("Новые акции в избранном", systemImage: "tag")
-            }
-            Toggle(isOn: $notifyReplies) {
-                Label("Ответы на мои отзывы", systemImage: "bubble.left")
-            }
-
             Picker(selection: Binding(get: { themeStore.theme }, set: { themeStore.theme = $0 })) {
                 ForEach(AppTheme.allCases) { theme in Label(theme.title, systemImage: theme.icon).tag(theme) }
             } label: {
@@ -165,10 +156,11 @@ struct ProfileView: View {
     // MARK: О приложении
 
     private var aboutSection: some View {
-        Section("О приложении") {
-            LabeledContent("Версия", value: "0.2 (MVP)")
-            Text("Ayta — заведения, акции и отзывы твоего города. Сначала Бишкек, дальше — вся Центральная Азия.")
-                .font(.caption).foregroundStyle(.secondary)
+        Section("Помощь") {
+            NavigationLink { AboutView() } label: { Label("О приложении", systemImage: "info.circle") }
+            NavigationLink { FAQView() } label: { Label("Вопросы и ответы", systemImage: "questionmark.circle") }
+            NavigationLink { SupportView() } label: { Label("Поддержка", systemImage: "bubble.left.and.bubble.right") }
+            LabeledContent("Версия", value: "0.3 (MVP)")
         }
     }
 

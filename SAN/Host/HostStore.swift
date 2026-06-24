@@ -47,6 +47,10 @@ struct HostVenueDTO: Codable, Identifiable {
     var imageURL: String = ""                                // ссылка на обложку
     var weekHours: [DayHours] = Venue.defaultWeek()          // часы по дням недели
     var pdfMenuURL: String = ""                              // прайс-лист / каталог (PDF)
+    var whatsapp: String = ""
+    var instagram: String = ""
+    var telegram: String = ""
+    var branches: [Branch] = []                              // дополнительные адреса
 
     var category: VenueCategory { VenueCategory(rawValue: categoryRaw) ?? .cafe }
     var moderation: ModerationStatus { ModerationStatus(rawValue: status) ?? .pending }
@@ -61,7 +65,8 @@ struct HostVenueDTO: Codable, Identifiable {
             todaySpecialText: (todaySpecial?.isEmpty == false) ? todaySpecial : nil,
             openHour: openHour, closeHour: closeHour, weekHours: weekHours,
             pdfMenuURL: pdfMenuURL.isEmpty ? nil : pdfMenuURL,
-            photoEmojis: [emoji], items: items, statusRaw: status, isPaused: isPaused
+            photoEmojis: [emoji], items: items, statusRaw: status, isPaused: isPaused,
+            whatsapp: whatsapp, instagram: instagram, telegram: telegram, branches: branches
         )
     }
 }
@@ -245,7 +250,9 @@ final class HostStore: ObservableObject {
     func addVenue(name: String, category: VenueCategory, district: String, address: String,
                   phone: String, emoji: String, latitude: Double, longitude: Double,
                   openHour: Int, closeHour: Int, imageURL: String = "",
-                  weekHours: [DayHours] = Venue.defaultWeek(), pdfMenuURL: String = "") -> HostVenueDTO {
+                  weekHours: [DayHours] = Venue.defaultWeek(), pdfMenuURL: String = "",
+                  whatsapp: String = "", instagram: String = "", telegram: String = "",
+                  branches: [Branch] = []) -> HostVenueDTO {
         var dto = HostVenueDTO(
             id: "hv_\(UUID().uuidString.prefix(8))", name: name, categoryRaw: category.rawValue,
             district: district, address: address, phone: phone, emoji: emoji,
@@ -254,6 +261,9 @@ final class HostStore: ObservableObject {
         dto.imageURL = imageURL
         dto.weekHours = weekHours
         dto.pdfMenuURL = pdfMenuURL
+        dto.whatsapp = whatsapp
+        dto.instagram = instagram
+        dto.branches = branches
         venueDTOs.append(dto)
         persistVenues()
         remoteSaveVenue(dto)

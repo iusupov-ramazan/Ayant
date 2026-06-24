@@ -353,7 +353,12 @@ struct HostVenueFormView: View {
     @State private var imageURL: String
     @State private var weekHours: [DayHours]
     @State private var pdfMenuURL: String
+    @State private var whatsapp: String
+    @State private var instagram: String
+    @State private var telegram: String
+    @State private var branches: [Branch]
     @State private var showingMapPicker = false
+    @State private var showingBranchForm = false
 
     init(existing: HostVenueDTO?) {
         self.existing = existing
@@ -369,6 +374,10 @@ struct HostVenueFormView: View {
         _closeHour = State(initialValue: existing?.closeHour ?? 22)
         _imageURL = State(initialValue: existing?.imageURL ?? "")
         _pdfMenuURL = State(initialValue: existing?.pdfMenuURL ?? "")
+        _whatsapp = State(initialValue: existing?.whatsapp ?? "")
+        _instagram = State(initialValue: existing?.instagram ?? "")
+        _telegram = State(initialValue: existing?.telegram ?? "")
+        _branches = State(initialValue: existing?.branches ?? [])
         let wh = existing?.weekHours ?? []
         _weekHours = State(initialValue: wh.count == 7 ? wh : Venue.defaultWeek())
     }
@@ -393,6 +402,30 @@ struct HostVenueFormView: View {
                     PDFPickerField(urlString: $pdfMenuURL)
                     Text("Список блюд или услуг. Гости откроют его на странице заведения.")
                         .font(.caption2).foregroundStyle(.secondary)
+                }
+                Section("Соцсети") {
+                    TextField("WhatsApp (номер, напр. 996700123456)", text: $whatsapp)
+                        .keyboardType(.phonePad)
+                    TextField("Instagram (ник или ссылка)", text: $instagram)
+                        .autocapitalization(.none)
+                    TextField("Telegram (ник или ссылка)", text: $telegram)
+                        .autocapitalization(.none)
+                }
+                Section("Филиалы (доп. адреса)") {
+                    ForEach(branches) { b in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(b.address).font(.subheadline)
+                            if !b.phone.isEmpty {
+                                Text(b.phone).font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .onDelete { branches.remove(atOffsets: $0) }
+                    Button {
+                        showingBranchForm = true
+                    } label: {
+                        Label("Добавить филиал", systemImage: "plus.circle")
+                    }
                 }
                 Section("Местоположение") {
                     Button {
@@ -464,6 +497,9 @@ struct HostVenueFormView: View {
                     longitude = String(coord.longitude)
                 }
             }
+            .sheet(isPresented: $showingBranchForm) {
+                HostBranchFormView { branches.append($0) }
+            }
         }
     }
 
@@ -504,6 +540,10 @@ struct HostVenueFormView: View {
             dto.imageURL = imageURL.trimmingCharacters(in: .whitespaces)
             dto.weekHours = weekHours
             dto.pdfMenuURL = pdfMenuURL.trimmingCharacters(in: .whitespaces)
+            dto.whatsapp = whatsapp.trimmingCharacters(in: .whitespaces)
+            dto.instagram = instagram.trimmingCharacters(in: .whitespaces)
+            dto.telegram = telegram.trimmingCharacters(in: .whitespaces)
+            dto.branches = branches
             host.updateVenue(dto)
         } else {
             host.addVenue(name: name, category: category, district: district, address: address,
@@ -511,9 +551,94 @@ struct HostVenueFormView: View {
                           openHour: openHour, closeHour: closeHour,
                           imageURL: imageURL.trimmingCharacters(in: .whitespaces),
                           weekHours: weekHours,
-                          pdfMenuURL: pdfMenuURL.trimmingCharacters(in: .whitespaces))
+                          pdfMenuURL: pdfMenuURL.trimmingCharacters(in: .whitespaces),
+                          whatsapp: whatsapp.trimmingCharacters(in: .whitespaces),
+                          instagram: instagram.trimmingCharacters(in: .whitespaces),
+                          telegram: telegram.trimmingCharacters(in: .whitespaces),
+                          branches: branches)
         }
         dismiss()
+    }
+}
+
+// MARK: - Форма филиала (дополнительный адрес)
+
+struct HostBranchFormView: View {
+    var onSave: (Branch) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var address = ""
+    @State private var phone = ""
+    @State private var latitude = String(City.bishkek.latitude)
+    @State private var longitude = String(City.bishkek.longitude)
+    @State private var showingMapPicker = false
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Филиал") {
+                    TextField("Адрес", text: $address)
+                    TextField("Телефон (необязательно)", text: $phone).keyboardType(.phonePad)
+                }
+                Section("Местоположение") {
+                    Button { showingMapPicker = true } label: {
+                        HStack {
+                            Image(systemName: "mappin.and.ellipse")
+                            Text("Выбрать точку на карте")
+                            Spacer()
+                            Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    if let coord = coordinate {
+                        Map(initialPosition: .region(MKCoordinateRegion(
+                            center: coord,
+                            span: MKCoordinateSpan(latitudeDelta: 0.008, longitudeDelta: 0.008)))) {
+                            Marker("", coordinate: coord).tint(.red)
+                        }
+                        .frame(height: 140)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .allowsHitTesting(false)
+                        .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
+                    }
+                    DisclosureGroup("Ввести координаты вручную") {
+                        TextField("Широта", text: $latitude).keyboardType(.decimalPad)
+                        TextField("Долгота", text: $longitude).keyboardType(.decimalPad)
+                    }
+                }
+            }
+            .navigationTitle("Новый филиал")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Отмена") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Добавить") {
+                        let c = coordinate ?? CLLocationCoordinate2D(latitude: City.bishkek.latitude,
+                                                                     longitude: City.bishkek.longitude)
+                        onSave(Branch(id: "br_\(UUID().uuidString.prefix(6))",
+                                      address: address.trimmingCharacters(in: .whitespaces),
+                                      latitude: c.latitude, longitude: c.longitude,
+                                      phone: phone.trimmingCharacters(in: .whitespaces)))
+                        dismiss()
+                    }
+                    .disabled(address.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+            .sheet(isPresented: $showingMapPicker) {
+                VenueLocationPicker(initial: coordinate ?? CLLocationCoordinate2D(
+                    latitude: City.bishkek.latitude, longitude: City.bishkek.longitude)) { coord in
+                    latitude = String(coord.latitude)
+                    longitude = String(coord.longitude)
+                }
+            }
+        }
+    }
+
+    private var coordinate: CLLocationCoordinate2D? {
+        guard let lat = Double(latitude.replacingOccurrences(of: ",", with: ".")),
+              let lng = Double(longitude.replacingOccurrences(of: ",", with: ".")),
+              CLLocationCoordinate2DIsValid(CLLocationCoordinate2D(latitude: lat, longitude: lng))
+        else { return nil }
+        return CLLocationCoordinate2D(latitude: lat, longitude: lng)
     }
 }
 

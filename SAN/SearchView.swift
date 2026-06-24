@@ -22,10 +22,12 @@ struct SearchView: View {
             VStack(spacing: 0) {
                 filterBar
                 if results.isEmpty {
-                    Spacer()
-                    ContentUnavailableView("Ничего не нашлось", systemImage: "magnifyingglass",
-                        description: Text("Попробуй другое название или расширь расстояние."))
-                    Spacer()
+                    ScrollView {
+                        ContentUnavailableView("Ничего не нашлось", systemImage: "magnifyingglass",
+                            description: Text("Попробуй другое название или расширь расстояние."))
+                            .padding(.top, 80)
+                    }
+                    .refreshable { await store.load() }
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 16) {
@@ -40,6 +42,7 @@ struct SearchView: View {
                         }
                         .padding(.vertical, 12)
                     }
+                    .refreshable { await store.load() }
                 }
             }
             .navigationTitle("Поиск")

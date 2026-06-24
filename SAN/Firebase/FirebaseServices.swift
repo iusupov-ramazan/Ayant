@@ -275,8 +275,28 @@ extension Venue {
             ownerID: d["ownerID"] as? String ?? "",
             items: VenueItem.parse(d["items"]),
             statusRaw: d["status"] as? String ?? ModerationStatus.approved.rawValue,
-            isPaused: d["isPaused"] as? Bool ?? false
+            isPaused: d["isPaused"] as? Bool ?? false,
+            whatsapp: d["whatsapp"] as? String ?? "",
+            instagram: d["instagram"] as? String ?? "",
+            telegram: d["telegram"] as? String ?? "",
+            branches: Branch.parseArray(d["branches"])
         )
+    }
+}
+
+extension Branch {
+    var firestoreMap: [String: Any] {
+        ["id": id, "address": address, "latitude": latitude, "longitude": longitude, "phone": phone]
+    }
+    static func parseArray(_ raw: Any?) -> [Branch] {
+        guard let arr = raw as? [[String: Any]] else { return [] }
+        return arr.compactMap { m in
+            guard let id = m["id"] as? String, let address = m["address"] as? String else { return nil }
+            return Branch(id: id, address: address,
+                          latitude: (m["latitude"] as? NSNumber)?.doubleValue ?? 0,
+                          longitude: (m["longitude"] as? NSNumber)?.doubleValue ?? 0,
+                          phone: m["phone"] as? String ?? "")
+        }
     }
 }
 
@@ -450,6 +470,10 @@ extension HostVenueDTO {
             "imageURL": imageURL,
             "weekHours": weekHours.map(\.firestoreMap),
             "pdfMenuURL": pdfMenuURL,
+            "whatsapp": whatsapp,
+            "instagram": instagram,
+            "telegram": telegram,
+            "branches": branches.map(\.firestoreMap),
             "todaySpecial": todaySpecial ?? ""
         ]
         if (todaySpecial ?? "").isEmpty { d["todaySpecial"] = "" }
@@ -478,7 +502,11 @@ extension HostVenueDTO {
             items: VenueItem.parse(d["items"]),
             imageURL: d["imageURL"] as? String ?? "",
             weekHours: { let w = DayHours.parseArray(d["weekHours"]); return w.isEmpty ? Venue.defaultWeek() : w }(),
-            pdfMenuURL: d["pdfMenuURL"] as? String ?? "")
+            pdfMenuURL: d["pdfMenuURL"] as? String ?? "",
+            whatsapp: d["whatsapp"] as? String ?? "",
+            instagram: d["instagram"] as? String ?? "",
+            telegram: d["telegram"] as? String ?? "",
+            branches: Branch.parseArray(d["branches"]))
     }
 }
 

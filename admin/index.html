@@ -291,6 +291,18 @@
         <input id="vPdfMenuURL" placeholder="https://…/menu.pdf" />
       </div>
       <div class="field">
+        <label>WhatsApp (номер)</label>
+        <input id="vWhatsapp" placeholder="996700123456" />
+      </div>
+      <div class="field">
+        <label>Instagram (ник/ссылка)</label>
+        <input id="vInstagram" placeholder="@nick" />
+      </div>
+      <div class="field">
+        <label>Telegram (ник/ссылка)</label>
+        <input id="vTelegram" placeholder="@nick" />
+      </div>
+      <div class="field">
         <label>Проверенное</label>
         <select id="vVerified">
           <option value="false">Нет</option>
@@ -773,6 +785,9 @@ window.openVenueModal = (id) => {
   document.getElementById('vOpenHour').value     = v?.openHour ?? '';
   document.getElementById('vCloseHour').value    = v?.closeHour ?? '';
   document.getElementById('vPdfMenuURL').value   = v?.pdfMenuURL ?? '';
+  document.getElementById('vWhatsapp').value     = v?.whatsapp ?? '';
+  document.getElementById('vInstagram').value    = v?.instagram ?? '';
+  document.getElementById('vTelegram').value     = v?.telegram ?? '';
   document.getElementById('vVerified').value     = String(v?.isVerified ?? false);
   document.getElementById('vModeration').value   = v?.status ?? 'approved';
   document.getElementById('vActive').value       = String((v?.isPaused ? false : (v?.active ?? true)));
@@ -805,6 +820,9 @@ window.saveVenue = async () => {
     openHour:     num(document.getElementById('vOpenHour').value),
     closeHour:    num(document.getElementById('vCloseHour').value),
     pdfMenuURL:   document.getElementById('vPdfMenuURL').value.trim(),
+    whatsapp:     document.getElementById('vWhatsapp').value.trim(),
+    instagram:    document.getElementById('vInstagram').value.trim(),
+    telegram:     document.getElementById('vTelegram').value.trim(),
   };
   if (!data.name) return toast('Укажи название', 'error');
   // Пустые координаты по умолчанию — центр Бишкека.

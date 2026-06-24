@@ -154,6 +154,7 @@ struct VenueDetailView: View {
     @State private var reportingReview: Review?
     @State private var showGuestPrompt = false
     @State private var showMapOptions = false
+    @State private var showAllDeals = false
 
     private var deals: [Deal] { store.deals(for: venue) }
     private var agg: (rating: Double, count: Int) { store.aggregate(for: venue) }
@@ -177,7 +178,6 @@ struct VenueDetailView: View {
                 actionRow
                 if venue.hasTodaySpecial { todaySpecialBanner }
                 infoSection
-                mapTile
                 if !deals.isEmpty { dealsGrid }
                 if !galleryPhotos.isEmpty { photosGallery }
                 if !venue.items.isEmpty { itemsSection }
@@ -323,8 +323,33 @@ struct VenueDetailView: View {
                 Button("Google Maps") { openURL(Directions.google(lat: venue.latitude, lng: venue.longitude)) }
                 Button("Отмена", role: .cancel) {}
             }
-            if let url = URL(string: "tel:\(venue.phone.filter { !$0.isWhitespace })") {
+            // Дополнительные адреса (филиалы)
+            ForEach(venue.branches) { b in
+                Button { openURL(Directions.dgis(lat: b.latitude, lng: b.longitude)) } label: {
+                    HStack {
+                        Label(b.address, systemImage: "mappin.and.ellipse").font(.subheadline)
+                        Spacer()
+                        Image(systemName: "map").foregroundStyle(Color.sanAccent)
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+            if !venue.phone.trimmingCharacters(in: .whitespaces).isEmpty,
+               let url = URL(string: "tel:\(venue.phone.filter { !$0.isWhitespace })") {
                 Link(destination: url) { Label(venue.phone, systemImage: "phone.fill").font(.subheadline) }
+            }
+            if venue.whatsappURL != nil || venue.instagramURL != nil || venue.telegramURL != nil {
+                HStack(spacing: 12) {
+                    if let wa = venue.whatsappURL {
+                        socialIcon("message.fill", .green, wa)
+                    }
+                    if let tg = venue.telegramURL {
+                        socialIcon("paperplane.fill", Color(hex: 0x29A9EB), tg)
+                    }
+                    if let ig = venue.instagramURL {
+                        socialIcon("camera.fill", Color(hex: 0xC13584), ig)
+                    }
+                }
             }
             Button { withAnimation { hoursExpanded.toggle() } } label: {
                 HStack {
@@ -365,33 +390,37 @@ struct VenueDetailView: View {
         .padding(.horizontal, 16)
     }
 
-
-    // MARK: Карта (статичный тайл → маршрут)
-
-    private var mapTile: some View {
-        Button { openURL(Directions.url(lat: venue.latitude, lng: venue.longitude)) } label: {
-            ZStack {
-                LinearGradient(colors: [Color(.systemGray5), Color(.systemGray4)],
-                               startPoint: .top, endPoint: .bottom)
-                VStack(spacing: 6) {
-                    Image(systemName: "mappin.circle.fill").font(.system(size: 38)).foregroundStyle(Color.sanAccent)
-                    Text("Открыть маршрут").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                }
-            }
-            .frame(height: 130)
-            .clipShape(RoundedRectangle(cornerRadius: 14))
-            .padding(.horizontal, 16)
+    private func socialIcon(_ icon: String, _ color: Color, _ url: URL) -> some View {
+        Link(destination: url) {
+            Image(systemName: icon)
+                .font(.headline).foregroundStyle(.white)
+                .frame(width: 40, height: 40)
+                .background(color, in: Circle())
         }
-        .buttonStyle(.plain)
     }
 
-    // MARK: Сетка предложений (3 колонки)
+
+    // MARK: Публикации заведения (последние 3 + «смотреть все»)
+
+    private var shownDeals: [Deal] {
+        showAllDeals ? deals : Array(deals.prefix(3))
+    }
 
     private var dealsGrid: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Предложения").font(.headline).padding(.horizontal, 16)
+            HStack {
+                Text("Публикации").font(.headline)
+                Spacer()
+                if deals.count > 3 {
+                    Button(showAllDeals ? "Свернуть" : "Смотреть все (\(deals.count))") {
+                        withAnimation { showAllDeals.toggle() }
+                    }
+                    .font(.subheadline.weight(.semibold))
+                }
+            }
+            .padding(.horizontal, 16)
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
-                ForEach(deals) { deal in
+                ForEach(shownDeals) { deal in
                     Button { activeSheet = .deal(deal) } label: {
                         Color.clear
                             .aspectRatio(1, contentMode: .fit)

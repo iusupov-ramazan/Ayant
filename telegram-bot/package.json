@@ -1,0 +1,17 @@
+{
+  "name": "ayta-support-bot",
+  "version": "1.0.0",
+  "description": "Telegram AI support bot for Ayta (free, long-polling).",
+  "type": "module",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "grammy": "^1.30.0"
+  }
+}

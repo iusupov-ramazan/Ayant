@@ -1,0 +1,19 @@
+# Render Blueprint — деплой бота в один клик.
+# В Render: New → Blueprint → выбери репозиторий с этим файлом.
+services:
+  - type: web
+    name: ayta-support-bot
+    runtime: node
+    plan: free
+    rootDir: telegram-bot
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false          # впишешь в дашборде Render
+      - key: GROQ_API_KEY
+        sync: false          # впишешь в дашборде Render
+      - key: GROQ_MODEL
+        value: llama-3.3-70b-versatile
+      - key: SUPPORT_CONTACT
+        value: ostepp1@gmail.com
