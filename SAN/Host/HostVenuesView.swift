@@ -6,6 +6,7 @@ import MapKit
 struct HostVenuesView: View {
     @EnvironmentObject private var host: HostStore
     @State private var showAddVenue = false
+    @State private var venueToDelete: HostVenueDTO?
 
     var body: some View {
         NavigationStack {
@@ -23,6 +24,11 @@ struct HostVenuesView: View {
                     List {
                         ForEach(host.venueDTOs) { v in
                             NavigationLink(value: v.id) { venueRow(v) }
+                                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                    Button(role: .destructive) { venueToDelete = v } label: {
+                                        Label("Удалить", systemImage: "trash")
+                                    }
+                                }
                         }
                     }
                     .listStyle(.plain)
@@ -43,6 +49,15 @@ struct HostVenuesView: View {
             }
             .sheet(isPresented: $showAddVenue) {
                 HostVenueFormView(existing: nil)
+            }
+            .alert("Удалить заведение?", isPresented: Binding(
+                get: { venueToDelete != nil },
+                set: { if !$0 { venueToDelete = nil } }
+            ), presenting: venueToDelete) { v in
+                Button("Удалить", role: .destructive) { host.deleteVenue(id: v.id) }
+                Button("Отмена", role: .cancel) {}
+            } message: { v in
+                Text("«\(v.name)» и все его предложения будут удалены без возможности восстановления.")
             }
         }
     }
@@ -81,8 +96,10 @@ struct HostVenuesView: View {
 struct HostVenueDetailView: View {
     let venueID: String
     @EnvironmentObject private var host: HostStore
+    @Environment(\.dismiss) private var dismiss
     @State private var special = ""
     @State private var activeSheet: HostVenueSheet?
+    @State private var showDeleteConfirm = false
 
     private var dto: HostVenueDTO? { host.venueDTO(id: venueID) }
 
@@ -262,6 +279,22 @@ struct HostVenueDetailView: View {
                     .frame(maxWidth: .infinity).padding(.vertical, 12)
                     .background(Color.sanAccent.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
                     .foregroundStyle(Color.sanAccent)
+            }
+            Button(role: .destructive) { showDeleteConfirm = true } label: {
+                Label("Удалить заведение", systemImage: "trash")
+                    .frame(maxWidth: .infinity).padding(.vertical, 12)
+                    .background(Color.red.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
+                    .foregroundStyle(.red)
+            }
+            .buttonStyle(.plain)
+            .alert("Удалить заведение?", isPresented: $showDeleteConfirm) {
+                Button("Удалить", role: .destructive) {
+                    host.deleteVenue(id: v.id)
+                    dismiss()
+                }
+                Button("Отмена", role: .cancel) {}
+            } message: {
+                Text("«\(v.name)» и все его предложения будут удалены без возможности восстановления.")
             }
         }
         .padding(.horizontal, 16)

@@ -64,20 +64,17 @@ struct DealDetailView: View {
     }
 
     private var hero: some View {
-        ZStack {
-            CoverImage(urlString: deal.imageURL, gradient: venue?.gradient ?? [.sanAccent, .orange],
-                       emoji: deal.emoji, emojiSize: 100)
-            if let percent = deal.discountPercent {
-                Text("−\(percent)%")
-                    .font(.title.weight(.heavy)).foregroundStyle(.white)
-                    .padding(.horizontal, 16).padding(.vertical, 8)
-                    .background(.black.opacity(0.35), in: Capsule())
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                    .padding(16)
+        DealImage(urlString: deal.imageURL, gradient: venue?.gradient ?? [.sanAccent, .orange],
+                  emoji: deal.emoji, emojiSize: 100)
+            .overlay(alignment: .topLeading) {
+                if let percent = deal.discountPercent {
+                    Text("−\(percent)%")
+                        .font(.title.weight(.heavy)).foregroundStyle(.white)
+                        .padding(.horizontal, 16).padding(.vertical, 8)
+                        .background(.black.opacity(0.35), in: Capsule())
+                        .padding(16)
+                }
             }
-        }
-        .frame(height: 260)
-        .clipped()
     }
 
     private var showAtVenue: some View {
@@ -112,23 +109,26 @@ struct DealDetailView: View {
                     }
                 }
                 .buttonStyle(.plain)
-                Button {
-                    store.log(AnalyticsMetric.maps, for: venue.id)
-                    showMapOptions = true
-                } label: {
-                    HStack {
-                        Label(venue.address, systemImage: "mappin.and.ellipse").font(.subheadline)
-                        Spacer()
-                        Image(systemName: "map.fill").foregroundStyle(Color.sanAccent)
+                if !venue.address.trimmingCharacters(in: .whitespaces).isEmpty {
+                    Button {
+                        store.log(AnalyticsMetric.maps, for: venue.id)
+                        showMapOptions = true
+                    } label: {
+                        HStack {
+                            Label(venue.address, systemImage: "mappin.and.ellipse").font(.subheadline)
+                            Spacer()
+                            Image(systemName: "map.fill").foregroundStyle(Color.sanAccent)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .confirmationDialog("Открыть на карте", isPresented: $showMapOptions, titleVisibility: .visible) {
+                        Button("2GIS") { openURL(Directions.dgis(lat: venue.latitude, lng: venue.longitude)) }
+                        Button("Google Maps") { openURL(Directions.google(lat: venue.latitude, lng: venue.longitude)) }
+                        Button("Отмена", role: .cancel) {}
                     }
                 }
-                .buttonStyle(.plain)
-                .confirmationDialog("Открыть на карте", isPresented: $showMapOptions, titleVisibility: .visible) {
-                    Button("2GIS") { openURL(Directions.dgis(lat: venue.latitude, lng: venue.longitude)) }
-                    Button("Google Maps") { openURL(Directions.google(lat: venue.latitude, lng: venue.longitude)) }
-                    Button("Отмена", role: .cancel) {}
-                }
-                if let url = URL(string: "tel:\(venue.phone.filter { !$0.isWhitespace })") {
+                if !venue.phone.trimmingCharacters(in: .whitespaces).isEmpty,
+                   let url = URL(string: "tel:\(venue.phone.filter { !$0.isWhitespace })") {
                     Link(destination: url) {
                         Label(venue.phone, systemImage: "phone.fill").font(.subheadline)
                     }
@@ -307,21 +307,23 @@ struct VenueDetailView: View {
 
     private var infoSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Button {
-                store.log(AnalyticsMetric.maps, for: venue.id)
-                showMapOptions = true
-            } label: {
-                HStack {
-                    Label(venue.address, systemImage: "mappin.and.ellipse").font(.subheadline)
-                    Spacer()
-                    Image(systemName: "map.fill").foregroundStyle(Color.sanAccent)
+            if !venue.address.trimmingCharacters(in: .whitespaces).isEmpty {
+                Button {
+                    store.log(AnalyticsMetric.maps, for: venue.id)
+                    showMapOptions = true
+                } label: {
+                    HStack {
+                        Label(venue.address, systemImage: "mappin.and.ellipse").font(.subheadline)
+                        Spacer()
+                        Image(systemName: "map.fill").foregroundStyle(Color.sanAccent)
+                    }
                 }
-            }
-            .buttonStyle(.plain)
-            .confirmationDialog("Открыть на карте", isPresented: $showMapOptions, titleVisibility: .visible) {
-                Button("2GIS") { openURL(Directions.dgis(lat: venue.latitude, lng: venue.longitude)) }
-                Button("Google Maps") { openURL(Directions.google(lat: venue.latitude, lng: venue.longitude)) }
-                Button("Отмена", role: .cancel) {}
+                .buttonStyle(.plain)
+                .confirmationDialog("Открыть на карте", isPresented: $showMapOptions, titleVisibility: .visible) {
+                    Button("2GIS") { openURL(Directions.dgis(lat: venue.latitude, lng: venue.longitude)) }
+                    Button("Google Maps") { openURL(Directions.google(lat: venue.latitude, lng: venue.longitude)) }
+                    Button("Отмена", role: .cancel) {}
+                }
             }
             // Дополнительные адреса (филиалы)
             ForEach(venue.branches) { b in

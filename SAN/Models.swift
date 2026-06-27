@@ -6,6 +6,7 @@ enum DealType: String, CaseIterable, Identifiable {
     case discount = "Скидка"
     case promo = "Акция"
     case novelty = "Новинка"
+    case announcement = "Объявление"
 
     var id: String { rawValue }
 
@@ -14,6 +15,7 @@ enum DealType: String, CaseIterable, Identifiable {
         case .discount: return .sanAccent
         case .promo: return .purple
         case .novelty: return .teal
+        case .announcement: return .blue
         }
     }
 
@@ -22,6 +24,7 @@ enum DealType: String, CaseIterable, Identifiable {
         case .discount: return "percent"
         case .promo: return "gift.fill"
         case .novelty: return "sparkles"
+        case .announcement: return "megaphone.fill"
         }
     }
 }

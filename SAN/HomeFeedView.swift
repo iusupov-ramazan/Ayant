@@ -107,7 +107,9 @@ struct HomeFeedView: View {
             emptyCategory
         } else {
             ForEach(Array(feed.enumerated()), id: \.element.id) { index, deal in
-                DealCard(deal: deal) { path.append(deal) }
+                DealCard(deal: deal,
+                         onTap: { path.append(deal) },
+                         onVenueTap: { if let v = store.venue(for: deal) { path.append(v) } })
                     .padding(.horizontal, 16)
 
                 // Каждая 5-я позиция — рекламный слот (пока плейсхолдер).

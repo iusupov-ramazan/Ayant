@@ -221,7 +221,7 @@ private let categoryMap: [String: VenueCategory] = [
 ]
 
 private let typeMap: [String: DealType] = [
-    "discount": .discount, "promo": .promo, "novelty": .novelty
+    "discount": .discount, "promo": .promo, "novelty": .novelty, "announcement": .announcement
 ]
 
 private let statusMap: [String: DealStatus] = [
@@ -234,7 +234,7 @@ private let categoryKeyMap: [VenueCategory: String] = [
     .restaurant: "restaurant", .teahouse: "teahouse", .bakery: "bakery"
 ]
 private let typeKeyMap: [DealType: String] = [
-    .discount: "discount", .promo: "promo", .novelty: "novelty"
+    .discount: "discount", .promo: "promo", .novelty: "novelty", .announcement: "announcement"
 ]
 func firestoreCategoryKey(_ c: VenueCategory) -> String { categoryKeyMap[c] ?? c.rawValue }
 func firestoreTypeKey(_ t: DealType) -> String { typeKeyMap[t] ?? t.rawValue }

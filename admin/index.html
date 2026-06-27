@@ -71,6 +71,7 @@
   .badge-discount { background:#fce4ec; color:#c62828; }
   .badge-promo    { background:#ede7f6; color:#4527a0; }
   .badge-novelty  { background:#e0f7fa; color:#006064; }
+  .badge-announcement { background:#e3f2fd; color:#0d47a1; }
   .badge-pending  { background:#fff3e0; color:#e65100; }
   .badge-approved { background:#e8f5e9; color:#2e7d32; }
   .badge-rejected { background:#ffebee; color:#c62828; }
@@ -364,6 +365,7 @@
           <option value="discount">Скидка</option>
           <option value="promo">Акция</option>
           <option value="novelty">Новинка</option>
+          <option value="announcement">Объявление</option>
         </select>
       </div>
       <div class="field">
@@ -935,7 +937,7 @@ function categoryLabel(c) {
            restaurant:'Ресторан', teahouse:'Чайхана', bakery:'Пекарня' }[c] ?? c;
 }
 function typeLabel(t) {
-  return { discount:'Скидка', promo:'Акция', novelty:'Новинка' }[t] ?? t;
+  return { discount:'Скидка', promo:'Акция', novelty:'Новинка', announcement:'Объявление' }[t] ?? t;
 }
 
 let toastTimer;

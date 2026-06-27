@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // MARK: - Аватар заведения
 
@@ -96,7 +97,8 @@ struct PriceLabel: View {
 
 struct DealCard: View {
     let deal: Deal
-    var onTap: () -> Void = {}
+    var onTap: () -> Void = {}          // тап по картинке/тексту → страница акции
+    var onVenueTap: () -> Void = {}     // тап по логотипу/названию → страница заведения
     @EnvironmentObject private var store: AppStore
     @State private var showGuestAlert = false
 
@@ -104,10 +106,12 @@ struct DealCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Основная область открывает предложение; кнопки ниже работают отдельно.
+            // Шапка (логотип + название) ведёт на страницу заведения.
+            Button(action: onVenueTap) { header }
+                .buttonStyle(.plain)
+            // Картинка и текст открывают саму акцию.
             Button(action: onTap) {
                 VStack(alignment: .leading, spacing: 0) {
-                    header
                     visual
                     caption
                 }
@@ -116,8 +120,9 @@ struct DealCard: View {
             actions
         }
         .background(Color(.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 18))
-        .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color(.systemGray5), lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 20))
+        .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color(.systemGray5), lineWidth: 1))
+        .shadow(color: .black.opacity(0.04), radius: 6, y: 3)
         .alert("Войдите в аккаунт", isPresented: $showGuestAlert) {
             Button("Понятно", role: .cancel) {}
         } message: {
@@ -126,14 +131,16 @@ struct DealCard: View {
     }
 
     private var header: some View {
-        HStack(spacing: 10) {
-            if let venue { VenueAvatar(venue: venue) }
-            VStack(alignment: .leading, spacing: 1) {
+        HStack(spacing: 12) {
+            if let venue { VenueAvatar(venue: venue, size: 46) }
+            VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
-                    Text(venue?.name ?? "").font(.subheadline.weight(.semibold))
+                    Text(venue?.name ?? "").font(.subheadline.weight(.bold))
                     if venue?.isVerified == true {
                         Image(systemName: "checkmark.seal.fill").font(.caption2).foregroundStyle(.blue)
                     }
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
                 }
                 Text("\(venue?.category.rawValue ?? "") • \(venue?.district ?? "")")
                     .font(.caption).foregroundStyle(.secondary)
@@ -141,25 +148,24 @@ struct DealCard: View {
             Spacer()
             DealTypeBadge(type: deal.type)
         }
-        .padding(12)
+        .contentShape(Rectangle())
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
     }
 
     private var visual: some View {
-        ZStack {
-            CoverImage(urlString: deal.imageURL, gradient: venue?.gradient ?? [.sanAccent, .orange],
-                       emoji: deal.emoji, emojiSize: 90)
-            if let percent = deal.discountPercent {
-                Text("−\(percent)%")
-                    .font(.title2.weight(.heavy))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 14).padding(.vertical, 8)
-                    .background(.black.opacity(0.35), in: Capsule())
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                    .padding(12)
+        DealImage(urlString: deal.imageURL, gradient: venue?.gradient ?? [.sanAccent, .orange],
+                  emoji: deal.emoji, emojiSize: 90)
+            .overlay(alignment: .topLeading) {
+                if let percent = deal.discountPercent {
+                    Text("−\(percent)%")
+                        .font(.title2.weight(.heavy))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 14).padding(.vertical, 8)
+                        .background(.black.opacity(0.35), in: Capsule())
+                        .padding(12)
+                }
             }
-        }
-        .frame(height: 240)
-        .clipped()
     }
 
     private var actions: some View {
@@ -184,17 +190,21 @@ struct DealCard: View {
             Label("до \(deal.validUntil.sanShort)", systemImage: "clock")
                 .font(.caption).foregroundStyle(.secondary)
         }
-        .padding(12)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
     }
 
     private var caption: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(deal.title).font(.headline)
+        VStack(alignment: .leading, spacing: 7) {
+            Text(deal.title).font(.title3.weight(.bold)).lineLimit(2)
             Text(deal.details).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
             PriceLabel(deal: deal)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding([.horizontal, .bottom], 12)
+        .contentShape(Rectangle())
+        .padding(.horizontal, 14)
+        .padding(.top, 16)      // воздух между картинкой и заголовком
+        .padding(.bottom, 4)
     }
 }
 
@@ -224,6 +234,64 @@ struct CoverImage: View {
                 Text(emoji).font(.system(size: emojiSize)).shadow(radius: 6)
             }
         }
+    }
+}
+
+// MARK: - Картинка акции (как в Instagram: контейнер принимает форму фото)
+
+/// Загружает фото, чтобы узнать его реальные пропорции, и показывает в контейнере
+/// с тем же соотношением сторон — обрезанным только до диапазона Instagram
+/// (от 1.91:1 ширина к высоте до 4:5). В пределах диапазона картинка видна целиком.
+@MainActor
+final class DealImageLoader: ObservableObject {
+    @Published var ui: UIImage?
+    private var loadedURL: URL?
+
+    func load(_ url: URL) async {
+        guard loadedURL != url else { return }
+        loadedURL = url
+        if let (data, _) = try? await URLSession.shared.data(from: url) {
+            ui = UIImage(data: data)
+        }
+    }
+}
+
+struct DealImage: View {
+    let urlString: String?
+    let gradient: [Color]
+    let emoji: String
+    var emojiSize: CGFloat = 80
+
+    private let maxAR: CGFloat = 1.91   // самый широкий (1.91:1)
+    private let minAR: CGFloat = 0.8    // самый высокий (4:5)
+    @StateObject private var loader = DealImageLoader()
+
+    private var url: URL? {
+        guard let s = urlString, !s.isEmpty else { return nil }
+        return URL(string: s)
+    }
+
+    /// Соотношение сторон контейнера (ширина/высота), ограниченное диапазоном Instagram.
+    private var aspect: CGFloat {
+        guard let ui = loader.ui, ui.size.height > 0 else { return 1 }
+        return min(maxAR, max(minAR, ui.size.width / ui.size.height))
+    }
+
+    var body: some View {
+        ZStack {
+            LinearGradient(colors: gradient, startPoint: .topLeading, endPoint: .bottomTrailing)
+            if let ui = loader.ui {
+                Image(uiImage: ui).resizable().scaledToFill()
+            } else if url != nil {
+                ProgressView().tint(.white)
+            } else {
+                Text(emoji).font(.system(size: emojiSize)).shadow(radius: 6)
+            }
+        }
+        .aspectRatio(aspect, contentMode: .fit)
+        .frame(maxWidth: .infinity)
+        .clipped()
+        .task(id: urlString) { if let u = url { await loader.load(u) } }
     }
 }
 
@@ -341,9 +409,9 @@ struct VenueCard: View {
             info
         }
         .background(Color(.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 18))
-        .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color(.systemGray5), lineWidth: 1))
-        .shadow(color: .black.opacity(0.04), radius: 6, y: 3)
+        .clipShape(RoundedRectangle(cornerRadius: 20))
+        .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color(.systemGray5), lineWidth: 1))
+        .shadow(color: .black.opacity(0.05), radius: 7, y: 3)
         .alert("Войдите в аккаунт", isPresented: $showGuestAlert) {
             Button("Понятно", role: .cancel) {}
         } message: {
@@ -387,21 +455,21 @@ struct VenueCard: View {
                     .padding(10)
             }
         }
-        .frame(height: 150)
+        .frame(height: 180)
         .clipped()
     }
 
     private var info: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 5) {
-                Text(venue.name).font(.headline).lineLimit(1)
+                Text(venue.name).font(.title3.weight(.bold)).lineLimit(1)
                 if venue.isVerified {
                     Image(systemName: "checkmark.seal.fill")
-                        .font(.caption).foregroundStyle(.blue)
+                        .font(.subheadline).foregroundStyle(.blue)
                 }
                 Spacer()
                 Text(venue.isOpenNow ? "Открыто" : "Закрыто")
-                    .font(.caption2.weight(.semibold))
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(venue.isOpenNow ? .green : .secondary)
             }
             HStack(spacing: 6) {
@@ -423,7 +491,8 @@ struct VenueCard: View {
                 }
             }
         }
-        .padding(12)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 14)
     }
 }
 
@@ -499,16 +568,16 @@ struct VenueCompactRow: View {
     private var agg: (rating: Double, count: Int) { store.aggregate(for: venue) }
 
     var body: some View {
-        HStack(spacing: 12) {
-            VenueAvatar(venue: venue, size: 52)
-            VStack(alignment: .leading, spacing: 3) {
+        HStack(spacing: 14) {
+            VenueAvatar(venue: venue, size: 62)
+            VStack(alignment: .leading, spacing: 5) {
                 HStack(spacing: 4) {
-                    Text(venue.name).font(.subheadline.weight(.semibold)).lineLimit(1)
+                    Text(venue.name).font(.body.weight(.semibold)).lineLimit(1)
                     if venue.isVerified {
-                        Image(systemName: "checkmark.seal.fill").font(.caption2).foregroundStyle(.blue)
+                        Image(systemName: "checkmark.seal.fill").font(.caption).foregroundStyle(.blue)
                     }
                 }
-                StarRatingView(rating: agg.rating, count: agg.count, size: 11)
+                StarRatingView(rating: agg.rating, count: agg.count, size: 12)
                 HStack(spacing: 6) {
                     Text("\(venue.category.rawValue) · \(venue.district)")
                         .font(.caption).foregroundStyle(.secondary).lineLimit(1)
@@ -518,7 +587,9 @@ struct VenueCompactRow: View {
                 }
             }
             Spacer()
+            Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
         }
+        .padding(.vertical, 4)
         .contentShape(Rectangle())
     }
 }
@@ -531,20 +602,17 @@ struct CompactDealRow: View {
     @EnvironmentObject private var store: AppStore
 
     var body: some View {
-        HStack(spacing: 12) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(LinearGradient(colors: store.venue(for: deal)?.gradient ?? [.sanAccent, .orange],
-                                         startPoint: .topLeading,
-                                         endPoint: .bottomTrailing))
-                Text(deal.emoji).font(.title2)
-            }
-            .frame(width: 52, height: 52)
+        HStack(spacing: 14) {
+            CoverImage(urlString: deal.imageURL,
+                       gradient: store.venue(for: deal)?.gradient ?? [.sanAccent, .orange],
+                       emoji: deal.emoji, emojiSize: 28)
+                .frame(width: 62, height: 62)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 5) {
                 Text(deal.title)
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
+                    .font(.body.weight(.semibold))
+                    .lineLimit(2)
                 if showVenue {
                     Text("\(store.venue(for: deal)?.name ?? "") • до \(deal.validUntil.sanShort)")
                         .font(.caption)
@@ -562,10 +630,12 @@ struct CompactDealRow: View {
                 store.toggleFavorite(deal)
             } label: {
                 Image(systemName: store.isFavorite(deal) ? "heart.fill" : "heart")
+                    .font(.title3)
                     .foregroundStyle(store.isFavorite(deal) ? Color.sanAccent : .secondary)
             }
             .buttonStyle(.plain)
         }
+        .padding(.vertical, 4)
         .contentShape(Rectangle())
     }
 }
