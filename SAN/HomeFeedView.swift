@@ -10,6 +10,9 @@ struct HomeFeedView: View {
     private var feed: [Deal] {
         store.feedDeals(category: category)
     }
+    private var items: [FeedItem] {
+        store.feedItems(category: category)
+    }
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -106,16 +109,21 @@ struct HomeFeedView: View {
         } else if feed.isEmpty {
             emptyCategory
         } else {
-            ForEach(Array(feed.enumerated()), id: \.element.id) { index, deal in
-                DealCard(deal: deal,
-                         onTap: { path.append(deal) },
-                         onVenueTap: { if let v = store.venue(for: deal) { path.append(v) } })
-                    .padding(.horizontal, 16)
-
-                // Каждая 5-я позиция — рекламный слот (пока плейсхолдер).
-                if (index + 1) % 5 == 0 {
-                    AdPlaceholderCard()
+            ForEach(items) { item in
+                switch item {
+                case .deal(let deal):
+                    DealCard(deal: deal,
+                             onTap: { path.append(deal) },
+                             onVenueTap: { if let v = store.venue(for: deal) { path.append(v) } })
                         .padding(.horizontal, 16)
+                case .adVenue(let venue):
+                    Button { path.append(venue) } label: {
+                        VenueCard(venue: venue,
+                                  distanceKm: location.distanceKm(to: venue.latitude, venue.longitude),
+                                  isSponsored: true)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 16)
                 }
             }
         }

@@ -51,6 +51,7 @@ struct HostVenueDTO: Codable, Identifiable {
     var instagram: String = ""
     var telegram: String = ""
     var branches: [Branch] = []                              // дополнительные адреса
+    var boostedUntil: Date? = nil                            // буст в ленте до даты
 
     var category: VenueCategory { VenueCategory(rawValue: categoryRaw) ?? .cafe }
     var moderation: ModerationStatus { ModerationStatus(rawValue: status) ?? .pending }
@@ -66,7 +67,8 @@ struct HostVenueDTO: Codable, Identifiable {
             openHour: openHour, closeHour: closeHour, weekHours: weekHours,
             pdfMenuURL: pdfMenuURL.isEmpty ? nil : pdfMenuURL,
             photoEmojis: [emoji], items: items, statusRaw: status, isPaused: isPaused,
-            whatsapp: whatsapp, instagram: instagram, telegram: telegram, branches: branches
+            whatsapp: whatsapp, instagram: instagram, telegram: telegram, branches: branches,
+            boostedUntil: boostedUntil
         )
     }
 }
@@ -355,6 +357,14 @@ final class HostStore: ObservableObject {
 
     // MARK: Кампании (Promote)
 
+    /// Включает буст заведения в ленте до даты (пишется в Firestore → видит юзер).
+    func boostVenue(id: String, until: Date) {
+        guard let i = venueDTOs.firstIndex(where: { $0.id == id }) else { return }
+        venueDTOs[i].boostedUntil = until
+        persistVenues()
+        remoteSaveVenue(venueDTOs[i])
+    }
+
     func addCampaign(_ c: AdCampaign) {
         campaigns.insert(c, at: 0)
         persist(Key.campaigns, campaigns)
@@ -362,13 +372,13 @@ final class HostStore: ObservableObject {
 
     /// Push-кампания: записывает документ в Firestore (Cloud Function рассылает FCM)
     /// и добавляет кампанию в список.
-    func launchPush(headline: String, body: String, venueID: String) {
+    func launchPush(headline: String, body: String, venueID: String, dealID: String? = nil) {
         guard !ownerID.isEmpty else { return }
         let owner = ownerID
         Task {
             try? await repo.queuePushCampaign(headline: headline, body: body,
                                               city: City.bishkek.id, category: nil,
-                                              venueID: venueID, ownerID: owner)
+                                              venueID: venueID, dealID: dealID, ownerID: owner)
         }
     }
 

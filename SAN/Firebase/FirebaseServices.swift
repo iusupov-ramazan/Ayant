@@ -154,6 +154,24 @@ final class FirebaseDataRepository: DataRepository {
         ], merge: true)
     }
 
+    // Подарочный купон: создаём документ по коду.
+    func createGiftCoupon(title: String, code: String, fromName: String) async throws {
+        try await db.collection("giftCoupons").document(code).setData([
+            "title": title, "code": code, "fromName": fromName,
+            "claimed": false, "createdAt": Timestamp(date: .now)
+        ])
+    }
+
+    // Забираем подарок один раз: если не занят — помечаем claimed и возвращаем.
+    func claimGiftCoupon(code: String) async throws -> GiftInfo? {
+        let ref = db.collection("giftCoupons").document(code)
+        let snap = try await ref.getDocument()
+        guard let d = snap.data(), (d["claimed"] as? Bool) != true,
+              let title = d["title"] as? String else { return nil }
+        try await ref.setData(["claimed": true, "claimedAt": Timestamp(date: .now)], merge: true)
+        return GiftInfo(title: title, code: code)
+    }
+
     // Забирает неполученные серверные бонусы и помечает claimed.
     func claimBonusGrants(userID: String) async throws -> Int {
         // Один фильтр по userID (без составного индекса); claimed фильтруем в коде.
@@ -313,7 +331,8 @@ extension Venue {
             whatsapp: d["whatsapp"] as? String ?? "",
             instagram: d["instagram"] as? String ?? "",
             telegram: d["telegram"] as? String ?? "",
-            branches: Branch.parseArray(d["branches"])
+            branches: Branch.parseArray(d["branches"]),
+            boostedUntil: (d["boostedUntil"] as? Timestamp)?.dateValue()
         )
     }
 }
@@ -510,6 +529,7 @@ extension HostVenueDTO {
             "instagram": instagram,
             "telegram": telegram,
             "branches": branches.map(\.firestoreMap),
+            "boostedUntil": boostedUntil.map { Timestamp(date: $0) } as Any,
             "todaySpecial": todaySpecial ?? ""
         ]
         if (todaySpecial ?? "").isEmpty { d["todaySpecial"] = "" }
@@ -542,7 +562,8 @@ extension HostVenueDTO {
             whatsapp: d["whatsapp"] as? String ?? "",
             instagram: d["instagram"] as? String ?? "",
             telegram: d["telegram"] as? String ?? "",
-            branches: Branch.parseArray(d["branches"]))
+            branches: Branch.parseArray(d["branches"]),
+            boostedUntil: (d["boostedUntil"] as? Timestamp)?.dateValue())
     }
 }
 
@@ -636,7 +657,7 @@ final class FirebaseHostRepository: HostRepository {
     }
 
     func queuePushCampaign(headline: String, body: String, city: String,
-                           category: String?, venueID: String, ownerID: String) async throws {
+                           category: String?, venueID: String, dealID: String?, ownerID: String) async throws {
         var data: [String: Any] = [
             "headline": headline,
             "body": body,
@@ -648,6 +669,7 @@ final class FirebaseHostRepository: HostRepository {
             "createdAt": Timestamp(date: .now)
         ]
         if let category { data["category"] = category }
+        if let dealID, !dealID.isEmpty { data["dealID"] = dealID }
         // Админ одобряет в панели (status → approved) → Cloud Function рассылает.
         _ = try await db.collection("pushCampaigns").addDocument(data: data)
     }

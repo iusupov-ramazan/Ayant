@@ -256,10 +256,13 @@ struct HostPromoteCreateView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var selectedVenue: String = ""
+    @State private var selectedDeal: String = ""    // "" = вся витрина заведения
     @State private var kind: AdCampaign.Kind = .boost
     @State private var duration = 7
     @State private var pushHeadline = ""
     @State private var pushBody = ""
+
+    private var venueDeals: [HostDealDTO] { host.deals(forVenue: selectedVenue) }
 
     private let durations = [7, 14, 30]
     private func price(_ d: Int) -> Int { d * 150 }
@@ -284,6 +287,22 @@ struct HostPromoteCreateView: View {
                     }
                 }
             } else {
+                Section("Что продвигаем") {
+                    Picker("Предложение", selection: $selectedDeal) {
+                        Text("Вся витрина заведения").tag("")
+                        ForEach(venueDeals) { Text($0.title).tag($0.id) }
+                    }
+                    .onChange(of: selectedDeal) { _, id in
+                        if let d = venueDeals.first(where: { $0.id == id }) {
+                            pushHeadline = String(d.title.prefix(60))
+                            pushBody = String(d.details.prefix(120))
+                        }
+                    }
+                    if !selectedDeal.isEmpty {
+                        Text("Нажав на push, пользователь откроет это предложение.")
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }
+                }
                 Section("Текст уведомления") {
                     TextField("Заголовок (до 60)", text: $pushHeadline)
                         .onChange(of: pushHeadline) { _, v in if v.count > 60 { pushHeadline = String(v.prefix(60)) } }
@@ -312,12 +331,17 @@ struct HostPromoteCreateView: View {
                            status: .active, startAt: .now, endAt: end,
                            impressions: 0, taps: 0, spend: kind == .boost ? price(duration) : 100)
         host.addCampaign(c)
+        // Буст в ленте: помечаем заведение boostedUntil — оно поднимется вверх с меткой «Реклама».
+        if kind == .boost {
+            host.boostVenue(id: selectedVenue, until: end)
+        }
         // Push-кампания: реально ставим в очередь рассылки (Cloud Function → FCM).
         if kind == .push {
             let venueName = host.venueDTO(id: selectedVenue)?.name ?? "заведение"
             host.launchPush(headline: pushHeadline.isEmpty ? venueName : pushHeadline,
                             body: pushBody.isEmpty ? "Новое предложение в \(venueName)" : pushBody,
-                            venueID: selectedVenue)
+                            venueID: selectedVenue,
+                            dealID: selectedDeal.isEmpty ? nil : selectedDeal)
         }
         dismiss()
     }

@@ -19,8 +19,9 @@ initializeApp();
 const db = getFirestore();
 
 const DAY_MS = 86400000;
-const DAILY_CAP = 1;
-const WEEKLY_CAP = 3;
+// ⚠️ На время теста лимиты подняты. Для продакшена верни 1 и 3 (анти-спам из спеки).
+const DAILY_CAP = 20;
+const WEEKLY_CAP = 100;
 
 // Награды за рефералку (бонусы).
 const REFERRAL_REWARD = 100;
@@ -63,14 +64,16 @@ exports.sendPushCampaign = onDocumentWritten("pushCampaigns/{id}", async (event)
   }
 
   if (eligible.length === 0) {
-    // Фолбэк: рассылка по топику города. Устройства подписываются на city_<город>
-    // при запуске (без авторизации), поэтому буст доходит даже без userTokens.
-    const topic = city ? `city_${city}` : "all_users";
+    // Фолбэк: рассылка по топику ВСЕХ пользователей. Каждое устройство
+    // подписывается на all_users при запуске (без авторизации и без привязки
+    // к городу) — поэтому буст доходит до всех, даже без userTokens.
+    const topic = "all_users";
     try {
       await getMessaging().send({
         topic,
         notification: { title: c.headline || "САН", body: c.body || "" },
-        data: { type: "ad", venueID: String(c.venueID || ""), campaignId: event.params.id },
+        data: { type: c.dealID ? "deal" : "ad", venueID: String(c.venueID || ""),
+                dealID: String(c.dealID || ""), campaignId: event.params.id },
         apns: { payload: { aps: { sound: "default", badge: 1 } } },
         android: { notification: { sound: "default" }, priority: "high" },
       });
@@ -84,7 +87,8 @@ exports.sendPushCampaign = onDocumentWritten("pushCampaigns/{id}", async (event)
 
   const base = {
     notification: { title: c.headline || "САН", body: c.body || "" },
-    data: { type: "ad", venueID: String(c.venueID || ""), campaignId: event.params.id },
+    data: { type: c.dealID ? "deal" : "ad", venueID: String(c.venueID || ""),
+            dealID: String(c.dealID || ""), campaignId: event.params.id },
     apns: { payload: { aps: { sound: "default", badge: 1 } } },
     android: { notification: { sound: "default" }, priority: "high" },
   };

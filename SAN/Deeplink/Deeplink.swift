@@ -39,6 +39,7 @@ final class DeepLinkRouter: ObservableObject {
             case "venue": route = .venue(id)
             case "deal": route = .deal(id)
             case "ref": Self.setPendingReferrer(id)
+            case "gift": Self.setPendingGift(id)
             default: break
             }
         } else if url.scheme == "https" {
@@ -48,6 +49,7 @@ final class DeepLinkRouter: ObservableObject {
             case "venue": route = .venue(comps[1])
             case "deal": route = .deal(comps[1])
             case "ref": Self.setPendingReferrer(comps[1])
+            case "gift": Self.setPendingGift(comps[1])
             default: break
             }
         }
@@ -60,9 +62,17 @@ final class DeepLinkRouter: ObservableObject {
     static func venueURL(_ id: String) -> URL { URL(string: "https://\(domain)/venue/\(id)")! }
     static func dealURL(_ id: String) -> URL { URL(string: "https://\(domain)/deal/\(id)")! }
     static func referralURL(_ code: String) -> URL { URL(string: "https://\(domain)/ref/\(code)")! }
+    static func giftURL(_ code: String) -> URL { URL(string: "https://\(domain)/gift/\(code)")! }
 
     // MARK: Рефералка
     static let pendingReferrerKey = "san.referrer.pending"
+
+    static let pendingGiftKey = "san.gift.pending"
+    /// Запоминаем код подарка из ссылки. Забираем купон после входа.
+    static func setPendingGift(_ code: String) {
+        guard !code.isEmpty else { return }
+        UserDefaults.standard.set(code, forKey: pendingGiftKey)
+    }
 
     /// Запоминаем, кто пригласил (если ещё не записано). Привязка и бонус — после входа.
     static func setPendingReferrer(_ code: String) {
@@ -88,6 +98,18 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         return true
     }
 
+    // APNs-токен устройства → ОБЯЗАТЕЛЬНО передаём в FCM, иначе токен FCM не
+    // получить (ошибка 505 "No APNS token specified before fetching FCM Token").
+    func application(_ application: UIApplication,
+                     didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        Messaging.messaging().apnsToken = deviceToken
+    }
+
+    func application(_ application: UIApplication,
+                     didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        print("❌ APNs registration failed: \(error.localizedDescription)")
+    }
+
     // FCM-токен устройства → пишем в Firestore (userTokens) для адресной рассылки.
     func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
         guard let token = fcmToken else { return }
@@ -102,13 +124,16 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         completionHandler([.banner, .sound, .badge])
     }
 
-    // Тап по уведомлению → открываем целевое заведение из payload (venueID).
+    // Тап по уведомлению → открываем предложение (если буст деала) или заведение.
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 didReceive response: UNNotificationResponse,
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
         let info = response.notification.request.content.userInfo
-        if let vid = info["venueID"] as? String, !vid.isEmpty {
-            Task { @MainActor in DeepLinkRouter.shared.openVenue(vid) }
+        let dealID = info["dealID"] as? String ?? ""
+        let venueID = info["venueID"] as? String ?? ""
+        Task { @MainActor in
+            if !dealID.isEmpty { DeepLinkRouter.shared.openDeal(dealID) }
+            else if !venueID.isEmpty { DeepLinkRouter.shared.openVenue(venueID) }
         }
         completionHandler()
     }

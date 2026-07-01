@@ -1,9 +1,13 @@
 import SwiftUI
 
 /// Вкладка «Бонусы»: кошелёк, прогресс активного времени, игры, обмен на скидки.
+/// Обёртка URL+название для .sheet(item:).
+struct ShareURL: Identifiable { let id = UUID(); let url: URL; let title: String }
+
 struct BonusHubView: View {
     @EnvironmentObject private var bonus: BonusEngine
     @EnvironmentObject private var coupons: CouponStore
+    @EnvironmentObject private var store: AppStore
 
     var body: some View {
         NavigationStack {
@@ -162,6 +166,8 @@ struct BonusHubView: View {
 
     @State private var justClaimed: Coupon?
     @State private var pendingReward: Reward?
+    @State private var pendingGift: Reward?
+    @State private var giftShare: ShareURL?
 
     private func rewardRow(_ reward: Reward) -> some View {
         HStack(spacing: 12) {
@@ -171,16 +177,34 @@ struct BonusHubView: View {
                 Text("\(reward.cost) бонусов").font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
-            Button("Обменять") {
-                pendingReward = reward
+            Menu {
+                Button { pendingReward = reward } label: { Label("Обменять себе", systemImage: "ticket") }
+                Button { pendingGift = reward } label: { Label("Подарить другу", systemImage: "gift") }
+            } label: {
+                Text("Обменять").font(.caption.weight(.semibold))
+                    .padding(.horizontal, 12).padding(.vertical, 7)
+                    .background(bonus.balance >= reward.cost ? Color.sanAccent : Color.gray, in: Capsule())
+                    .foregroundStyle(.white)
             }
-            .font(.caption.weight(.semibold))
-            .buttonStyle(.borderedProminent)
-            .tint(bonus.balance >= reward.cost ? .sanAccent : .gray)
             .disabled(bonus.balance < reward.cost)
         }
         .padding(14)
         .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
+        .alert("Подарить купон?", isPresented: Binding(
+            get: { pendingGift != nil }, set: { if !$0 { pendingGift = nil } }),
+            presenting: pendingGift) { r in
+            Button("Подарить за \(r.cost)", role: .destructive) {
+                if let url = store.createGift(r, bonus: bonus) {
+                    giftShare = ShareURL(url: url, title: r.title)
+                }
+            }
+            Button("Отмена", role: .cancel) {}
+        } message: { r in
+            Text("Спишется \(r.cost) бонусов. Отправь ссылку другу — он заберёт «\(r.title)».")
+        }
+        .sheet(item: $giftShare) { item in
+            GiftShareSheet(url: item.url, title: item.title)
+        }
     }
 
     // MARK: Тост «+N»
@@ -206,5 +230,6 @@ struct BonusHubView: View {
     BonusHubView()
         .environmentObject(BonusEngine())
         .environmentObject(CouponStore())
+        .environmentObject(AppStore())
         .tint(.sanAccent)
 }

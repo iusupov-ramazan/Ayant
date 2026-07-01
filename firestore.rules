@@ -75,5 +75,12 @@ service cloud.firestore {
                     && request.resource.data.userID == resource.data.userID;
       allow create, delete: if false;
     }
+
+    // Подарочные купоны: создаёт даритель, забирает получатель (помечает claimed).
+    match /giftCoupons/{code} {
+      allow create: if request.auth != null;
+      allow read, update: if request.auth != null;
+      allow delete: if false;
+    }
   }
 }

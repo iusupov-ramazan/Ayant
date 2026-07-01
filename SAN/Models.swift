@@ -210,6 +210,10 @@ struct Venue: Identifiable, Hashable {
     var instagram: String = ""      // ник или ссылка Instagram
     var telegram: String = ""       // ник или ссылка Telegram
     var branches: [Branch] = []     // дополнительные адреса (филиалы)
+    var boostedUntil: Date? = nil   // платный буст в ленте до этой даты
+
+    /// Активен ли платный буст прямо сейчас.
+    var isBoosted: Bool { boostedUntil.map { $0 > .now } ?? false }
 
     /// Ссылка WhatsApp (wa.me) или nil.
     var whatsappURL: URL? {

@@ -39,6 +39,7 @@ struct SANApp: App {
                     AuthView()
                 }
             }
+            .overlay(alignment: .top) { AppToast() }
             .environmentObject(store)
             .environmentObject(session)
             .environmentObject(bonus)
@@ -53,9 +54,13 @@ struct SANApp: App {
                 GIDSignIn.sharedInstance.handle(url)
                 #endif
                 router.handle(url: url)
+                store.claimPendingGift(into: coupons)
             }
             .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
-                if let url = activity.webpageURL { router.handle(url: url) }
+                if let url = activity.webpageURL {
+                    router.handle(url: url)
+                    store.claimPendingGift(into: coupons)
+                }
             }
             .sheet(item: $router.route) { route in
                 DeepLinkDestination(route: route)
@@ -87,6 +92,7 @@ struct SANApp: App {
                 if signedIn {
                     store.grantPendingReferral(bonus: bonus)
                     store.claimReferralBonuses(bonus: bonus)
+                    store.claimPendingGift(into: coupons)
                     registerPushToken()      // токен пишем уже под авторизацией
                     bonus.start()
                     hostStore.configure(ownerID: session.user?.id)
@@ -106,6 +112,7 @@ struct SANApp: App {
                 store.setCurrentUser(id: session.user?.id, name: session.user?.name, isGuest: session.isGuest)
                 store.grantPendingReferral(bonus: bonus)
                 store.claimReferralBonuses(bonus: bonus)
+                store.claimPendingGift(into: coupons)
                 await hostStore.sync()
                 if session.isSignedIn { bonus.start() }
                 // Регистрация для remote-уведомлений → APNs-токен уходит в FCM
@@ -126,6 +133,31 @@ struct SANApp: App {
             guard let token else { return }
             pushService.registerToken(token, city: store.selectedCitySlug, uid: session.user?.id)
         }
+    }
+}
+
+/// Всплывающее уведомление (подарки, ошибки и т. п.) поверх всего приложения.
+struct AppToast: View {
+    @EnvironmentObject private var store: AppStore
+    var body: some View {
+        ZStack {
+            if let msg = store.toastMessage {
+                Text(msg)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 16).padding(.vertical, 12)
+                    .background(Color.black.opacity(0.85), in: Capsule())
+                    .padding(.horizontal, 24).padding(.top, 8)
+                    .shadow(radius: 6)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .task(id: msg) {
+                        try? await Task.sleep(nanoseconds: 2_800_000_000)
+                        store.toastMessage = nil
+                    }
+            }
+        }
+        .animation(.spring(response: 0.35), value: store.toastMessage)
     }
 }
 

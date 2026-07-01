@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // MARK: - Модели
 
@@ -51,6 +52,14 @@ final class CouponStore: ObservableObject {
         return c
     }
 
+    /// Кладёт полученный в подарок купон в кошелёк.
+    func addGifted(title: String, code: String) {
+        guard !coupons.contains(where: { $0.code == code }) else { return }
+        coupons.insert(Coupon(id: "cp_\(UUID().uuidString.prefix(8))",
+                              title: title, code: code, createdAt: .now), at: 0)
+        save()
+    }
+
     func markUsed(_ coupon: Coupon) {
         guard let i = coupons.firstIndex(where: { $0.id == coupon.id }) else { return }
         coupons[i].used = true
@@ -99,6 +108,85 @@ struct MyCouponsView: View {
         }
         .navigationTitle("Мои купоны")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+// MARK: - Подарок готов (картинка купона + текст для шаринга)
+
+/// Картинка-купон для шаринга (рендерится в UIImage).
+struct GiftCardImage: View {
+    let title: String
+    var body: some View {
+        VStack(spacing: 14) {
+            Text("🎁").font(.system(size: 72))
+            Text("ПОДАРОК · AYTA").font(.headline.weight(.heavy)).tracking(2)
+            Text(title).font(.title.weight(.bold)).multilineTextAlignment(.center)
+            Text("Открой ссылку в приложении Ayta\nи забери купон").font(.subheadline)
+                .multilineTextAlignment(.center).opacity(0.95)
+        }
+        .padding(40)
+        .frame(width: 640, height: 460)
+        .background(LinearGradient(colors: [Color(hex: 0xFF4D29), Color(hex: 0xFFB300)],
+                                   startPoint: .topLeading, endPoint: .bottomTrailing))
+        .foregroundStyle(.white)
+    }
+}
+
+@MainActor
+func renderGiftImage(title: String) -> UIImage? {
+    let renderer = ImageRenderer(content: GiftCardImage(title: title))
+    renderer.scale = 3
+    return renderer.uiImage
+}
+
+/// Обёртка над UIActivityViewController — шарит текст + картинку + ссылку.
+struct ActivityShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+    func updateUIViewController(_ vc: UIActivityViewController, context: Context) {}
+}
+
+struct GiftShareSheet: View {
+    let url: URL
+    let title: String
+    @Environment(\.dismiss) private var dismiss
+    @State private var image: UIImage?
+    @State private var showActivity = false
+
+    private var caption: String {
+        "🎁 Тебе подарок — купон «\(title)» в Ayta! Забери по ссылке: \(url.absoluteString)"
+    }
+
+    var body: some View {
+        VStack(spacing: 16) {
+            if let image {
+                Image(uiImage: image).resizable().scaledToFit()
+                    .frame(maxHeight: 240)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .shadow(color: .black.opacity(0.12), radius: 8, y: 4)
+            }
+            Text("Подарок готов!").font(.title2.weight(.bold))
+            Text("Отправь другу картинку со ссылкой — он заберёт купон в приложении.")
+                .font(.subheadline).foregroundStyle(.secondary)
+                .multilineTextAlignment(.center).padding(.horizontal)
+            Button { showActivity = true } label: {
+                Label("Поделиться", systemImage: "square.and.arrow.up")
+                    .font(.headline).frame(maxWidth: .infinity).padding(.vertical, 14)
+                    .background(Color.sanAccent, in: RoundedRectangle(cornerRadius: 14))
+                    .foregroundStyle(.white)
+            }
+            .padding(.horizontal)
+            Button("Готово") { dismiss() }.padding(.top, 2)
+            Spacer()
+        }
+        .padding(.top, 30)
+        .onAppear { image = renderGiftImage(title: title) }
+        .sheet(isPresented: $showActivity) {
+            ActivityShareSheet(items: image != nil ? [caption, image!] : [caption])
+        }
+        .presentationDetents([.large])
     }
 }
 

@@ -134,9 +134,14 @@ struct DealCard: View {
     @State private var showGuestAlert = false
 
     private var venue: Venue? { store.venue(for: deal) }
+    // Акции показываются «как есть» — рекламой выступают карточки заведений.
+    private var isAd: Bool { false }
+
+    private var pad: CGFloat { isAd ? 18 : 14 }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            if isAd { adBanner }
             // Шапка (логотип + название) ведёт на страницу заведения.
             Button(action: onVenueTap) { header }
                 .buttonStyle(.plain)
@@ -150,15 +155,31 @@ struct DealCard: View {
             .buttonStyle(.plain)
             actions
         }
-        .background(Color(.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 20))
-        .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color(.systemGray5), lineWidth: 1))
-        .shadow(color: .black.opacity(0.04), radius: 6, y: 3)
+        .background(isAd ? Color.sanAccent.opacity(0.06) : Color(.systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: isAd ? 22 : 20))
+        .overlay(RoundedRectangle(cornerRadius: isAd ? 22 : 20)
+            .stroke(isAd ? Color.sanAccent : Color(.systemGray5), lineWidth: isAd ? 2 : 1))
+        .shadow(color: isAd ? Color.sanAccent.opacity(0.18) : .black.opacity(0.04),
+                radius: isAd ? 12 : 6, y: isAd ? 5 : 3)
+        .padding(.vertical, isAd ? 4 : 0)
         .alert("Войдите в аккаунт", isPresented: $showGuestAlert) {
             Button("Понятно", role: .cancel) {}
         } message: {
             Text("Гостям доступен только просмотр. Войдите в профиле, чтобы сохранять.")
         }
+    }
+
+    private var adBanner: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "megaphone.fill").font(.caption2)
+            Text("Реклама").font(.caption.weight(.heavy))
+            Spacer()
+            Text("спецпредложение").font(.caption2.weight(.semibold)).opacity(0.9)
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, pad).padding(.vertical, 8)
+        .background(LinearGradient(colors: [Color(hex: 0xFF4D29), Color(hex: 0xFFB300)],
+                                   startPoint: .leading, endPoint: .trailing))
     }
 
     private var header: some View {
@@ -180,7 +201,7 @@ struct DealCard: View {
             DealTypeBadge(type: deal.type)
         }
         .contentShape(Rectangle())
-        .padding(.horizontal, 14)
+        .padding(.horizontal, pad)
         .padding(.vertical, 12)
     }
 
@@ -221,7 +242,7 @@ struct DealCard: View {
             Label("до \(deal.validUntil.sanShort)", systemImage: "clock")
                 .font(.caption).foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, pad)
         .padding(.vertical, 12)
     }
 
@@ -240,9 +261,9 @@ struct DealCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
-        .padding(.horizontal, 14)
-        .padding(.top, 16)      // воздух между картинкой и заголовком
-        .padding(.bottom, 4)
+        .padding(.horizontal, pad)
+        .padding(.top, isAd ? 18 : 16)   // воздух между картинкой и заголовком
+        .padding(.bottom, isAd ? 8 : 4)
     }
 }
 
@@ -446,10 +467,12 @@ struct VenueCard: View {
             cover
             info
         }
-        .background(Color(.systemBackground))
+        .background(isSponsored ? Color.sanAccent.opacity(0.06) : Color(.systemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 20))
-        .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color(.systemGray5), lineWidth: 1))
-        .shadow(color: .black.opacity(0.05), radius: 7, y: 3)
+        .overlay(RoundedRectangle(cornerRadius: 20)
+            .stroke(isSponsored ? Color.sanAccent : Color(.systemGray5), lineWidth: isSponsored ? 2 : 1))
+        .shadow(color: isSponsored ? Color.sanAccent.opacity(0.18) : .black.opacity(0.05),
+                radius: isSponsored ? 10 : 7, y: 3)
         .alert("Войдите в аккаунт", isPresented: $showGuestAlert) {
             Button("Понятно", role: .cancel) {}
         } message: {

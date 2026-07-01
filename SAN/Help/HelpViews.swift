@@ -88,6 +88,7 @@ struct FAQView: View {
 // MARK: - Поддержка
 
 struct SupportView: View {
+    private let telegram = URL(string: "https://t.me/bonus_kg_bot")!
     private let whatsapp = URL(string: "https://wa.me/996707266556")!
     private let email = URL(string: "mailto:ostepp1@gmail.com")!
 
@@ -98,6 +99,13 @@ struct SupportView: View {
                     .font(.subheadline).foregroundStyle(.secondary)
             }
             Section("Связаться с нами") {
+                Link(destination: telegram) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Label("Telegram-бот", systemImage: "paperplane.fill")
+                        Text("ИИ-помощник — отвечает 24/7")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
                 Link(destination: whatsapp) { Label("WhatsApp", systemImage: "message.fill") }
                 Link(destination: email) { Label("Email", systemImage: "envelope.fill") }
             }

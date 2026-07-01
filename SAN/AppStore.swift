@@ -1,6 +1,18 @@
 import SwiftUI
 import CoreLocation
 
+/// Элемент ленты: либо акция, либо рекламная карточка заведения (буст).
+enum FeedItem: Identifiable {
+    case deal(Deal)
+    case adVenue(Venue)
+    var id: String {
+        switch self {
+        case .deal(let d): return "d_\(d.id)"
+        case .adVenue(let v): return "av_\(v.id)"
+        }
+    }
+}
+
 /// Глобальное состояние приложения (пользовательская сторона).
 @MainActor
 final class AppStore: ObservableObject {
@@ -22,6 +34,7 @@ final class AppStore: ObservableObject {
     var currentUserID = "me"
     var currentUserName = "Вы"
     @Published var isGuest = false   // гость не может сохранять/оставлять отзывы
+    @Published var toastMessage: String?   // всплывающее уведомление (подарки и т. п.)
 
     private let repository: DataRepository = AppConfig.makeDataRepository()
     private let analytics: AnalyticsService = AppConfig.makeAnalyticsService()
@@ -142,7 +155,8 @@ final class AppStore: ObservableObject {
         return s
     }
 
-    /// Оценка предложения для ленты: релевантность заведения + свежесть.
+    /// Органическая оценка предложения: релевантность заведения + свежесть.
+    /// Платный буст обрабатывается отдельно в feedDeals (1 реклама на компанию).
     func dealScore(_ d: Deal) -> Double {
         var s = venue(for: d).map(venueScore) ?? 0
         if d.isFresh { s += 6.0 }                              // последние 48ч — буст
@@ -163,14 +177,36 @@ final class AppStore: ObservableObject {
         deals.filter { $0.venueID == venue.id && $0.isActive }
     }
 
-    /// Лента предложений: активные акции заведений выбранного города
-    /// (одобренные, не на паузе), с фильтром по категории. Свежие — выше.
+    /// Лента предложений: активные акции заведений выбранного города. Акции — как есть.
     func feedDeals(category: VenueCategory?) -> [Deal] {
         let cityVenues = venuesInSelectedCity()
             .filter { category == nil || $0.category == category }
         let ids = Set(cityVenues.map(\.id))
         return deals.filter { $0.isActive && ids.contains($0.venueID) }
             .sorted { dealScore($0) > dealScore($1) }
+    }
+
+    /// Заведения с активным платным бустом (для рекламных карточек в ленте), в ротации.
+    func boostedVenuesRotated(category: VenueCategory?) -> [Venue] {
+        let rot = Int(Date().timeIntervalSince1970 / 1800)   // ротация каждые 30 мин
+        return venuesInSelectedCity()
+            .filter { (category == nil || $0.category == category) && $0.isBoosted }
+            .sorted { ($0.id.hashValue &+ rot) < ($1.id.hashValue &+ rot) }
+    }
+
+    /// Смешанная лента: акции как есть + рекламные карточки заведений вставлены через интервал.
+    func feedItems(category: VenueCategory?) -> [FeedItem] {
+        let deals = feedDeals(category: category)
+        let ads = boostedVenuesRotated(category: category)
+        var items: [FeedItem] = []
+        var ai = 0
+        for (i, d) in deals.enumerated() {
+            // Рекламную карточку заведения вставляем на 3-й, 8-й… позиции (не первой).
+            if i % 5 == 3, ai < ads.count { items.append(.adVenue(ads[ai])); ai += 1 }
+            items.append(.deal(d))
+        }
+        while ai < ads.count { items.append(.adVenue(ads[ai])); ai += 1 }
+        return items
     }
 
     func allDeals(for venue: Venue) -> [Deal] {
@@ -246,6 +282,39 @@ final class AppStore: ObservableObject {
         AnalyticsLog.log(.referralJoin, ["referrer_id": ref, "user_id": currentUserID])
         // Записываем реферал — Cloud Function начислит бонус пригласившему.
         Task { try? await repository.recordReferral(inviteeID: currentUserID, referrerID: ref) }
+    }
+
+    // MARK: - Подарочные купоны
+
+    /// Покупает подарочный купон за бонусы и возвращает ссылку для отправки другу.
+    func createGift(_ reward: Reward, bonus: BonusEngine) -> URL? {
+        guard !isGuest, bonus.spend(reward.cost) else { return nil }
+        let code = "GIFT-\(UUID().uuidString.prefix(8).uppercased())"
+        Task { try? await repository.createGiftCoupon(title: reward.title, code: code, fromName: currentUserName) }
+        AnalyticsLog.log(.couponClaim, ["reward_id": reward.id, "gift": true])
+        return DeepLinkRouter.giftURL(code)
+    }
+
+    /// Забирает подарок по коду и кладёт купон в кошелёк получателя (с уведомлением).
+    func claimGift(code: String, into coupons: CouponStore) {
+        guard !isGuest, !code.isEmpty else { return }
+        Task {
+            if let g = try? await repository.claimGiftCoupon(code: code) {
+                coupons.addGifted(title: g.title, code: g.code)
+                toastMessage = "🎁 Подарок получен — купон в «Мои купоны»!"
+            } else {
+                toastMessage = "Этот подарок уже забрали или ссылка недействительна"
+            }
+        }
+    }
+
+    /// Если есть отложенный подарок из ссылки и пользователь вошёл — забираем.
+    func claimPendingGift(into coupons: CouponStore) {
+        guard !isGuest else { return }
+        let d = UserDefaults.standard
+        guard let code = d.string(forKey: DeepLinkRouter.pendingGiftKey), !code.isEmpty else { return }
+        d.removeObject(forKey: DeepLinkRouter.pendingGiftKey)
+        claimGift(code: code, into: coupons)
     }
 
     /// Забирает серверные бонусы (награды за приглашённых) при запуске.

@@ -18,6 +18,16 @@ protocol DataRepository {
     func recordReferral(inviteeID: String, referrerID: String) async throws
     /// Забирает начисленные сервером бонусы (рефералка) и помечает claimed. Возвращает сумму.
     func claimBonusGrants(userID: String) async throws -> Int
+    /// Создаёт подарочный купон (giftCoupons/{code}) — можно отправить другому пользователю.
+    func createGiftCoupon(title: String, code: String, fromName: String) async throws
+    /// Забирает подарок по коду (один раз). nil — если уже забран или не найден.
+    func claimGiftCoupon(code: String) async throws -> GiftInfo?
+}
+
+/// Данные забранного подарочного купона.
+struct GiftInfo: Equatable {
+    let title: String
+    let code: String
 }
 
 /// Запись/чтение контента хоста в Firestore (заведения и предложения с владельцем).
@@ -34,7 +44,7 @@ protocol HostRepository {
     /// Кладёт push-кампанию в очередь (Firestore). Реальную рассылку делает
     /// Cloud Function по триггеру создания документа.
     func queuePushCampaign(headline: String, body: String, city: String,
-                           category: String?, venueID: String, ownerID: String) async throws
+                           category: String?, venueID: String, dealID: String?, ownerID: String) async throws
 }
 
 /// Аналитика заведений: события пишутся в коллекцию `analytics/{venueID}/days/{date}`.
@@ -77,6 +87,8 @@ final class MockDataRepository: DataRepository {
     func logRedemption(userID: String, dealID: String, venueID: String) async throws {}
     func recordReferral(inviteeID: String, referrerID: String) async throws {}
     func claimBonusGrants(userID: String) async throws -> Int { 0 }
+    func createGiftCoupon(title: String, code: String, fromName: String) async throws {}
+    func claimGiftCoupon(code: String) async throws -> GiftInfo? { nil }
 }
 
 final class MockPushService: PushService {
@@ -107,7 +119,7 @@ final class MockHostRepository: HostRepository {
     func saveProfile(_ profile: HostProfile, ownerID: String) async throws {}
     func fetchProfile(ownerID: String) async throws -> HostProfile? { nil }
     func queuePushCampaign(headline: String, body: String, city: String,
-                           category: String?, venueID: String, ownerID: String) async throws {
+                           category: String?, venueID: String, dealID: String?, ownerID: String) async throws {
         print("[push] queued (mock): \(headline)")
     }
 }
