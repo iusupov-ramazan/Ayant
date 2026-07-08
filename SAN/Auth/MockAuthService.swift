@@ -16,6 +16,8 @@ final class MockAuthService: AuthService {
         return try? JSONDecoder().decode(SANUser.self, from: data)
     }
 
+    func idToken() async -> String? { "mock-token" }
+
     private func persist(_ user: SANUser) {
         if let data = try? JSONEncoder().encode(user) {
             defaults.set(data, forKey: sessionKey)

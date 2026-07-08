@@ -1,5 +1,5 @@
 /**
- * Seed — каталог заведений Бишкека (41) в Firestore по модели приложения Ayta.
+ * Seed — каталог заведений Бишкека (41) в Firestore по модели приложения Ayant.
  *
  * Запуск:  node seed-bishkek.js   (нужен serviceAccountKey.json рядом)
  *

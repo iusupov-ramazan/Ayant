@@ -6,10 +6,10 @@ struct AboutView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text("Ayta")
+                Text("Ayant")
                     .font(.largeTitle.weight(.heavy)).foregroundStyle(Color.sanAccent)
 
-                Text("Ayta — это единая лента событий твоего города и платформа для получения скидок. Мы убрали весь информационный шум, оставив только то, что действительно важно для пользователя.")
+                Text("Ayant — это единая лента событий твоего города и платформа для получения скидок. Мы убрали весь информационный шум, оставив только то, что действительно важно для пользователя.")
 
                 group("Что ты найдёшь внутри") {
                     Text("Вся ключевая информация от заведений города собрана по системе **САН**:")
@@ -73,10 +73,13 @@ struct FAQView: View {
         List {
             ForEach(items, id: \.0) { item in
                 DisclosureGroup {
-                    Text(item.1).font(.subheadline).foregroundStyle(.secondary)
+                    // LocalizedStringKey(String) — иначе Text(String) не проходит через
+                    // каталог локализации и текст остаётся на языке источника.
+                    Text(LocalizedStringKey(item.1)).font(.subheadline).foregroundStyle(.secondary)
                         .padding(.vertical, 4)
                 } label: {
-                    Text("❓ \(item.0)").font(.subheadline.weight(.medium))
+                    Text("❓ ") + Text(LocalizedStringKey(item.0))
+                        .font(.subheadline.weight(.medium))
                 }
             }
         }
@@ -88,7 +91,11 @@ struct FAQView: View {
 // MARK: - Поддержка
 
 struct SupportView: View {
-    private let telegram = URL(string: "https://t.me/bonus_kg_bot")!
+    @Environment(\.openURL) private var openURL
+
+    private let telegramApp = URL(string: "tg://resolve?domain=bonus_kg_bot")!
+    private let telegramWeb = URL(string: "https://t.me/bonus_kg_bot")!
+    private let instagram = URL(string: "https://www.instagram.com/ayant_kg")!
     private let whatsapp = URL(string: "https://wa.me/996707266556")!
     private let email = URL(string: "mailto:ostepp1@gmail.com")!
 
@@ -99,18 +106,49 @@ struct SupportView: View {
                     .font(.subheadline).foregroundStyle(.secondary)
             }
             Section("Связаться с нами") {
-                Link(destination: telegram) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Label("Telegram-бот", systemImage: "paperplane.fill")
-                        Text("ИИ-помощник — отвечает 24/7")
-                            .font(.caption).foregroundStyle(.secondary)
+                // Сначала пробуем открыть приложение Telegram (tg://), затем веб как фолбэк.
+                Button {
+                    openURL(telegramApp) { accepted in
+                        if !accepted { openURL(telegramWeb) }
+                    }
+                } label: {
+                    HStack(spacing: 12) {
+                        telegramIcon
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Telegram-бот").foregroundStyle(.primary)
+                            Text("ИИ-помощник — отвечает 24/7")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
                     }
                 }
-                Link(destination: whatsapp) { Label("WhatsApp", systemImage: "message.fill") }
+                .buttonStyle(.plain)
+                Link(destination: instagram) {
+                    Label { Text("Instagram") } icon: { assetIcon("instagram") }
+                }
+                Link(destination: whatsapp) {
+                    Label { Text("WhatsApp") } icon: { assetIcon("whatsapp") }
+                }
                 Link(destination: email) { Label("Email", systemImage: "envelope.fill") }
             }
         }
         .navigationTitle("Поддержка")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    /// Логотип из ассетов со скруглёнными углами.
+    private func assetIcon(_ name: String) -> some View {
+        Image(name).resizable().scaledToFill()
+            .frame(width: 26, height: 26)
+            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+    }
+
+    /// Иконка Telegram (нет отдельного ассета) — фирменный синий скруглённый квадрат.
+    private var telegramIcon: some View {
+        Image(systemName: "paperplane.fill")
+            .font(.system(size: 13, weight: .bold))
+            .foregroundStyle(.white)
+            .frame(width: 26, height: 26)
+            .background(Color(hex: 0x29A9EB),
+                        in: RoundedRectangle(cornerRadius: 7, style: .continuous))
     }
 }

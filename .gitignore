@@ -31,3 +31,5 @@ xcuserdata/
 *.xcscmblueprint
 build/
 DerivedData/
+
+functions/certs/

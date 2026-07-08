@@ -65,6 +65,30 @@ enum AnalyticsMetric {
     static let all = [views, saves, calls, maps, dealTaps, redemptions]
 }
 
+/// Результат сканирования купона заведением (ответ Cloud Function scanCoupon).
+struct ScanOutcome: Equatable {
+    let ok: Bool
+    let title: String
+    let loyalty: Bool
+    let stamps: Int
+    let goal: Int
+    let rewardIssued: Bool
+    let rewardTitle: String
+    let errorCode: String?     // nil при успехе; иначе "already_used"/"wrong_venue"/…
+}
+
+/// Бэкенд-трекинг купонов + карт лояльности (Firestore) и сканер заведения.
+protocol CouponService {
+    /// Пишет купон пользователя в Firestore (deal-купон создаёт клиент).
+    func saveCoupon(_ coupon: Coupon, userID: String) async throws
+    /// Купоны пользователя из Firestore (для синка used-статуса и наград).
+    func fetchCoupons(userID: String) async throws -> [Coupon]
+    /// Карты лояльности пользователя из Firestore.
+    func fetchLoyaltyCards(userID: String) async throws -> [LoyaltyCard]
+    /// Сканирование купона заведением: погашение + штамп (через Cloud Function).
+    func scanCoupon(code: String, venueID: String, idToken: String) async throws -> ScanOutcome
+}
+
 /// Push-уведомления (новые акции рядом / у избранных мест).
 protocol PushService {
     func requestAuthorization() async -> Bool
@@ -89,6 +113,17 @@ final class MockDataRepository: DataRepository {
     func claimBonusGrants(userID: String) async throws -> Int { 0 }
     func createGiftCoupon(title: String, code: String, fromName: String) async throws {}
     func claimGiftCoupon(code: String) async throws -> GiftInfo? { nil }
+}
+
+/// Mock купон-сервиса: без бэкенда. Сканирование всегда «успех + штамп» для демо.
+final class MockCouponService: CouponService {
+    func saveCoupon(_ coupon: Coupon, userID: String) async throws {}
+    func fetchCoupons(userID: String) async throws -> [Coupon] { [] }
+    func fetchLoyaltyCards(userID: String) async throws -> [LoyaltyCard] { [] }
+    func scanCoupon(code: String, venueID: String, idToken: String) async throws -> ScanOutcome {
+        ScanOutcome(ok: true, title: "Демо-купон", loyalty: true, stamps: 1, goal: 6,
+                    rewardIssued: false, rewardTitle: "", errorCode: nil)
+    }
 }
 
 final class MockPushService: PushService {

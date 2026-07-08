@@ -27,6 +27,11 @@ final class FirebaseAuthService: AuthService {
                        email: u.email, provider: .email)
     }
 
+    func idToken() async -> String? {
+        guard let u = Auth.auth().currentUser else { return nil }
+        return try? await u.getIDToken()
+    }
+
     func signInWithEmail(_ email: String, password: String) async throws -> SANUser {
         let r = try await Auth.auth().signIn(withEmail: email, password: password)
         return map(r.user, provider: .email)
@@ -332,7 +337,11 @@ extension Venue {
             instagram: d["instagram"] as? String ?? "",
             telegram: d["telegram"] as? String ?? "",
             branches: Branch.parseArray(d["branches"]),
-            boostedUntil: (d["boostedUntil"] as? Timestamp)?.dateValue()
+            boostedUntil: (d["boostedUntil"] as? Timestamp)?.dateValue(),
+            loyaltyEnabled: d["loyaltyEnabled"] as? Bool ?? false,
+            loyaltyGoal: (d["loyaltyGoal"] as? NSNumber)?.intValue ?? 6,
+            loyaltyReward: d["loyaltyReward"] as? String ?? "Награда за лояльность",
+            couponsEnabled: d["couponsEnabled"] as? Bool ?? true
         )
     }
 }
@@ -404,7 +413,8 @@ extension Deal {
             status: statusMap[d["status"] as? String ?? "active"] ?? .active,
             startDate: (d["startDate"] as? Timestamp)?.dateValue(),
             imageEmojis: d["imageEmojis"] as? [String] ?? [],
-            imageURL: d["imageURL"] as? String
+            imageURL: d["imageURL"] as? String,
+            imageURLs: d["imageURLs"] as? [String] ?? []
         )
     }
 }
@@ -530,6 +540,10 @@ extension HostVenueDTO {
             "telegram": telegram,
             "branches": branches.map(\.firestoreMap),
             "boostedUntil": boostedUntil.map { Timestamp(date: $0) } as Any,
+            "loyaltyEnabled": loyaltyEnabled,
+            "loyaltyGoal": loyaltyGoal,
+            "loyaltyReward": loyaltyReward,
+            "couponsEnabled": couponsEnabled,
             "todaySpecial": todaySpecial ?? ""
         ]
         if (todaySpecial ?? "").isEmpty { d["todaySpecial"] = "" }
@@ -563,7 +577,11 @@ extension HostVenueDTO {
             instagram: d["instagram"] as? String ?? "",
             telegram: d["telegram"] as? String ?? "",
             branches: Branch.parseArray(d["branches"]),
-            boostedUntil: (d["boostedUntil"] as? Timestamp)?.dateValue())
+            boostedUntil: (d["boostedUntil"] as? Timestamp)?.dateValue(),
+            loyaltyEnabled: d["loyaltyEnabled"] as? Bool ?? false,
+            loyaltyGoal: (d["loyaltyGoal"] as? NSNumber)?.intValue ?? 6,
+            loyaltyReward: d["loyaltyReward"] as? String ?? "Награда за лояльность",
+            couponsEnabled: d["couponsEnabled"] as? Bool ?? true)
     }
 }
 
@@ -586,6 +604,7 @@ extension HostDealDTO {
         if let discountPercent { d["discountPercent"] = discountPercent }
         if let endDate { d["endDate"] = Timestamp(date: endDate) }
         d["imageURL"] = imageURL
+        d["imageURLs"] = imageURLs
         return d
     }
 
@@ -604,7 +623,8 @@ extension HostDealDTO {
             startDate: (d["startDate"] as? Timestamp)?.dateValue() ?? .now,
             endDate: (d["endDate"] as? Timestamp)?.dateValue(),
             statusRaw: status.rawValue,
-            imageURL: d["imageURL"] as? String ?? "")
+            imageURL: d["imageURL"] as? String ?? "",
+            imageURLs: d["imageURLs"] as? [String] ?? [])
     }
 }
 
@@ -672,6 +692,80 @@ final class FirebaseHostRepository: HostRepository {
         if let dealID, !dealID.isEmpty { data["dealID"] = dealID }
         // Админ одобряет в панели (status → approved) → Cloud Function рассылает.
         _ = try await db.collection("pushCampaigns").addDocument(data: data)
+    }
+}
+
+// MARK: - Купоны (бэкенд-трекинг + сканер)
+
+final class FirebaseCouponService: CouponService {
+    private let db = Firestore.firestore()
+    private let scanURL = "https://us-central1-san-25d32.cloudfunctions.net/scanCoupon"
+
+    func saveCoupon(_ c: Coupon, userID: String) async throws {
+        let data: [String: Any] = [
+            "code": c.code, "userID": userID,
+            "venueID": c.venueID, "venueName": c.venueName,
+            "title": c.title, "kind": c.kind, "dealID": c.dealID,
+            "used": c.used, "createdAt": Timestamp(date: c.createdAt)
+        ]
+        try await db.collection("coupons").document(c.id).setData(data, merge: true)
+    }
+
+    func fetchCoupons(userID: String) async throws -> [Coupon] {
+        let snap = try await db.collection("coupons")
+            .whereField("userID", isEqualTo: userID).getDocuments()
+        return snap.documents.map { doc in
+            let d = doc.data()
+            return Coupon(
+                id: doc.documentID,
+                title: d["title"] as? String ?? "Купон",
+                code: d["code"] as? String ?? "",
+                createdAt: (d["createdAt"] as? Timestamp)?.dateValue() ?? .now,
+                used: d["used"] as? Bool ?? false,
+                venueID: d["venueID"] as? String ?? "",
+                venueName: d["venueName"] as? String ?? "",
+                kind: d["kind"] as? String ?? "bonus",
+                dealID: d["dealID"] as? String ?? ""
+            )
+        }
+    }
+
+    func fetchLoyaltyCards(userID: String) async throws -> [LoyaltyCard] {
+        let snap = try await db.collection("loyaltyCards")
+            .whereField("userID", isEqualTo: userID).getDocuments()
+        return snap.documents.map { doc in
+            let d = doc.data()
+            return LoyaltyCard(
+                venueID: d["venueID"] as? String ?? "",
+                venueName: d["venueName"] as? String ?? "",
+                stamps: (d["stamps"] as? NSNumber)?.intValue ?? 0,
+                completedRounds: (d["completedRounds"] as? NSNumber)?.intValue ?? 0,
+                goal: (d["goal"] as? NSNumber)?.intValue ?? 6,
+                reward: d["reward"] as? String ?? "Награда за лояльность"
+            )
+        }
+    }
+
+    func scanCoupon(code: String, venueID: String, idToken: String) async throws -> ScanOutcome {
+        guard let url = URL(string: scanURL) else { throw URLError(.badURL) }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+        req.httpBody = try JSONSerialization.data(withJSONObject: ["code": code, "venueID": venueID])
+        let (data, _) = try await URLSession.shared.data(for: req)
+        let j = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
+        let ok = j["ok"] as? Bool ?? false
+        return ScanOutcome(
+            ok: ok,
+            title: j["title"] as? String ?? "",
+            loyalty: j["loyalty"] as? Bool ?? false,
+            stamps: (j["stamps"] as? NSNumber)?.intValue ?? 0,
+            goal: (j["goal"] as? NSNumber)?.intValue ?? 6,
+            rewardIssued: j["rewardIssued"] as? Bool ?? false,
+            rewardTitle: j["rewardTitle"] as? String ?? "",
+            errorCode: ok ? nil : (j["error"] as? String ?? "scan_failed")
+        )
     }
 }
 

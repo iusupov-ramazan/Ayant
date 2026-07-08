@@ -52,8 +52,14 @@ struct VenueLocationPicker: View {
     private var mapView: some View {
         MapReader { proxy in
             Map(position: $cameraPosition) {
-                Marker("Заведение", coordinate: coordinate)
-                    .tint(.red)
+                // Annotation (не Marker): заголовок рисуется дефолтным цветом текста карты,
+                // а не белым на красном балуне.
+                Annotation("Заведение", coordinate: coordinate) {
+                    Image(systemName: "mappin.circle.fill")
+                        .font(.title)
+                        .foregroundStyle(Color.sanAccent)
+                        .background(Circle().fill(.background).padding(3))
+                }
             }
             .mapControls {
                 MapUserLocationButton()

@@ -70,7 +70,7 @@ struct HostOnboardingView: View {
             Section("Бизнес") {
                 TextField("Название бизнеса", text: $businessName)
                 Picker("Категория", selection: $category) {
-                    ForEach(VenueCategory.allCases) { Text($0.rawValue).tag($0) }
+                    ForEach(VenueCategory.allCases) { Text($0.locKey).tag($0) }
                 }
                 TextField("Контактный телефон", text: $phone).keyboardType(.phonePad)
                 TextField("Email", text: $email).keyboardType(.emailAddress)

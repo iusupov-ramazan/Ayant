@@ -6,6 +6,7 @@ import MapKit
 struct HostVenuesView: View {
     @EnvironmentObject private var host: HostStore
     @State private var showAddVenue = false
+    @State private var showScanner = false
     @State private var venueToDelete: HostVenueDTO?
 
     var body: some View {
@@ -37,6 +38,13 @@ struct HostVenuesView: View {
             .navigationTitle("Мои заведения")
             .refreshable { await host.sync() }
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    if !host.venueDTOs.isEmpty {
+                        Button { showScanner = true } label: {
+                            Image(systemName: "qrcode.viewfinder")
+                        }
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showAddVenue = true } label: { Image(systemName: "plus") }
                 }
@@ -49,6 +57,9 @@ struct HostVenuesView: View {
             }
             .sheet(isPresented: $showAddVenue) {
                 HostVenueFormView(existing: nil)
+            }
+            .sheet(isPresented: $showScanner) {
+                HostScannerView().environmentObject(host)
             }
             .alert("Удалить заведение?", isPresented: Binding(
                 get: { venueToDelete != nil },
@@ -78,13 +89,16 @@ struct HostVenuesView: View {
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 3) {
-                Text(v.moderation.title)
-                    .font(.caption2.weight(.semibold))
+                Text(L(v.moderation.title))
+                    .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(v.moderation.color)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                 if v.moderation == .approved {
                     Text(v.isPaused ? "На паузе" : "Активно")
-                        .font(.caption2)
+                        .font(.system(size: 10))
                         .foregroundStyle(v.isPaused ? .orange : .secondary)
+                        .lineLimit(1)
                 }
             }
         }
@@ -110,6 +124,7 @@ struct HostVenueDetailView: View {
                     header(v)
                     if v.moderation != .approved { moderationBanner(v) }
                     todaySpecialEditor(v)
+                    loyaltySection(v)
                     itemsSection(v)
                     dealsSection(v)
                     actions(v)
@@ -126,6 +141,7 @@ struct HostVenueDetailView: View {
             case .addDeal: HostDealFormView(venueID: venueID, existing: nil)
             case .editDeal(let d): HostDealFormView(venueID: venueID, existing: d)
             case .addItem: HostItemFormView(venueID: venueID)
+            case .scanCoupons: HostScannerView(fixedVenueID: venueID).environmentObject(host)
             }
         }
     }
@@ -155,7 +171,7 @@ struct HostVenueDetailView: View {
             Image(systemName: v.moderation == .rejected ? "xmark.octagon.fill" : "clock.fill")
                 .foregroundStyle(v.moderation.color)
             VStack(alignment: .leading, spacing: 2) {
-                Text(v.moderation.title).font(.subheadline.weight(.semibold))
+                Text(L(v.moderation.title)).font(.subheadline.weight(.semibold))
                 Text(v.moderation == .rejected
                      ? "Заведение отклонено. Отредактируйте данные и сохраните повторно."
                      : "Заведение на проверке. Появится в ленте после одобрения.")
@@ -258,7 +274,7 @@ struct HostVenueDetailView: View {
                            gradient: gradient, emoji: d.emoji, emojiSize: 30)
             }
             .overlay(alignment: .bottomLeading) {
-                Text(d.status.title)
+                Text(L(d.status.title))
                     .font(.system(size: 8).weight(.bold)).foregroundStyle(.white)
                     .padding(.horizontal, 5).padding(.vertical, 2)
                     .background(d.status.color, in: Capsule()).padding(5)
@@ -266,8 +282,48 @@ struct HostVenueDetailView: View {
             .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
+    // MARK: Карта лояльности (обзор для бизнеса)
+
+    private func loyaltySection(_ v: HostVenueDTO) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label("Карта лояльности", systemImage: "creditcard.fill")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Text(v.loyaltyEnabled ? "Включена" : "Выключена")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(v.loyaltyEnabled ? .green : .secondary)
+            }
+            if v.loyaltyEnabled {
+                Text("\(v.loyaltyGoal) визитов → «\(v.loyaltyReward)»")
+                    .font(.subheadline).foregroundStyle(.primary)
+                Text("Гость получает штамп за каждое погашение вашего купона/акции. На \(v.loyaltyGoal)-м штампе ему автоматически выдаётся купон «\(v.loyaltyReward)», который он показывает вам.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else {
+                Text("Включите программу лояльности, чтобы гости возвращались: копили штампы за визиты и получали награду.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Button { activeSheet = .editVenue } label: {
+                Label(v.loyaltyEnabled ? "Настроить" : "Включить",
+                      systemImage: v.loyaltyEnabled ? "slider.horizontal.3" : "plus.circle")
+                    .font(.caption.weight(.semibold))
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 14))
+        .padding(.horizontal, 16)
+    }
+
     private func actions(_ v: HostVenueDTO) -> some View {
         VStack(spacing: 10) {
+            Button { activeSheet = .scanCoupons } label: {
+                Label("Сканировать купоны гостей", systemImage: "qrcode.viewfinder")
+                    .frame(maxWidth: .infinity).padding(.vertical, 12)
+                    .background(Color.sanAccent, in: RoundedRectangle(cornerRadius: 12))
+                    .foregroundStyle(.white)
+            }
+            .buttonStyle(.plain)
             Button { activeSheet = .editVenue } label: {
                 Label("Изменить данные заведения", systemImage: "pencil")
                     .frame(maxWidth: .infinity).padding(.vertical, 12)
@@ -310,6 +366,7 @@ private enum HostVenueSheet: Identifiable {
     case addDeal
     case editDeal(HostDealDTO)
     case addItem
+    case scanCoupons
 
     var id: String {
         switch self {
@@ -317,6 +374,7 @@ private enum HostVenueSheet: Identifiable {
         case .addDeal: return "addDeal"
         case .editDeal(let d): return "editDeal_\(d.id)"
         case .addItem: return "addItem"
+        case .scanCoupons: return "scanCoupons"
         }
     }
 }
@@ -390,6 +448,10 @@ struct HostVenueFormView: View {
     @State private var instagram: String
     @State private var telegram: String
     @State private var branches: [Branch]
+    @State private var loyaltyEnabled: Bool
+    @State private var loyaltyGoal: Int
+    @State private var loyaltyReward: String
+    @State private var couponsEnabled: Bool
     @State private var showingMapPicker = false
     @State private var showingBranchForm = false
 
@@ -411,6 +473,10 @@ struct HostVenueFormView: View {
         _instagram = State(initialValue: existing?.instagram ?? "")
         _telegram = State(initialValue: existing?.telegram ?? "")
         _branches = State(initialValue: existing?.branches ?? [])
+        _loyaltyEnabled = State(initialValue: existing?.loyaltyEnabled ?? false)
+        _loyaltyGoal = State(initialValue: existing?.loyaltyGoal ?? 6)
+        _loyaltyReward = State(initialValue: existing?.loyaltyReward ?? "Награда за лояльность")
+        _couponsEnabled = State(initialValue: existing?.couponsEnabled ?? true)
         let wh = existing?.weekHours ?? []
         _weekHours = State(initialValue: wh.count == 7 ? wh : Venue.defaultWeek())
     }
@@ -421,7 +487,7 @@ struct HostVenueFormView: View {
                 Section("Основное") {
                     TextField("Название", text: $name)
                     Picker("Категория", selection: $category) {
-                        ForEach(VenueCategory.allCases) { Text($0.rawValue).tag($0) }
+                        ForEach(VenueCategory.allCases) { Text($0.locKey).tag($0) }
                     }
                     TextField("Эмодзи", text: $emoji)
                     TextField("Район", text: $district)
@@ -443,6 +509,29 @@ struct HostVenueFormView: View {
                         .autocapitalization(.none)
                     TextField("Telegram (ник или ссылка)", text: $telegram)
                         .autocapitalization(.none)
+                }
+                Section {
+                    Toggle("Принимать купоны", isOn: $couponsEnabled.animation())
+                } header: {
+                    Text("Купоны")
+                } footer: {
+                    Text(couponsEnabled
+                         ? "Гости смогут получать и гасить купоны на ваши акции. Рекомендуем оставить включённым — купоны заметно повышают посещаемость."
+                         : "⚠️ Купоны выключены — гости не увидят кнопку получения купона на ваших акциях. Рекомендуем включить: это привлекает больше гостей.")
+                }
+                Section {
+                    Toggle("Карта лояльности", isOn: $loyaltyEnabled.animation())
+                    if loyaltyEnabled {
+                        Stepper("Штампов до награды: \(loyaltyGoal)",
+                                value: $loyaltyGoal, in: 2...12)
+                        TextField("Награда (напр. Бесплатный кофе)", text: $loyaltyReward)
+                    }
+                } header: {
+                    Text("Программа лояльности")
+                } footer: {
+                    Text(loyaltyEnabled
+                         ? "Гость получает штамп за каждое погашение купона у вас. На \(loyaltyGoal)-м штампе — «\(loyaltyReward)» купоном."
+                         : "Включите, чтобы гости копили штампы за визиты и получали награду.")
                 }
                 Section("Филиалы (доп. адреса)") {
                     ForEach(branches) { b in
@@ -577,9 +666,13 @@ struct HostVenueFormView: View {
             dto.instagram = instagram.trimmingCharacters(in: .whitespaces)
             dto.telegram = telegram.trimmingCharacters(in: .whitespaces)
             dto.branches = branches
+            dto.loyaltyEnabled = loyaltyEnabled
+            dto.loyaltyGoal = loyaltyGoal
+            dto.loyaltyReward = loyaltyReward.trimmingCharacters(in: .whitespaces)
+            dto.couponsEnabled = couponsEnabled
             host.updateVenue(dto)
         } else {
-            host.addVenue(name: name, category: category, district: district, address: address,
+            var dto = host.addVenue(name: name, category: category, district: district, address: address,
                           phone: phone, emoji: emoji, latitude: lat, longitude: lng,
                           openHour: openHour, closeHour: closeHour,
                           imageURL: imageURL.trimmingCharacters(in: .whitespaces),
@@ -589,6 +682,13 @@ struct HostVenueFormView: View {
                           instagram: instagram.trimmingCharacters(in: .whitespaces),
                           telegram: telegram.trimmingCharacters(in: .whitespaces),
                           branches: branches)
+            if loyaltyEnabled || !couponsEnabled {
+                dto.loyaltyEnabled = loyaltyEnabled
+                dto.loyaltyGoal = loyaltyGoal
+                dto.loyaltyReward = loyaltyReward.trimmingCharacters(in: .whitespaces)
+                dto.couponsEnabled = couponsEnabled
+                host.updateVenue(dto)
+            }
         }
         dismiss()
     }
@@ -693,6 +793,7 @@ struct HostDealFormView: View {
     @State private var endDate: Date
     @State private var isDraft: Bool
     @State private var imageURL: String
+    @State private var imageURLs: [String]
 
     init(venueID: String, existing: HostDealDTO?) {
         self.venueID = venueID
@@ -707,6 +808,8 @@ struct HostDealFormView: View {
         _endDate = State(initialValue: existing?.endDate ?? Calendar.current.date(byAdding: .day, value: 14, to: .now)!)
         _isDraft = State(initialValue: existing?.status == .draft)
         _imageURL = State(initialValue: existing?.imageURL ?? "")
+        let imgs = existing?.imageURLs ?? []
+        _imageURLs = State(initialValue: imgs.isEmpty ? [existing?.imageURL].compactMap { $0 }.filter { !$0.isEmpty } : imgs)
     }
 
     var body: some View {
@@ -715,7 +818,7 @@ struct HostDealFormView: View {
                 Section("Предложение") {
                     TextField("Заголовок", text: $title)
                     Picker("Тип", selection: $type) {
-                        ForEach(DealType.allCases) { Text($0.rawValue).tag($0) }
+                        ForEach(DealType.allCases) { Text($0.locKey).tag($0) }
                     }
                     TextField("Эмодзи", text: $emoji)
                     TextField("Описание", text: $details, axis: .vertical).lineLimit(2...5)
@@ -724,8 +827,8 @@ struct HostDealFormView: View {
                     TextField("Новая цена, сом", text: $newPrice).keyboardType(.numberPad)
                     TextField("Процент скидки", text: $discount).keyboardType(.numberPad)
                 }
-                Section("Фото (необязательно)") {
-                    ImagePickerField(imageURL: $imageURL)
+                Section("Фото (до 3 — листаются каруселью)") {
+                    MultiImagePickerField(urls: $imageURLs)
                 }
                 Section("Срок") {
                     Toggle("Есть дата окончания", isOn: $hasEnd)
@@ -754,7 +857,8 @@ struct HostDealFormView: View {
             startDate: existing?.startDate ?? .now,
             endDate: hasEnd ? endDate : nil,
             statusRaw: (isDraft ? DealStatus.draft : .active).rawValue,
-            imageURL: imageURL.trimmingCharacters(in: .whitespaces))
+            imageURL: imageURLs.first ?? "",
+            imageURLs: imageURLs)
         host.saveDeal(dto)
         dismiss()
     }

@@ -24,11 +24,13 @@ struct SANApp: App {
     @StateObject private var session = SessionStore()
     @StateObject private var bonus = BonusEngine()
     @StateObject private var coupons = CouponStore()
+    @StateObject private var loyalty = LoyaltyStore()
     @StateObject private var themeStore = ThemeStore()
     @StateObject private var location = LocationManager()
     @StateObject private var hostStore = HostStore()
     private let pushService = AppConfig.makePushService()
     @Environment(\.scenePhase) private var scenePhase
+    @AppStorage("san.language") private var appLanguage = "ru"   // ru | en | ky
 
     var body: some Scene {
         WindowGroup {
@@ -44,10 +46,12 @@ struct SANApp: App {
             .environmentObject(session)
             .environmentObject(bonus)
             .environmentObject(coupons)
+            .environmentObject(loyalty)
             .environmentObject(themeStore)
             .environmentObject(location)
             .environmentObject(hostStore)
             .tint(.sanAccent)
+            .environment(\.locale, Locale(identifier: appLanguage))
             .preferredColorScheme(themeStore.theme.colorScheme)
             .onOpenURL { url in
                 #if canImport(GoogleSignIn)
@@ -68,6 +72,8 @@ struct SANApp: App {
                     .environmentObject(session)
                     .environmentObject(location)
                     .environmentObject(bonus)
+                    .environmentObject(coupons)
+                    .environmentObject(loyalty)
                     .environmentObject(themeStore)
                     .environmentObject(hostStore)
                     .tint(.sanAccent)
@@ -97,8 +103,12 @@ struct SANApp: App {
                     bonus.start()
                     hostStore.configure(ownerID: session.user?.id)
                     Task { await hostStore.sync() }
+                    syncBackendCoupons()
                 } else {
                     bonus.pause()
+                    // Выход: сбрасываем кэш заведений владельца из памяти (данные
+                    // остаются в Firestore под ownerID и вернутся при следующем входе).
+                    hostStore.configure(ownerID: nil)
                 }
             }
             .onChange(of: bonus.reachedGoalToday) { _, reached in
@@ -114,6 +124,7 @@ struct SANApp: App {
                 store.claimReferralBonuses(bonus: bonus)
                 store.claimPendingGift(into: coupons)
                 await hostStore.sync()
+                syncBackendCoupons()
                 if session.isSignedIn { bonus.start() }
                 // Регистрация для remote-уведомлений → APNs-токен уходит в FCM
                 // (нужно для доставки топик-сообщений). Идемпотентно.
@@ -132,6 +143,15 @@ struct SANApp: App {
         Messaging.messaging().token { token, _ in
             guard let token else { return }
             pushService.registerToken(token, city: store.selectedCitySlug, uid: session.user?.id)
+        }
+    }
+
+    /// Синк купонов и карт лояльности из Firestore (used-статус, новые награды, штампы).
+    private func syncBackendCoupons() {
+        guard let uid = session.user?.id, !session.isGuest else { return }
+        Task {
+            await coupons.sync(userID: uid)
+            await loyalty.sync(userID: uid)
         }
     }
 }

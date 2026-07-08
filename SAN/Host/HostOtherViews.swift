@@ -187,7 +187,9 @@ enum HostMetrics {
 
 struct HostPromoteView: View {
     @EnvironmentObject private var host: HostStore
+    @EnvironmentObject private var store: AppStore
     @State private var showCreate = false
+    @State private var stats: [String: (views: Int, taps: Int)] = [:]   // campaignID → метрики
 
     var body: some View {
         NavigationStack {
@@ -220,32 +222,48 @@ struct HostPromoteView: View {
             .sheet(isPresented: $showCreate) {
                 NavigationStack { HostPromoteCreateView(venueID: nil) }
             }
+            .task(id: host.campaigns.count) { await loadStats() }
         }
     }
 
     private func campaignRow(_ c: AdCampaign) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        let status = c.effectiveStatus
+        let m = stats[c.id]
+        return VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text(c.kind.title).font(.subheadline.weight(.semibold))
+                Text(L(c.kind.title)).font(.subheadline.weight(.semibold))
                 Spacer()
-                Text(c.status.title).font(.caption2.weight(.semibold))
-                    .foregroundStyle(c.status == .active ? .green : .secondary)
+                Text(L(status.title)).font(.caption2.weight(.semibold))
+                    .foregroundStyle(status.isLive ? .green : .secondary)
             }
             Text(host.venueDTO(id: c.venueID)?.name ?? "Заведение")
                 .font(.caption).foregroundStyle(.secondary)
             HStack(spacing: 14) {
-                Label("\(c.impressions)", systemImage: "eye")
-                Label("\(c.taps)", systemImage: "hand.tap")
+                Label("\(m?.views ?? c.impressions)", systemImage: "eye")
+                Label("\(m?.taps ?? c.taps)", systemImage: "hand.tap")
                 Label("\(c.spend) сом", systemImage: "creditcard")
             }
             .font(.caption2).foregroundStyle(.secondary)
         }
         .swipeActions {
-            if c.status == .active || c.status == .scheduled {
+            // Отменить можно только «живую» кампанию (активный буст / запланированную).
+            if status == .active || status == .scheduled {
                 Button(role: .destructive) { host.cancelCampaign(id: c.id) } label: {
                     Label("Отменить", systemImage: "xmark")
                 }
             }
+        }
+    }
+
+    /// Живая аналитика по каждой кампании: просмотры и клики заведения за период
+    /// кампании (из AnalyticsService). Push-клики считаем по dealTaps.
+    private func loadStats() async {
+        for c in host.campaigns {
+            let days = max(1, Calendar.current.dateComponents([.day], from: c.startAt, to: .now).day ?? 1)
+            let raw = await store.analyticsStats(venueID: c.venueID, days: days)
+            let views = raw[AnalyticsMetric.views] ?? 0
+            let taps = (raw[AnalyticsMetric.dealTaps] ?? 0) + (raw[AnalyticsMetric.maps] ?? 0)
+            stats[c.id] = (views: views, taps: taps)
         }
     }
 }
@@ -339,8 +357,9 @@ struct HostPromoteCreateView: View {
         // Бессрочно (duration == 0) → дата далеко в будущем.
         let boostDays = duration == 0 ? 365 * 50 : duration
         let end = Calendar.current.date(byAdding: .day, value: kind == .boost ? boostDays : 1, to: .now)!
+        // Push — разовая отправка (сразу «Отправлено»); буст — «Активна» до конца срока.
         let c = AdCampaign(id: host.campaignID(), kind: kind, venueID: selectedVenue,
-                           status: .active, startAt: .now, endAt: end,
+                           status: kind == .push ? .sent : .active, startAt: .now, endAt: end,
                            impressions: 0, taps: 0, spend: kind == .boost ? price(duration) : 100)
         host.addCampaign(c)
         // Буст в ленте: помечаем заведение boostedUntil — оно поднимется вверх с меткой «Реклама».

@@ -3,11 +3,13 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleDisplayName</key>
-	<string>Ayta</string>
+	<string>Ayant</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Разреши доступ к локации, чтобы видеть расстояние до заведений рядом с тобой.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Камера нужна, чтобы сканировать QR-коды купонов гостей и начислять штампы лояльности.</string>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>dgis</string>

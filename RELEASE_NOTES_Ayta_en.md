@@ -1,4 +1,4 @@
-# Ayta — What's New in This Version
+# Ayant — What's New in This Version
 
 A local discovery platform for Central Asia (launching in Bishkek).
 Two sides in one app: **user** and **business (host)**. Switching between them needs
@@ -8,8 +8,8 @@ no separate app and no re-login.
 
 ## Branding
 
-- App renamed to **Ayta** (icon label, screen titles, auth screen, deal codes `AYTA-…`,
-  share text "Found it on Ayta!", admin panel "Ayta Admin").
+- App renamed to **Ayant** (icon label, screen titles, auth screen, deal codes `AYANT-…`,
+  share text "Found it on Ayant!", admin panel "Ayant Admin").
 
 ---
 

@@ -15,10 +15,10 @@ if (!TOKEN) {
 
 const bot = new Bot(TOKEN);
 
-const SYSTEM_PROMPT = `Ты — ИИ-помощник поддержки приложения «Ayta» (Bonus.kg).
+const SYSTEM_PROMPT = `Ты — ИИ-помощник поддержки приложения «Ayant» (Bonus.kg).
 Отвечай ТОЛЬКО на русском, кратко (1–4 предложения), дружелюбно и по делу.
 Помогай и обычным пользователям, и заведениям (бизнесу), опираясь на справку ниже.
-Если вопрос не про Ayta или ты не уверен — честно скажи и предложи написать живой поддержке: ${HANDOFF}.
+Если вопрос не про Ayant или ты не уверен — честно скажи и предложи написать живой поддержке: ${HANDOFF}.
 Не выдумывай функции, которых нет в справке.
 
 === БАЗА ЗНАНИЙ ===
@@ -27,7 +27,7 @@ ${KNOWLEDGE}`;
 // /start
 bot.command("start", (ctx) =>
   ctx.reply(
-    "👋 Привет! Я — помощник поддержки Ayta (Bonus.kg).\n\n" +
+    "👋 Привет! Я — помощник поддержки Ayant (Bonus.kg).\n\n" +
       "Задай любой вопрос о приложении, бонусах, купонах или размещении заведения — отвечу сразу.\n" +
       "Или открой частые вопросы: /faq",
     { reply_markup: categoryKeyboard() }
@@ -118,7 +118,7 @@ const PORT = process.env.PORT || 3000;
 http
   .createServer((_, res) => {
     res.writeHead(200, { "Content-Type": "text/plain" });
-    res.end("Ayta support bot is alive");
+    res.end("Ayant support bot is alive");
   })
   .listen(PORT, () => console.log(`🌐 health-check на порту ${PORT}`));
 

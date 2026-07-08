@@ -1,5 +1,5 @@
 /**
- * BACKUP — Ayta / Firestore → локальный JSON
+ * BACKUP — Ayant / Firestore → локальный JSON
  *
  * Сохраняет коллекции venues, deals, reviews, hosts в файл backup-<дата>.json.
  * Запуск:

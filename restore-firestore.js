@@ -1,5 +1,5 @@
 /**
- * RESTORE — Ayta / JSON-бэкап → Firestore
+ * RESTORE — Ayant / JSON-бэкап → Firestore
  *
  * Запуск:
  *   node restore-firestore.js backup-2026-06-30T05-10-00-000Z.json

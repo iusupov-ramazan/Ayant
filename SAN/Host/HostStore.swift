@@ -52,6 +52,10 @@ struct HostVenueDTO: Codable, Identifiable {
     var telegram: String = ""
     var branches: [Branch] = []                              // дополнительные адреса
     var boostedUntil: Date? = nil                            // буст в ленте до даты
+    var loyaltyEnabled: Bool = false                         // карта лояльности вкл/выкл
+    var loyaltyGoal: Int = 6                                 // штампов до награды
+    var loyaltyReward: String = "Награда за лояльность"      // текст награды
+    var couponsEnabled: Bool = true                          // принимать купоны (по умолчанию да)
 
     var category: VenueCategory { VenueCategory(rawValue: categoryRaw) ?? .cafe }
     var moderation: ModerationStatus { ModerationStatus(rawValue: status) ?? .pending }
@@ -68,7 +72,9 @@ struct HostVenueDTO: Codable, Identifiable {
             pdfMenuURL: pdfMenuURL.isEmpty ? nil : pdfMenuURL,
             photoEmojis: [emoji], items: items, statusRaw: status, isPaused: isPaused,
             whatsapp: whatsapp, instagram: instagram, telegram: telegram, branches: branches,
-            boostedUntil: boostedUntil
+            boostedUntil: boostedUntil,
+            loyaltyEnabled: loyaltyEnabled, loyaltyGoal: loyaltyGoal, loyaltyReward: loyaltyReward,
+            couponsEnabled: couponsEnabled
         )
     }
 }
@@ -88,6 +94,7 @@ struct HostDealDTO: Codable, Identifiable {
     var endDate: Date?
     var statusRaw: String
     var imageURL: String = ""
+    var imageURLs: [String] = []      // галерея фото (карусель)
 
     var type: DealType { DealType(rawValue: typeRaw) ?? .discount }
     var status: DealStatus { DealStatus(rawValue: statusRaw) ?? .active }
@@ -99,7 +106,8 @@ struct HostDealDTO: Codable, Identifiable {
             discountPercent: discountPercent,
             validUntil: endDate ?? Calendar.current.date(byAdding: .year, value: 1, to: .now)!,
             status: status, startDate: startDate, imageEmojis: [emoji],
-            imageURL: imageURL.isEmpty ? nil : imageURL
+            imageURL: imageURL.isEmpty ? nil : imageURL,
+            imageURLs: imageURLs
         )
     }
 }
@@ -110,15 +118,18 @@ struct AdCampaign: Codable, Identifiable {
     enum Kind: String, Codable { case boost, push
         var title: String { self == .boost ? "Буст заведения" : "Push-уведомление" }
     }
-    enum Status: String, Codable { case scheduled, active, completed, cancelled
+    enum Status: String, Codable { case scheduled, active, sent, completed, cancelled
         var title: String {
             switch self {
             case .scheduled: return "Запланирована"
             case .active: return "Активна"
+            case .sent: return "Отправлено"
             case .completed: return "Завершена"
             case .cancelled: return "Отменена"
             }
         }
+        /// Зелёным подсвечиваем «живые» статусы.
+        var isLive: Bool { self == .active || self == .sent }
     }
     var id: String
     var kind: Kind
@@ -129,6 +140,14 @@ struct AdCampaign: Codable, Identifiable {
     var impressions: Int
     var taps: Int
     var spend: Int
+
+    /// Фактический статус с учётом времени: истёкший буст → «Завершена».
+    /// Push — разовая отправка, остаётся «Отправлено».
+    var effectiveStatus: Status {
+        if status == .cancelled { return .cancelled }
+        if kind == .push { return status }
+        return endAt < Date() ? .completed : status
+    }
 }
 
 // MARK: - HostStore
@@ -167,9 +186,46 @@ final class HostStore: ObservableObject {
         pushToAppStore()
     }
 
+    /// Ключ кэша, привязанный к владельцу. Пустой ownerID → легаси-глобальный ключ.
+    private func key(_ base: String) -> String {
+        ownerID.isEmpty ? base : "\(base).\(ownerID)"
+    }
+
     /// Задаёт владельца (uid пользователя). Нужно до создания заведений.
+    /// При смене владельца (вход/выход/другой аккаунт) перезагружает кэш этого
+    /// аккаунта — так заведения «привязаны к аккаунту» и не утекают между ними.
     func configure(ownerID id: String?) {
-        ownerID = id ?? ""
+        let newOwner = id ?? ""
+        guard newOwner != ownerID else { return }
+        ownerID = newOwner
+        reloadFromCache()
+    }
+
+    /// Перечитывает заведения/предложения/профиль текущего владельца из кэша.
+    private func reloadFromCache() {
+        profile = decode(key(Key.profile))
+        venueDTOs = decode(key(Key.venues)) ?? []
+        dealDTOs = decode(key(Key.deals)) ?? []
+        campaigns = decode(key(Key.campaigns)) ?? []
+
+        // Миграция: у авторизованного пользователя ещё нет своего кэша, но есть
+        // легаси-глобальный (созданный до привязки к аккаунту) — усыновляем его
+        // один раз, до-сохраняем в Firestore под ownerID и чистим глобальные ключи,
+        // чтобы данные не утекли в другой аккаунт.
+        if !ownerID.isEmpty, venueDTOs.isEmpty, dealDTOs.isEmpty,
+           let legacyV: [HostVenueDTO] = decode(Key.venues), !legacyV.isEmpty {
+            venueDTOs = legacyV
+            dealDTOs = decode(Key.deals) ?? []
+            if profile == nil { profile = decode(Key.profile) }
+            persistVenues(); persistDeals(); persistProfile(remote: true)
+            for v in venueDTOs { remoteSaveVenue(v) }
+            for d in dealDTOs { remoteSaveDeal(d) }
+            UserDefaults.standard.removeObject(forKey: Key.venues)
+            UserDefaults.standard.removeObject(forKey: Key.deals)
+            UserDefaults.standard.removeObject(forKey: Key.campaigns)
+            UserDefaults.standard.removeObject(forKey: Key.profile)
+        }
+        pushToAppStore()
     }
 
     /// Подтягивает заведения/предложения владельца из Firestore.
@@ -182,8 +238,8 @@ final class HostStore: ObservableObject {
             let (remoteV, remoteD) = try await (v, d)
             venueDTOs = Self.merge(remote: remoteV, local: venueDTOs)
             dealDTOs = Self.merge(remote: remoteD, local: dealDTOs)
-            persist(Key.venues, venueDTOs)
-            persist(Key.deals, dealDTOs)
+            persist(key(Key.venues), venueDTOs)
+            persist(key(Key.deals), dealDTOs)
             pushToAppStore()
             // Профиль (включая статус верификации, выставленный админом).
             if let remoteProfile = try await repo.fetchProfile(ownerID: ownerID) {
@@ -265,6 +321,7 @@ final class HostStore: ObservableObject {
         dto.pdfMenuURL = pdfMenuURL
         dto.whatsapp = whatsapp
         dto.instagram = instagram
+        dto.telegram = telegram
         dto.branches = branches
         venueDTOs.append(dto)
         persistVenues()
@@ -367,7 +424,7 @@ final class HostStore: ObservableObject {
 
     func addCampaign(_ c: AdCampaign) {
         campaigns.insert(c, at: 0)
-        persist(Key.campaigns, campaigns)
+        persist(key(Key.campaigns), campaigns)
     }
 
     /// Push-кампания: записывает документ в Firestore (Cloud Function рассылает FCM)
@@ -385,7 +442,7 @@ final class HostStore: ObservableObject {
     func cancelCampaign(id: String) {
         if let i = campaigns.firstIndex(where: { $0.id == id }) {
             campaigns[i].status = .cancelled
-            persist(Key.campaigns, campaigns)
+            persist(key(Key.campaigns), campaigns)
         }
     }
 
@@ -394,14 +451,14 @@ final class HostStore: ObservableObject {
     // MARK: Persistence
 
     private func persistProfile(remote: Bool = true) {
-        persist(Key.profile, profile)
+        persist(key(Key.profile), profile)
         if remote, let p = profile, !ownerID.isEmpty {
             let owner = ownerID
             Task { try? await repo.saveProfile(p, ownerID: owner) }
         }
     }
-    private func persistVenues() { persist(Key.venues, venueDTOs); pushToAppStore() }
-    private func persistDeals() { persist(Key.deals, dealDTOs); pushToAppStore() }
+    private func persistVenues() { persist(key(Key.venues), venueDTOs); pushToAppStore() }
+    private func persistDeals() { persist(key(Key.deals), dealDTOs); pushToAppStore() }
 
     private func pushToAppStore() {
         appStore?.setHostContent(venues: venues, deals: deals)

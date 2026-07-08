@@ -19,6 +19,7 @@ enum AnalyticsEvent: String {
     case referralInvite = "referral_invite"  // пользователь поделился ссылкой
     case referralJoin   = "referral_join"    // пришёл по чужой ссылке
     case couponClaim    = "coupon_claim"     // обменял бонусы на купон
+    case loyaltyStamp   = "loyalty_stamp"    // штамп в карте лояльности
 }
 
 enum AnalyticsLog {

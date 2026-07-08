@@ -30,4 +30,8 @@ enum AppConfig {
     static func makePushService() -> PushService {
         useFirebase ? FirebasePushService() : MockPushService()
     }
+
+    static func makeCouponService() -> CouponService {
+        useFirebase ? FirebaseCouponService() : MockCouponService()
+    }
 }

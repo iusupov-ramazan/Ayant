@@ -211,6 +211,11 @@ struct Venue: Identifiable, Hashable {
     var telegram: String = ""       // ник или ссылка Telegram
     var branches: [Branch] = []     // дополнительные адреса (филиалы)
     var boostedUntil: Date? = nil   // платный буст в ленте до этой даты
+    // --- Карта лояльности (настраивается заведением) ---
+    var loyaltyEnabled: Bool = false          // включена ли карта лояльности
+    var loyaltyGoal: Int = 6                   // штампов до награды
+    var loyaltyReward: String = "Награда за лояльность"  // что получает гость
+    var couponsEnabled: Bool = true            // принимает ли заведение купоны (по умолчанию да)
 
     /// Активен ли платный буст прямо сейчас.
     var isBoosted: Bool { boostedUntil.map { $0 > .now } ?? false }
@@ -276,7 +281,16 @@ struct Deal: Identifiable, Hashable {
     var status: DealStatus = .active
     var startDate: Date? = nil
     var imageEmojis: [String] = []   // до 5 изображений (плейсхолдеры)
-    var imageURL: String? = nil      // ссылка на фото предложения
+    var imageURL: String? = nil      // главное фото предложения
+    var imageURLs: [String] = []     // галерея фото (карусель)
+
+    /// Все фото предложения (для карусели): imageURLs, иначе одно imageURL.
+    var allImages: [String] {
+        let extra = imageURLs.filter { !$0.isEmpty }
+        if !extra.isEmpty { return extra }
+        if let u = imageURL, !u.isEmpty { return [u] }
+        return []
+    }
 
     /// Протухшие/на паузе/черновики не показываются в пользовательской ленте.
     var isActive: Bool { status == .active && validUntil >= .now }

@@ -7,12 +7,14 @@ struct DealDetailView: View {
     let deal: Deal
     var isPushed: Bool = false   // true — экран в навигационном стеке (push), без «Готово»
     @EnvironmentObject private var store: AppStore
+    @EnvironmentObject private var coupons: CouponStore
+    @EnvironmentObject private var loyalty: LoyaltyStore
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @Environment(\.requestReview) private var requestReview
     @AppStorage("san.redeemCount") private var redeemCount = 0
     @State private var showMapOptions = false
-    @State private var showRedeemConfirm = false
+    @State private var presentedCoupon: Coupon?
 
     private var venue: Venue? { store.venue(for: deal) }
 
@@ -70,7 +72,7 @@ struct DealDetailView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 ShareLink(item: DeepLinkRouter.dealURL(deal.id),
                           subject: Text(deal.title),
-                          message: Text("\(deal.title) — \(venue?.name ?? ""). Нашёл в Ayta!")) {
+                          message: Text("\(deal.title) — \(venue?.name ?? ""). Нашёл в Ayant!")) {
                     Image(systemName: "square.and.arrow.up")
                 }
             }
@@ -78,8 +80,8 @@ struct DealDetailView: View {
     }
 
     private var hero: some View {
-        DealImage(urlString: deal.imageURL, gradient: venue?.gradient ?? [.sanAccent, .orange],
-                  emoji: deal.emoji, emojiSize: 100)
+        ImageCarousel(urls: deal.allImages, gradient: venue?.gradient ?? [.sanAccent, .orange],
+                      emoji: deal.emoji, height: 300)
             .overlay(alignment: .topLeading) {
                 if let percent = deal.discountPercent {
                     Text("−\(percent)%")
@@ -93,19 +95,23 @@ struct DealDetailView: View {
 
     @ViewBuilder
     private var showAtVenue: some View {
-        // Купон есть только у скидок и акций. У новинок и объявлений показывать нечего.
-        if deal.isRedeemable {
-            let used = store.hasRedeemed(deal)
+        // Купон есть только у скидок и акций, и только если заведение принимает купоны.
+        // У новинок и объявлений показывать нечего.
+        if deal.isRedeemable && (venue?.couponsEnabled ?? true) {
+            let dealCoupon = coupons.coupons.first { $0.dealID == deal.id }
+            let used = dealCoupon?.used ?? false
             VStack(spacing: 12) {
                 HStack(spacing: 14) {
-                    QRCodeView(text: "AYTA-\(deal.id.uppercased())", size: 92)
+                    QRCodeView(text: dealCoupon?.code ?? "AYANT-\(deal.id.uppercased())", size: 92)
                         .opacity(used ? 0.4 : 1)
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Покажи этот экран сотруднику").font(.subheadline.weight(.semibold))
-                        Text("Сотрудник отсканирует код и применит предложение перед оплатой.")
+                        Text(used ? "Купон использован" : "Купон на предложение")
+                            .font(.subheadline.weight(.semibold))
+                        Text("Сотрудник сканирует QR и применяет предложение перед оплатой.")
                             .font(.caption).foregroundStyle(.secondary)
-                        Text("AYTA-\(deal.id.uppercased())")
-                            .font(.caption2.monospaced()).foregroundStyle(.secondary)
+                        if let c = dealCoupon {
+                            Text(c.code).font(.caption2.monospaced()).foregroundStyle(.secondary)
+                        }
                     }
                     Spacer(minLength: 0)
                 }
@@ -115,14 +121,19 @@ struct DealDetailView: View {
                         .foregroundStyle(.green)
                         .frame(maxWidth: .infinity)
                 } else if store.isGuest {
-                    Text("Войдите в аккаунт, чтобы воспользоваться купоном.")
+                    Text("Войдите в аккаунт, чтобы получить купон.")
                         .font(.caption).foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
                     Button {
-                        showRedeemConfirm = true
+                        let vID = venue?.id ?? deal.venueID
+                        let vName = venue?.name ?? ""
+                        let c = coupons.createDealCoupon(dealID: deal.id, title: deal.title,
+                                                         venueID: vID, venueName: vName)
+                        presentedCoupon = c
+                        bumpRatingPrompt()
                     } label: {
-                        Text("Воспользоваться купоном")
+                        Text(dealCoupon == nil ? "Получить купон" : "Показать купон")
                             .font(.subheadline.weight(.bold))
                             .frame(maxWidth: .infinity).padding(.vertical, 11)
                             .background(Color.sanAccent, in: RoundedRectangle(cornerRadius: 12))
@@ -135,21 +146,20 @@ struct DealDetailView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color.sanAccent.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
             .padding(.horizontal, 16)
-            .alert("Воспользоваться купоном?", isPresented: $showRedeemConfirm) {
-                Button("Да, применить", role: .destructive) {
-                    store.redeem(deal)
-                    redeemCount += 1
-                    // Просим оценить приложение после 1-го и каждого 5-го погашения.
-                    if redeemCount == 1 || redeemCount % 5 == 0 {
-                        Task { @MainActor in
-                            try? await Task.sleep(nanoseconds: 900_000_000)
-                            requestReview()
-                        }
-                    }
-                }
-                Button("Отмена", role: .cancel) {}
-            } message: {
-                Text("Подтверждайте только при сотруднике — купон можно использовать один раз.")
+            .sheet(item: $presentedCoupon) { c in
+                NavigationStack { CouponDetailView(coupon: c) }
+                    .environmentObject(coupons)
+            }
+        }
+    }
+
+    /// Просим оценить приложение после 1-го и каждого 5-го полученного купона.
+    private func bumpRatingPrompt() {
+        redeemCount += 1
+        if redeemCount == 1 || redeemCount % 5 == 0 {
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 900_000_000)
+                requestReview()
             }
         }
     }
@@ -209,6 +219,7 @@ struct VenueDetailView: View {
     @EnvironmentObject private var store: AppStore
     @EnvironmentObject private var location: LocationManager
     @EnvironmentObject private var session: SessionStore
+    @EnvironmentObject private var loyalty: LoyaltyStore
     @Environment(\.openURL) private var openURL
 
     @State private var activeSheet: VenueSheet?
@@ -217,7 +228,6 @@ struct VenueDetailView: View {
     @State private var reportingReview: Review?
     @State private var showGuestPrompt = false
     @State private var showMapOptions = false
-    @State private var showAllDeals = false
 
     private var deals: [Deal] { store.deals(for: venue) }
     private var agg: (rating: Double, count: Int) { store.aggregate(for: venue) }
@@ -240,6 +250,7 @@ struct VenueDetailView: View {
                 header
                 actionRow
                 if venue.hasTodaySpecial { todaySpecialBanner }
+                if venue.loyaltyEnabled { loyaltyBanner }
                 infoSection
                 if !deals.isEmpty { dealsGrid }
                 if !galleryPhotos.isEmpty { photosGallery }
@@ -282,8 +293,15 @@ struct VenueDetailView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 0) {
             ZStack(alignment: .bottomLeading) {
-                VenuePhoto(urlString: venue.imageURL, gradient: venue.gradient)
-                    .frame(height: 190).clipped()
+                Group {
+                    let photos = galleryPhotos.filter { $0.hasPrefix("http") }
+                    if photos.count > 1 {
+                        ImageCarousel(urls: photos, gradient: venue.gradient, emoji: venue.emoji, height: 190)
+                    } else {
+                        VenuePhoto(urlString: venue.imageURL, gradient: venue.gradient)
+                    }
+                }
+                .frame(height: 190).clipped()
                 VenueAvatar(venue: venue, size: 64)
                     .overlay(Circle().stroke(Color(.systemBackground), lineWidth: 3))
                     .offset(x: 16, y: 32)
@@ -296,7 +314,7 @@ struct VenueDetailView: View {
                     }
                 }
                 HStack(spacing: 8) {
-                    Text(venue.category.rawValue)
+                    Text(venue.category.locKey)
                         .font(.caption.weight(.medium))
                         .padding(.horizontal, 10).padding(.vertical, 4)
                         .background(Color(.systemGray6), in: Capsule())
@@ -314,15 +332,26 @@ struct VenueDetailView: View {
 
     // MARK: Действия
 
+    private var hasPhone: Bool {
+        !venue.phone.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+    private var hasLocation: Bool {
+        !venue.address.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
     private var actionRow: some View {
         HStack(spacing: 10) {
-            actionButton("Позвонить", "phone.fill") {
-                store.log(AnalyticsMetric.calls, for: venue.id)
-                if let url = URL(string: "tel:\(venue.phone.filter { !$0.isWhitespace })") { openURL(url) }
+            if hasPhone {
+                actionButton("Позвонить", "phone.fill") {
+                    store.log(AnalyticsMetric.calls, for: venue.id)
+                    if let url = URL(string: "tel:\(venue.phone.filter { !$0.isWhitespace })") { openURL(url) }
+                }
             }
-            actionButton("Маршрут", "location.fill") {
-                store.log(AnalyticsMetric.maps, for: venue.id)
-                openURL(Directions.url(lat: venue.latitude, lng: venue.longitude))
+            if hasLocation {
+                actionButton("Маршрут", "location.fill") {
+                    store.log(AnalyticsMetric.maps, for: venue.id)
+                    openURL(Directions.url(lat: venue.latitude, lng: venue.longitude))
+                }
             }
             actionButton(store.isSaved(venue) ? "Сохранено" : "Сохранить",
                          store.isSaved(venue) ? "bookmark.fill" : "bookmark") {
@@ -331,7 +360,7 @@ struct VenueDetailView: View {
             }
             ShareLink(item: DeepLinkRouter.venueURL(venue.id),
                       subject: Text(venue.name),
-                      message: Text("\(venue.name), \(venue.address). Нашёл в Ayta!")) {
+                      message: Text("\(venue.name), \(venue.address). Нашёл в Ayant!")) {
                 actionLabel("Поделиться", "square.and.arrow.up")
             }
             .buttonStyle(.plain)
@@ -366,6 +395,58 @@ struct VenueDetailView: View {
         }
         .padding(14)
         .background(Color.sanAccent.opacity(0.1), in: RoundedRectangle(cornerRadius: 14))
+        .padding(.horizontal, 16)
+    }
+
+    // MARK: Карта лояльности
+
+    private var loyaltyBanner: some View {
+        let card = loyalty.card(for: venue.id)
+        let stamps = card?.stamps ?? 0
+        let goal = venue.loyaltyGoal
+        let rounds = card?.completedRounds ?? 0
+        return NavigationLink {
+            VenueLoyaltyScreen(venue: venue)
+        } label: {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 10) {
+                    Image(systemName: "creditcard.fill").foregroundStyle(.white)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Карта лояльности").font(.subheadline.weight(.bold)).foregroundStyle(.white)
+                        Text("\(goal) визитов → \(venue.loyaltyReward)")
+                            .font(.caption).foregroundStyle(.white.opacity(0.9))
+                    }
+                    Spacer()
+                    Text("\(stamps)/\(goal)")
+                        .font(.caption.weight(.bold)).foregroundStyle(.white)
+                        .padding(.horizontal, 8).padding(.vertical, 4)
+                        .background(.white.opacity(0.25), in: Capsule())
+                }
+                HStack(spacing: 6) {
+                    ForEach(0..<goal, id: \.self) { i in
+                        Image(systemName: i < stamps ? "checkmark.seal.fill" : "seal")
+                            .font(.footnote)
+                            .foregroundStyle(i < stamps ? .white : .white.opacity(0.45))
+                    }
+                }
+                HStack(spacing: 6) {
+                    Image(systemName: "info.circle.fill").font(.caption2)
+                    Text(rounds > 0
+                         ? "Наград получено: \(rounds). Штамп — за каждый использованный купон здесь."
+                         : "Штамп начисляется за каждый использованный купон в этом заведении.")
+                        .font(.caption2)
+                    Spacer()
+                    Image(systemName: "chevron.right").font(.caption2)
+                }
+                .foregroundStyle(.white.opacity(0.9))
+            }
+            .padding(14)
+            .background(
+                LinearGradient(colors: [Color(hex: 0xFF4D29), Color(hex: 0xFFB300)],
+                               startPoint: .topLeading, endPoint: .bottomTrailing),
+                in: RoundedRectangle(cornerRadius: 14))
+        }
+        .buttonStyle(.plain)
         .padding(.horizontal, 16)
     }
 
@@ -470,42 +551,29 @@ struct VenueDetailView: View {
 
     // MARK: Публикации заведения (последние 3 + «смотреть все»)
 
-    private var shownDeals: [Deal] {
-        showAllDeals ? deals : Array(deals.prefix(3))
-    }
+    // Показываем первые 6 публикаций; если их больше — кнопка ведёт на
+    // отдельный экран с подгрузкой (пагинацией).
+    private var shownDeals: [Deal] { Array(deals.prefix(6)) }
 
     private var dealsGrid: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text("Публикации").font(.headline)
                 Spacer()
-                if deals.count > 3 {
-                    Button(showAllDeals ? "Свернуть" : "Смотреть все (\(deals.count))") {
-                        withAnimation { showAllDeals.toggle() }
+                if deals.count > 6 {
+                    NavigationLink {
+                        VenueDealsView(venue: venue)
+                    } label: {
+                        Text("Смотреть все (\(deals.count))")
+                            .font(.subheadline.weight(.semibold))
                     }
-                    .font(.subheadline.weight(.semibold))
                 }
             }
             .padding(.horizontal, 16)
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
                 ForEach(shownDeals) { deal in
                     Button { activeSheet = .deal(deal) } label: {
-                        Color.clear
-                            .aspectRatio(1, contentMode: .fit)
-                            .overlay {
-                                CoverImage(urlString: deal.imageURL, gradient: venue.gradient,
-                                           emoji: deal.emoji, emojiSize: 34)
-                            }
-                            .overlay(alignment: .bottomLeading) {
-                                if let pct = deal.discountPercent {
-                                    Text("−\(pct)%")
-                                        .font(.caption2.weight(.bold)).foregroundStyle(.white)
-                                        .padding(.horizontal, 6).padding(.vertical, 3)
-                                        .background(.black.opacity(0.4), in: Capsule())
-                                        .padding(6)
-                                }
-                            }
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                        DealGridCell(deal: deal, gradient: venue.gradient)
                     }
                     .buttonStyle(.plain)
                 }
@@ -627,6 +695,71 @@ struct VenueDetailView: View {
     }
 }
 
+/// Ячейка публикации в сетке (квадрат с обложкой и бейджем скидки).
+struct DealGridCell: View {
+    let deal: Deal
+    let gradient: [Color]
+
+    var body: some View {
+        Color.clear
+            .aspectRatio(1, contentMode: .fit)
+            .overlay {
+                CoverImage(urlString: deal.imageURL, gradient: gradient,
+                           emoji: deal.emoji, emojiSize: 34)
+            }
+            .overlay(alignment: .bottomLeading) {
+                if let pct = deal.discountPercent {
+                    Text("−\(pct)%")
+                        .font(.caption2.weight(.bold)).foregroundStyle(.white)
+                        .padding(.horizontal, 6).padding(.vertical, 3)
+                        .background(.black.opacity(0.4), in: Capsule())
+                        .padding(6)
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+/// Все публикации заведения с постраничной подгрузкой (по 12 за раз).
+struct VenueDealsView: View {
+    let venue: Venue
+    @EnvironmentObject private var store: AppStore
+    @State private var visibleCount = 12
+    @State private var selectedDeal: Deal?
+
+    private static let pageSize = 12
+    private var deals: [Deal] { store.deals(for: venue) }
+    private var shown: [Deal] { Array(deals.prefix(visibleCount)) }
+
+    var body: some View {
+        ScrollView {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
+                ForEach(shown) { deal in
+                    Button { selectedDeal = deal } label: {
+                        DealGridCell(deal: deal, gradient: venue.gradient)
+                    }
+                    .buttonStyle(.plain)
+                    .onAppear { loadMoreIfNeeded(deal) }
+                }
+            }
+            .padding(16)
+            if visibleCount < deals.count {
+                ProgressView().padding(.bottom, 20)
+            }
+        }
+        .navigationTitle("Публикации")
+        .navigationBarTitleDisplayMode(.inline)
+        .sheet(item: $selectedDeal) { deal in
+            DealDetailView(deal: deal)
+        }
+    }
+
+    private func loadMoreIfNeeded(_ deal: Deal) {
+        guard deal.id == shown.last?.id, visibleCount < deals.count else { return }
+        visibleCount = min(visibleCount + Self.pageSize, deals.count)
+    }
+}
+
 /// Обёртка Int для item-based fullScreenCover.
 private struct IndexBox: Identifiable {
     let value: Int
@@ -654,6 +787,7 @@ private enum VenueSheet: Identifiable {
             .environmentObject(AppStore())
             .environmentObject(LocationManager())
             .environmentObject(SessionStore())
+            .environmentObject(LoyaltyStore())
     }
     .tint(.sanAccent)
 }

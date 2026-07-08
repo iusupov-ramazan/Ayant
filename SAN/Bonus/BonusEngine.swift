@@ -11,9 +11,11 @@ import SwiftUI
 @MainActor
 final class BonusEngine: ObservableObject {
 
-    // Настройки
+    // Настройки (уменьшены + дневные лимиты — защита от «фарма» бонусов)
     let goalSeconds: Int = 30 * 60          // цель: 30 минут
-    let rewardPerGoal: Int = 50             // бонусов за цикл
+    let rewardPerGoal: Int = 20             // бонусов за цикл (было 50)
+    let dailyGoalCap: Int = 4               // не больше 4 циклов активности в день (≤80/день)
+    let dailyGameplayCap: Int = 30          // не больше 30 бонусов в день с мини-игр
     private let idleTimeout: TimeInterval = 25  // сек без действий = простой
 
     // Состояние (персистентное)
@@ -21,6 +23,10 @@ final class BonusEngine: ObservableObject {
     @AppStorage("san.bonus.activeSeconds") private var storedActive: Int = 0
     @AppStorage("san.bonus.cycles") var completedCycles: Int = 0
     @AppStorage("san.bonus.lastAwardAt") private var lastAwardAt: Double = 0
+    // Дневные счётчики (сбрасываются по смене календарного дня).
+    @AppStorage("san.bonus.counterDate") private var counterDate: String = ""
+    @AppStorage("san.bonus.awardsToday") private var awardsToday: Int = 0
+    @AppStorage("san.bonus.gameEarnedToday") private var gameEarnedToday: Int = 0
 
     @Published var activeSeconds: Int = 0
     @Published var isCounting = false
@@ -67,6 +73,10 @@ final class BonusEngine: ObservableObject {
     }
 
     private func tick() {
+        resetDailyIfNeeded()
+        // Достигнут дневной лимит активности — больше не копим (анти-фарм).
+        guard awardsToday < dailyGoalCap else { isCounting = false; return }
+
         let active = Date().timeIntervalSince(lastInteraction) < idleTimeout
         isCounting = active
         guard active else { return }
@@ -79,10 +89,13 @@ final class BonusEngine: ObservableObject {
     }
 
     private func award() {
-        balance += rewardPerGoal
-        completedCycles += 1
+        resetDailyIfNeeded()
         activeSeconds = 0
         storedActive = 0
+        guard awardsToday < dailyGoalCap else { return }   // дневной лимит — без начисления
+        balance += rewardPerGoal
+        awardsToday += 1
+        completedCycles += 1
         lastReward = rewardPerGoal
         lastAwardAt = Date().timeIntervalSince1970
         // имитация лёгкой вибрации
@@ -91,12 +104,49 @@ final class BonusEngine: ObservableObject {
         NotificationManager.refresh(reachedGoalToday: true)
     }
 
-    // Игры тоже дают бонусы
+    /// Бонусы за мини-игру — с дневным лимитом. Возвращает реально начисленное.
+    @discardableResult
+    func awardGameplay(_ amount: Int) -> Int {
+        guard amount > 0 else { return 0 }
+        resetDailyIfNeeded()
+        let grant = min(amount, max(0, dailyGameplayCap - gameEarnedToday))
+        guard grant > 0 else { lastReward = 0; return 0 }
+        gameEarnedToday += grant
+        balance += grant
+        lastReward = grant
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        return grant
+    }
+
+    /// Сколько ещё бонусов можно получить с игр сегодня.
+    var remainingGameplayToday: Int {
+        max(0, dailyGameplayCap - gameEarnedToday)
+    }
+
+    /// Прямое начисление без дневного лимита — только для реферальных/серверных
+    /// наград (разовые, не фармятся). Мини-игры используют `awardGameplay`.
     func addFromGame(_ amount: Int) {
         guard amount > 0 else { return }
         balance += amount
         lastReward = amount
         UINotificationFeedbackGenerator().notificationOccurred(.success)
+    }
+
+    /// Сбрасывает дневные счётчики при смене календарного дня.
+    private func resetDailyIfNeeded() {
+        let key = Self.dayKey()
+        if counterDate != key {
+            counterDate = key
+            awardsToday = 0
+            gameEarnedToday = 0
+        }
+    }
+
+    private static func dayKey() -> String {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return f.string(from: Date())
     }
 
     func spend(_ amount: Int) -> Bool {

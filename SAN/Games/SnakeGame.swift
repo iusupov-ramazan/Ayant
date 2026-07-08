@@ -49,7 +49,7 @@ struct SnakeGameView: View {
                 }
             }
             .onChange(of: bridge.finalScore) { _, score in
-                if score > 0 { bonus.addFromGame(score * 2) }
+                if score > 0 { bonus.awardGameplay(score) }
             }
         }
     }
@@ -59,7 +59,8 @@ struct SnakeGameView: View {
             Label("\(bridge.score)", systemImage: "star.fill")
                 .font(.headline).foregroundStyle(Color.sanAccent)
             Spacer()
-            Text("1 🍎 = 2 бонуса").font(.caption).foregroundStyle(.secondary)
+            Text("1 🍎 = 1 бонус · до \(bonus.dailyGameplayCap)/день")
+                .font(.caption).foregroundStyle(.secondary)
         }
     }
 
@@ -68,7 +69,7 @@ struct SnakeGameView: View {
             Color.black.opacity(0.55)
             VStack(spacing: 10) {
                 Text("Игра окончена").font(.title3.bold()).foregroundStyle(.white)
-                Text("Счёт: \(bridge.finalScore) → +\(bridge.finalScore * 2) бонусов")
+                Text("Счёт: \(bridge.finalScore) → +\(bridge.finalScore) бонусов")
                     .foregroundStyle(.white)
                 Button("Ещё раз") { bridge.restart() }
                     .buttonStyle(.borderedProminent).tint(.sanAccent)

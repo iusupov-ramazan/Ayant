@@ -1,70 +1,59 @@
-# САН — скидки, акции, новинки (iOS MVP)
+# Ayant
 
-Лента выгодных предложений заведений Бишкека. Вместо отзывов (Yelp-модель 2003 года) — САН: то, ради чего открывают приложение каждый день.
+**A local discovery & deals app for Central Asia — the "САН" feed of your city.**
+Ayant is a dual-sided platform (users + businesses), Yelp/2GIS-inspired but built around what people open daily: **Скидки, Акции, Новинки** (Discounts, Promos, New items). Russian-language UI, launching in Bishkek.
 
-## Запуск
+iOS app (SwiftUI) · Firebase backend · Web admin panel · Telegram AI support bot.
 
-1. Открой `SAN.xcodeproj` в Xcode 16+
-2. Выбери симулятор iPhone
-3. Cmd+R
+---
 
-Без зависимостей, чистый SwiftUI, iOS 17+.
+## What it does
 
-## Вход
+### For users
+- **САН feed** — a single feed of discounts, promos, new items, and announcements from city venues.
+- **Search** across venues, dishes/services, deals, and reviews; filters (open now, rating, distance, with-discount) and a map view.
+- **Venue pages** — multiple branches, per-weekday hours, phone, WhatsApp/Instagram/Telegram, price-list PDF, publications.
+- **Item-level reviews** — rate a specific dish/service, with photos; verified-visit badge after redeeming.
+- **Coupons & bonuses** — earn bonuses from mini-games and referrals, exchange them for coupons (QR), gift a coupon to a friend.
+- **Deep links & Universal Links** — share venues/deals/gifts; push-tap opens the target.
 
-При первом запуске — экран авторизации: **Sign in with Apple** (нативно), **Google**, **email** (вход/регистрация) и «зайти как гостем». Сейчас на локальном слое (`MockAuthService`), реальный Firebase подключается по `FIREBASE_SETUP.md` без изменения экранов.
+### For businesses (host mode)
+- Create venues (with map picker, branches, photos, PDF, weekday hours) and deals (Скидка/Акция/Новинка/Объявление).
+- Moderation & verification, analytics (views, taps, saves, calls, maps, redemptions).
+- **Promotion** — push campaigns and in-feed boost (venue shown as a labeled ad), with admin approval.
 
-## Экраны
+---
 
-| Таб | Что внутри |
-|---|---|
-| Главная | Инста-лента: карточки акций, сторис-фильтры (Скидки/Акции/Новинки), лайк = избранное, шаринг |
-| Поиск | Поиск по названию/району + чипсы категорий общепита |
-| Бонусы | Кошелёк, прогресс «активных 30 минут», игры, обмен бонусов на скидки |
-| Избранное | Сохранённые предложения, хранятся локально (UserDefaults) |
-| Профиль | Пользователь, баланс, статистика, настройки пушей, выход |
+## Tech stack
 
-Детальные экраны: предложение (с кодом «покажи сотруднику») и заведение (контакты + все его САН).
+- **iOS** — SwiftUI (iOS 17+), no external UI deps. Repository pattern with Mock + Firebase implementations behind `AppConfig`.
+- **Backend** — Firebase: Auth, Firestore, Cloud Messaging (push), Cloud Functions (v2, Node 20), Hosting (AASA for Universal Links).
+- **Images/PDF** — Cloudinary (unsigned uploads).
+- **Admin** — static web panel (`docs/`, GitHub Pages) for moderation, venues/deals, weekday hours, map marker, boost approval.
+- **Support bot** — Node.js Telegram bot (grammY + Groq), FAQ + AI answers.
 
-## Бонусы и геймификация
+## Structure
 
-- **Активные 30 минут.** Бонус-движок (`BonusEngine`) копит время, только когда приложение на переднем плане И пользователь взаимодействует (тап/скролл за последние 25 сек). Простой не засчитывается. За каждые 30 минут активности — +50 бонусов. Прогресс и баланс переживают перезапуск.
-- **Змейка.** На **SpriteKit + GameplayKit**: единый игровой цикл `update(_:)` на 60 fps, `GKStateMachine` для состояний, `GKRandomSource` для рандома еды, партиклы при сборе яблока. Встроена в SwiftUI через `SpriteView`. 1 яблоко = 2 бонуса. Тетрис — заглушка «Скоро».
-- **Обмен.** Бонусы тратятся на скидки/кофе/VIP-доступ (демо-витрина).
+```
+SAN/                SwiftUI app (models, feed, search, venue/deal, reviews, bonus, host mode, Firebase layer)
+functions/          Cloud Functions (push fan-out, redemption count, referral reward)
+docs/ · admin/      Web admin panel (GitHub Pages serves docs/)
+web/                Firebase Hosting (AASA, landing, privacy policy)
+telegram-bot/       Telegram AI support bot
+branding/           Logo (SVG)
+*.js                Firestore seed / backup / restore scripts
+```
 
-## Firebase
+## Setup
 
-Вся логика за протоколами (`AuthService`, `DataRepository`, `PushService`), переключатель — `AppConfig.swift`. Заведения и акции хранятся в Firestore (правишь прямо в консоли, без релиза), пуши — через FCM. Пошаговая инструкция: **FIREBASE_SETUP.md**.
+1. Open `SAN.xcodeproj` in Xcode 16+, set your Team, run on a device/simulator.
+2. Firebase: add `GoogleService-Info.plist`; enable Auth, Firestore, Cloud Messaging; upload the APNs key. See `FIREBASE_SETUP.md`.
+3. Deploy backend: `firebase deploy --only functions,firestore:rules,hosting` (requires the Blaze plan for Functions).
+4. Seed data: `node reset-and-seed.js` (auto-backs-up first).
+5. Support bot: see `telegram-bot/DEPLOY.md`.
 
-## Файлы
+## Status
 
-- `Models.swift` — Deal, Venue, типы САН
-- `MockData.swift` — 10 заведений Бишкека, 15 предложений (даты относительные — никогда не протухают в демо)
-- `AppStore.swift` — избранное с persistence
-- `Components.swift` — карточка ленты, бейджи, строки
-- `HomeFeedView / SearchView / FavoritesView / ProfileView / DetailViews` — экраны
+MVP feature-complete; preparing a Bishkek pilot and TestFlight. Business overview and go-to-market in `AYANT_business_overview_ru.md`.
 
-## Что заложено в логику MVP
-
-- Протухшие акции автоматически скрываются из ленты (`isActive`)
-- Лента сортируется: ближайшие к окончанию — выше (FOMO)
-- Карта отложена осознанно; в поиске пока фильтр по району
-
-## Следующие шаги
-
-1. Подключить Firebase (см. FIREBASE_SETUP.md) — auth, Firestore, FCM
-2. Кабинет заведения, чтобы они сами постили САН
-3. Гео: «рядом со мной» в ленте
-4. Дальше категории: одежда, электроника
-
-## Что ещё стоит добавить для Центральной Азии
-
-Идеи под локальную специфику (детали — в файле `ИДЕИ_ЦА.md`):
-
-- Оплата и кошелёк: **Elsom, Balance.kg, MBANK, O!Dengi** — местные платёжки важнее карт.
-- Мультиязык: русский + **кыргызский/казахский/узбекский**, переключатель в профиле.
-- Рамадан-режим: ифтар-меню, акции на сухур, таймер до ифтара.
-- Реферальная программа («приведи друга — оба получаете бонусы») — вирусный рост в WhatsApp/Telegram.
-- Telegram-бот как второй канал акций (там сидит аудитория).
-- Группы и компании: «собрать стол на 6 человек», важно для чайхан.
-- Кэшбэк-модель а-ля Choco/Рахмет как путь к монетизации.
+> Secrets (`serviceAccountKey.json`, `.env`, `*.p8`) are gitignored — never commit them.

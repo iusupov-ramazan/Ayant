@@ -37,6 +37,8 @@ enum AuthError: LocalizedError {
 
 protocol AuthService {
     func currentUser() -> SANUser?
+    /// Firebase ID-токен текущего пользователя (для авторизации вызовов Cloud Functions).
+    func idToken() async -> String?
     func signInWithEmail(_ email: String, password: String) async throws -> SANUser
     func registerWithEmail(name: String, email: String, password: String) async throws -> SANUser
     func signInWithGoogle() async throws -> SANUser

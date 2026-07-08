@@ -87,7 +87,7 @@ struct BonusHubView: View {
             // поэтому горизонтальные свайпы управляют только игрой.
             Button { showSnake = true } label: {
                 gameRow(emoji: "🐍", title: "Змейка",
-                        subtitle: "1 яблоко = 2 бонуса", gradient: [.green, .teal])
+                        subtitle: "1 яблоко = 1 бонус", gradient: [.green, .teal])
             }
             .buttonStyle(.plain)
             .fullScreenCover(isPresented: $showSnake) {
@@ -96,7 +96,7 @@ struct BonusHubView: View {
 
             Button { showTetris = true } label: {
                 gameRow(emoji: "🧱", title: "Тетрис",
-                        subtitle: "1 линия = 20 бонусов", gradient: [.purple, .indigo])
+                        subtitle: "1 линия = 5 бонусов", gradient: [.purple, .indigo])
             }
             .buttonStyle(.plain)
             .fullScreenCover(isPresented: $showTetris) {
@@ -144,6 +144,19 @@ struct BonusHubView: View {
             ForEach(CouponStore.catalog) { reward in
                 rewardRow(reward)
             }
+            NavigationLink {
+                LoyaltyView()
+            } label: {
+                HStack {
+                    Label("Карты лояльности", systemImage: "creditcard.fill")
+                        .font(.subheadline.weight(.semibold))
+                    Spacer()
+                    Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
+                }
+                .padding(14)
+                .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
+            }
+            .buttonStyle(.plain)
         }
         .alert("Купон получен 🎉", isPresented: Binding(
             get: { justClaimed != nil }, set: { if !$0 { justClaimed = nil } })) {
@@ -173,7 +186,7 @@ struct BonusHubView: View {
         HStack(spacing: 12) {
             Text(reward.emoji).font(.title2)
             VStack(alignment: .leading, spacing: 2) {
-                Text(reward.title).font(.subheadline.weight(.medium))
+                Text(L(reward.title)).font(.subheadline.weight(.medium))
                 Text("\(reward.cost) бонусов").font(.caption).foregroundStyle(.secondary)
             }
             Spacer()

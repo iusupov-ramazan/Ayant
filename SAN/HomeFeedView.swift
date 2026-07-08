@@ -6,6 +6,8 @@ struct HomeFeedView: View {
     @EnvironmentObject private var location: LocationManager
     @State private var category: VenueCategory?
     @State private var path = NavigationPath()
+    @State private var visibleCount = 8       // пагинация ленты
+    private static let pageSize = 8
 
     private var feed: [Deal] {
         store.feedDeals(category: category)
@@ -27,10 +29,12 @@ struct HomeFeedView: View {
                 .padding(.vertical, 10)
             }
             .refreshable { await store.load() }
-            .navigationTitle("Ayta · \(store.selectedCity.name)")
+            .navigationTitle("Ayant · \(store.selectedCity.name)")
             .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(for: Venue.self) { VenueDetailView(venue: $0) }
             .navigationDestination(for: Deal.self) { DealDetailView(deal: $0, isPushed: true) }
+            // Сброс пагинации при смене категории.
+            .onChange(of: category) { _, _ in visibleCount = Self.pageSize }
         }
     }
 
@@ -109,13 +113,15 @@ struct HomeFeedView: View {
         } else if feed.isEmpty {
             emptyCategory
         } else {
-            ForEach(items) { item in
+            let shown = Array(items.prefix(visibleCount))
+            ForEach(shown) { item in
                 switch item {
                 case .deal(let deal):
                     DealCard(deal: deal,
                              onTap: { path.append(deal) },
                              onVenueTap: { if let v = store.venue(for: deal) { path.append(v) } })
                         .padding(.horizontal, 16)
+                        .onAppear { loadMoreIfNeeded(item, in: shown) }
                 case .adVenue(let venue):
                     Button { path.append(venue) } label: {
                         VenueCard(venue: venue,
@@ -124,9 +130,18 @@ struct HomeFeedView: View {
                     }
                     .buttonStyle(.plain)
                     .padding(.horizontal, 16)
+                    .onAppear { loadMoreIfNeeded(item, in: shown) }
                 }
             }
+            if visibleCount < items.count {
+                ProgressView().padding(.vertical, 16)
+            }
         }
+    }
+
+    private func loadMoreIfNeeded(_ item: FeedItem, in shown: [FeedItem]) {
+        guard item.id == shown.last?.id, visibleCount < items.count else { return }
+        visibleCount = min(visibleCount + Self.pageSize, items.count)
     }
 
     private var emptyCity: some View {

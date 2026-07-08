@@ -93,7 +93,7 @@ struct DealTypeBadge: View {
     let type: DealType
 
     var body: some View {
-        Label(type.rawValue, systemImage: type.icon)
+        Label(type.locKey, systemImage: type.icon)
             .font(.caption.weight(.semibold))
             .foregroundStyle(.white)
             .padding(.horizontal, 10)
@@ -194,7 +194,7 @@ struct DealCard: View {
                     Image(systemName: "chevron.right")
                         .font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
                 }
-                Text("\(venue?.category.rawValue ?? "") • \(venue?.district ?? "")")
+                (Text(L(venue?.category.rawValue ?? "")) + Text(verbatim: " • \(venue?.district ?? "")"))
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
@@ -206,8 +206,8 @@ struct DealCard: View {
     }
 
     private var visual: some View {
-        DealImage(urlString: deal.imageURL, gradient: venue?.gradient ?? [.sanAccent, .orange],
-                  emoji: deal.emoji, emojiSize: 90)
+        ImageCarousel(urls: deal.allImages, gradient: venue?.gradient ?? [.sanAccent, .orange],
+                      emoji: deal.emoji, height: 240)
             .overlay(alignment: .topLeading) {
                 if let percent = deal.discountPercent {
                     Text("−\(percent)%")
@@ -238,7 +238,7 @@ struct DealCard: View {
 
             ShareLink(item: DeepLinkRouter.dealURL(deal.id),
                       subject: Text(deal.title),
-                      message: Text("\(deal.title) — \(venue?.name ?? ""). Нашёл в Ayta!")) {
+                      message: Text("\(deal.title) — \(venue?.name ?? ""). Нашёл в Ayant!")) {
                 Image(systemName: "square.and.arrow.up").font(.title3).foregroundStyle(.primary)
             }
         }
@@ -351,6 +351,31 @@ struct DealImage: View {
         .frame(maxWidth: .infinity)
         .clipped()
         .task(id: urlString) { if let u = url { await loader.load(u) } }
+    }
+}
+
+// MARK: - Карусель фото (свайп + точки)
+
+struct ImageCarousel: View {
+    let urls: [String]
+    let gradient: [Color]
+    let emoji: String
+    var height: CGFloat = 260
+
+    var body: some View {
+        let imgs = urls.filter { !$0.isEmpty }
+        if imgs.count <= 1 {
+            DealImage(urlString: imgs.first, gradient: gradient, emoji: emoji)
+        } else {
+            TabView {
+                ForEach(Array(imgs.enumerated()), id: \.offset) { _, u in
+                    CoverImage(urlString: u, gradient: gradient, emoji: emoji, emojiSize: 90)
+                }
+            }
+            .frame(height: height)
+            .tabViewStyle(.page(indexDisplayMode: .always))
+            .indexViewStyle(.page(backgroundDisplayMode: .always))
+        }
     }
 }
 
@@ -543,7 +568,7 @@ struct VenueCard: View {
             HStack(spacing: 6) {
                 StarRatingView(rating: agg.rating, count: agg.count)
                 Text("·").foregroundStyle(.secondary)
-                Text(venue.category.rawValue).font(.caption).foregroundStyle(.secondary)
+                Text(venue.category.locKey).font(.caption).foregroundStyle(.secondary)
             }
             HStack(spacing: 10) {
                 if let distanceKm {
@@ -581,7 +606,7 @@ struct AdPlaceholderCard: View {
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
                 .foregroundStyle(.primary)
-            Text("Заведения — продвигайтесь в Ayta")
+            Text("Заведения — продвигайтесь в Ayant")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -619,7 +644,7 @@ struct CategoryStoryCircle: View {
                         .frame(width: 64, height: 64)
                     Image(systemName: icon).font(.title3).foregroundStyle(color)
                 }
-                Text(label).font(.caption2).foregroundStyle(isOn ? .primary : .secondary)
+                Text(L(label)).font(.caption2).foregroundStyle(isOn ? .primary : .secondary)
             }
         }
         .buttonStyle(.plain)
@@ -647,7 +672,7 @@ struct VenueCompactRow: View {
                 }
                 StarRatingView(rating: agg.rating, count: agg.count, size: 12)
                 HStack(spacing: 6) {
-                    Text("\(venue.category.rawValue) · \(venue.district)")
+                    (Text(venue.category.locKey) + Text(verbatim: " · \(venue.district)"))
                         .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                     if let distanceKm {
                         Text("· \(distanceKm.distanceText)").font(.caption).foregroundStyle(.secondary)

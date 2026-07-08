@@ -66,7 +66,7 @@ struct ProfileView: View {
                     if let email = session.user?.email {
                         Text(email).font(.caption).foregroundStyle(.secondary)
                     }
-                    Label(store.selectedCity.name, systemImage: "mappin.and.ellipse")
+                    Label(L(store.selectedCity.name), systemImage: "mappin.and.ellipse")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
@@ -112,7 +112,7 @@ struct ProfileView: View {
         Section("Настройки") {
             // Выбор города отключён — пока доступен только Бишкек.
             LabeledContent {
-                Text(store.selectedCity.name).foregroundStyle(.secondary)
+                Text(L(store.selectedCity.name)).foregroundStyle(.secondary)
             } label: {
                 Label("Город", systemImage: "building.2")
             }
@@ -122,8 +122,8 @@ struct ProfileView: View {
 
             Picker(selection: $language) {
                 Text("Русский").tag("ru")
-                Text("Oʻzbekcha").tag("uz")
                 Text("English").tag("en")
+                Text("Кыргызча").tag("ky")
             } label: {
                 Label("Язык", systemImage: "globe")
             }
@@ -186,8 +186,8 @@ struct ProfileView: View {
             } else {
                 ShareLink(
                     item: DeepLinkRouter.referralURL(store.referralCode),
-                    subject: Text("Ayta"),
-                    message: Text("Лови скидки и акции города в Ayta. Заходи по моей ссылке — бонусы получим оба!")
+                    subject: Text("Ayant"),
+                    message: Text("Лови скидки и акции города в Ayant. Заходи по моей ссылке — бонусы получим оба!")
                 ) {
                     Label("Поделиться приглашением", systemImage: "person.2.fill")
                 }

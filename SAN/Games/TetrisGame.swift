@@ -36,7 +36,7 @@ struct TetrisGameView: View {
             }
             .onChange(of: bridge.didFinish) { _, finished in
                 if finished, bridge.finalLines > 0 {
-                    bonus.addFromGame(bridge.finalLines * 20)
+                    bonus.awardGameplay(bridge.finalLines * 5)
                 }
             }
         }
@@ -50,7 +50,8 @@ struct TetrisGameView: View {
             Label("\(bridge.lines)", systemImage: "square.stack.3d.up.fill")
                 .font(.subheadline).foregroundStyle(.secondary)
             Spacer()
-            Text("1 линия = 20 бонусов").font(.caption).foregroundStyle(.secondary)
+            Text("1 линия = 5 бонусов · до \(bonus.dailyGameplayCap)/день")
+                .font(.caption).foregroundStyle(.secondary)
         }
     }
 
@@ -80,7 +81,7 @@ struct TetrisGameView: View {
             Color.black.opacity(0.55)
             VStack(spacing: 10) {
                 Text("Игра окончена").font(.title3.bold()).foregroundStyle(.white)
-                Text("Линий: \(bridge.finalLines) → +\(bridge.finalLines * 20) бонусов")
+                Text("Линий: \(bridge.finalLines) → +\(bridge.finalLines * 5) бонусов")
                     .foregroundStyle(.white)
                 Text("Очки: \(bridge.score)")
                     .font(.caption).foregroundStyle(.white.opacity(0.85))

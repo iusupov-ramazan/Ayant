@@ -82,5 +82,22 @@ service cloud.firestore {
       allow read, update: if request.auth != null;
       allow delete: if false;
     }
+
+    // Купоны пользователя (бэкенд-трекинг). Пользователь создаёт свои (deal-купоны),
+    // читает свои. Пометку used ставит только Cloud Function scanCoupon (admin SDK
+    // обходит правила) — поэтому update/delete из клиента запрещены (анти-чит).
+    // Купоны-награды лояльности тоже создаёт Cloud Function.
+    match /coupons/{id} {
+      allow read:   if request.auth != null && resource.data.userID == request.auth.uid;
+      allow create: if request.auth != null && request.resource.data.userID == request.auth.uid
+                    && request.resource.data.used == false;
+      allow update, delete: if false;
+    }
+
+    // Карты лояльности гостей: гость читает свои; пишет только Cloud Function.
+    match /loyaltyCards/{id} {
+      allow read:  if request.auth != null && resource.data.userID == request.auth.uid;
+      allow write: if false;
+    }
   }
 }

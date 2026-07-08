@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Ayta — Админ-панель</title>
+<title>Ayant — Админ-панель</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
@@ -158,7 +158,7 @@
 <!-- ══ APP ════════════════════════════════════════════════════════════════ -->
 <div id="app">
   <nav>
-    <h1>Ayta Админ</h1>
+    <h1>Ayant Админ</h1>
     <button onclick="showPage('venues')" id="navVenues" class="active">Заведения</button>
     <button onclick="showPage('deals')"  id="navDeals">Предложения</button>
     <button onclick="showPage('hosts')"  id="navHosts">Хосты</button>
@@ -322,6 +322,21 @@
       <div class="field">
         <label>Telegram (ник/ссылка)</label>
         <input id="vTelegram" placeholder="@nick" />
+      </div>
+      <div class="field">
+        <label>Карта лояльности</label>
+        <select id="vLoyaltyEnabled">
+          <option value="false">Выкл</option>
+          <option value="true">Вкл ✓</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Штампов до награды</label>
+        <input id="vLoyaltyGoal" type="number" min="2" max="12" placeholder="6" />
+      </div>
+      <div class="field span2">
+        <label>Награда лояльности (текст)</label>
+        <input id="vLoyaltyReward" placeholder="напр. Бесплатный кофе" />
       </div>
       <div class="field">
         <label>Проверенное</label>
@@ -531,7 +546,7 @@ window.removeVenueItem = (id) => {
 
 // ── Загрузка фото в Cloudinary (unsigned) ───────────────────────────────────
 const CLOUDINARY_CLOUD = 'dsb14gwxw';
-const CLOUDINARY_PRESET = 'Ayta_ios';
+const CLOUDINARY_PRESET = 'Ayant_ios';
 window.uploadImage = async (input, targetId) => {
   const file = input.files && input.files[0];
   if (!file) return;
@@ -794,7 +809,7 @@ function renderVenues() {
     return `
     <tr>
       <td class="emoji-cell">${v.emoji ?? '🍽'}</td>
-      <td><strong>${v.name}</strong><br><small style="color:var(--muted)">${v.address ?? ''}</small></td>
+      <td><strong>${v.name}</strong>${v.loyaltyEnabled ? ` <span class="badge" style="background:#fff0e8;color:#c0490f" title="${v.loyaltyGoal ?? 6} визитов → ${v.loyaltyReward ?? ''}">🎟 Лояльность</span>` : ''}<br><small style="color:var(--muted)">${v.address ?? ''}</small></td>
       <td><span class="badge badge-${v.category}">${categoryLabel(v.category)}</span></td>
       <td>${v.district ?? ''}</td>
       <td><span class="badge badge-${status}">${statusLabel}</span></td>
@@ -870,6 +885,9 @@ window.openVenueModal = (id) => {
   document.getElementById('vWhatsapp').value     = v?.whatsapp ?? '';
   document.getElementById('vInstagram').value    = v?.instagram ?? '';
   document.getElementById('vTelegram').value     = v?.telegram ?? '';
+  document.getElementById('vLoyaltyEnabled').value = String(v?.loyaltyEnabled ?? false);
+  document.getElementById('vLoyaltyGoal').value  = v?.loyaltyGoal ?? 6;
+  document.getElementById('vLoyaltyReward').value = v?.loyaltyReward ?? '';
   document.getElementById('vVerified').value     = String(v?.isVerified ?? false);
   document.getElementById('vModeration').value   = v?.status ?? 'approved';
   document.getElementById('vActive').value       = String((v?.isPaused ? false : (v?.active ?? true)));
@@ -990,6 +1008,9 @@ window.saveVenue = async () => {
     whatsapp:     document.getElementById('vWhatsapp').value.trim(),
     instagram:    document.getElementById('vInstagram').value.trim(),
     telegram:     document.getElementById('vTelegram').value.trim(),
+    loyaltyEnabled: document.getElementById('vLoyaltyEnabled').value === 'true',
+    loyaltyGoal:  Math.min(Math.max(parseInt(document.getElementById('vLoyaltyGoal').value) || 6, 2), 12),
+    loyaltyReward: document.getElementById('vLoyaltyReward').value.trim() || 'Награда за лояльность',
   };
   if (!data.name) return toast('Укажи название', 'error');
   // Пустые координаты по умолчанию — центр Бишкека.

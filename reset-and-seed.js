@@ -1,5 +1,5 @@
 /**
- * RESET + SEED — Ayta / Bishkek
+ * RESET + SEED — Ayant / Bishkek
  *
  * Полностью очищает коллекции `venues`, `deals`, `reviews`, `hosts`
  * и заливает 41 заведение Бишкека по модели приложения.
