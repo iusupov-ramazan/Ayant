@@ -553,7 +553,11 @@ extension HostVenueDTO {
     init?(firestore d: [String: Any], id: String) {
         guard let name = d["name"] as? String else { return nil }
         let key = d["category"] as? String ?? "cafe"
-        let cat = categoryMap[key] ?? VenueCategory(rawValue: key) ?? .cafe
+        // Порядок: встроенные слаги → пользовательские (slug→имя из бэкенда) → как есть.
+        let cat = categoryMap[key]
+            ?? VenueCategory.slugRegistry[key].flatMap(VenueCategory.init(rawValue:))
+            ?? VenueCategory(rawValue: key)
+            ?? .cafe
         let special = d["todaySpecial"] as? String
         self.init(
             id: id, name: name, categoryRaw: cat.rawValue,
@@ -773,5 +777,49 @@ private extension UIApplication {
     var firstKeyWindow: UIWindow? {
         connectedScenes.compactMap { $0 as? UIWindowScene }
             .flatMap { $0.windows }.first { $0.isKeyWindow }
+    }
+}
+
+// MARK: - Категории (гибкий список из бэкенда)
+//
+// Коллекция Firestore `categories` (управляется из админки): slug, name, icon,
+// emoji, order, enabled. Приложение читает её и использует в фильтрах и формах.
+// Если бэкенд недоступен / пуст — остаёмся на встроенных VenueCategory.allCases.
+
+@MainActor
+final class CategoryStore: ObservableObject {
+    static let shared = CategoryStore()
+
+    /// Категории для UI (встроенные — как фолбэк до загрузки).
+    @Published private(set) var categories: [VenueCategory] = VenueCategory.allCases
+
+    private init() {}
+
+    func load() async {
+        guard AppConfig.useFirebase else { return }
+        do {
+            let snap = try await Firestore.firestore().collection("categories").getDocuments()
+            struct Row { let name: String; let slug: String; let icon: String; let order: Int; let enabled: Bool }
+            let rows: [Row] = snap.documents.compactMap { doc in
+                let d = doc.data()
+                let name = (d["name"] as? String)?.trimmingCharacters(in: .whitespaces) ?? ""
+                guard !name.isEmpty else { return nil }
+                let slug = (d["slug"] as? String) ?? doc.documentID
+                let icon = (d["icon"] as? String) ?? "tag.fill"
+                let order = (d["order"] as? NSNumber)?.intValue ?? 0
+                let enabled = (d["enabled"] as? Bool) ?? true
+                return Row(name: name, slug: slug, icon: icon, order: order, enabled: enabled)
+            }
+            guard !rows.isEmpty else { return }   // пусто → остаёмся на встроенных
+            let visible = rows.filter { $0.enabled }.sorted { $0.order < $1.order }
+            var icons: [String: String] = [:]
+            var slugs: [String: String] = [:]
+            for r in rows { icons[r.name] = r.icon; slugs[r.slug] = r.name }
+            VenueCategory.iconRegistry = icons
+            VenueCategory.slugRegistry = slugs
+            categories = visible.compactMap { VenueCategory(rawValue: $0.name) }
+        } catch {
+            // Нет доступа/ошибка — тихо остаёмся на встроенных категориях.
+        }
     }
 }

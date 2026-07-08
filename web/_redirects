@@ -1,0 +1,8 @@
+# Cloudflare Pages routing (Firebase ignores this file; it uses firebase.json).
+# Root → about page.
+/                /about        302
+# Deep-link paths serve the launcher page (index.html tries san:// / opens the app).
+/venue/*         /index.html   200
+/deal/*          /index.html   200
+/ref/*           /index.html   200
+/gift/*          /index.html   200

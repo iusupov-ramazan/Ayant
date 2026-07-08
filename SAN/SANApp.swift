@@ -116,6 +116,7 @@ struct SANApp: App {
             }
             .task {
                 AnalyticsLog.log(.appOpen)
+                await CategoryStore.shared.load()   // гибкие категории из бэкенда
                 hostStore.bind(store)
                 hostStore.configure(ownerID: session.user?.id)
                 await store.load()

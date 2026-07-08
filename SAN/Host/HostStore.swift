@@ -23,6 +23,41 @@ struct HostProfile: Codable {
     var phone: String
     var email: String
     var verification: VerificationStatus = .none
+    // Реквизиты / расширенная информация о бизнесе
+    var legalForm: String = ""            // ИП / ООО / Самозанятый
+    var legalName: String = ""            // ФИО ИП или название юрлица
+    var inn: String = ""                  // ИНН / ОГРНИП
+    var registrationAddress: String = ""  // юридический адрес
+    var website: String = ""
+    var about: String = ""                // описание бизнеса
+
+    var category: VenueCategory { VenueCategory(rawValue: categoryRaw) ?? .cafe }
+
+    init(businessName: String, categoryRaw: String, phone: String, email: String,
+         verification: VerificationStatus = .none,
+         legalForm: String = "", legalName: String = "", inn: String = "",
+         registrationAddress: String = "", website: String = "", about: String = "") {
+        self.businessName = businessName; self.categoryRaw = categoryRaw
+        self.phone = phone; self.email = email; self.verification = verification
+        self.legalForm = legalForm; self.legalName = legalName; self.inn = inn
+        self.registrationAddress = registrationAddress; self.website = website; self.about = about
+    }
+
+    // Обратная совместимость: старые сохранённые профили без новых полей.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        businessName = try c.decodeIfPresent(String.self, forKey: .businessName) ?? ""
+        categoryRaw = try c.decodeIfPresent(String.self, forKey: .categoryRaw) ?? VenueCategory.cafe.rawValue
+        phone = try c.decodeIfPresent(String.self, forKey: .phone) ?? ""
+        email = try c.decodeIfPresent(String.self, forKey: .email) ?? ""
+        verification = try c.decodeIfPresent(VerificationStatus.self, forKey: .verification) ?? .none
+        legalForm = try c.decodeIfPresent(String.self, forKey: .legalForm) ?? ""
+        legalName = try c.decodeIfPresent(String.self, forKey: .legalName) ?? ""
+        inn = try c.decodeIfPresent(String.self, forKey: .inn) ?? ""
+        registrationAddress = try c.decodeIfPresent(String.self, forKey: .registrationAddress) ?? ""
+        website = try c.decodeIfPresent(String.self, forKey: .website) ?? ""
+        about = try c.decodeIfPresent(String.self, forKey: .about) ?? ""
+    }
 }
 
 // MARK: - DTO заведения хоста (Codable; конвертируется в Venue)
@@ -294,6 +329,27 @@ final class HostStore: ObservableObject {
         profile?.businessName = businessName
         profile?.phone = phone
         profile?.email = email
+        persistProfile()
+    }
+
+    /// Полное обновление информации о бизнесе (экран «Информация о бизнесе»).
+    func updateBusinessInfo(businessName: String, category: VenueCategory, phone: String, email: String,
+                            legalForm: String, legalName: String, inn: String,
+                            registrationAddress: String, website: String, about: String) {
+        if profile == nil {
+            profile = HostProfile(businessName: businessName, categoryRaw: category.rawValue,
+                                  phone: phone, email: email)
+        }
+        profile?.businessName = businessName
+        profile?.categoryRaw = category.rawValue
+        profile?.phone = phone
+        profile?.email = email
+        profile?.legalForm = legalForm
+        profile?.legalName = legalName
+        profile?.inn = inn
+        profile?.registrationAddress = registrationAddress
+        profile?.website = website
+        profile?.about = about
         persistProfile()
     }
 

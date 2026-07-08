@@ -26,6 +26,7 @@ struct SavedView: View {
                     }
                 }
             }
+            .background(Color.sanCanvas.ignoresSafeArea())
             .navigationTitle("Сохранённое")
             .navigationDestination(for: Venue.self) { VenueDetailView(venue: $0) }
             .sheet(item: $selectedDeal) { DealDetailView(deal: $0) }
@@ -54,6 +55,7 @@ struct SavedView: View {
                 }
             }
             .listStyle(.plain)
+            .scrollContentBackground(.hidden)
         }
     }
 
@@ -78,6 +80,7 @@ struct SavedView: View {
                 }
             }
             .listStyle(.plain)
+            .scrollContentBackground(.hidden)
         }
     }
 }

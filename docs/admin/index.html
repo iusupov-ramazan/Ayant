@@ -126,9 +126,25 @@
   .empty { padding: 48px; text-align: center; color: var(--muted); font-size: 14px; }
   .spinner { text-align: center; padding: 48px; color: var(--muted); }
 
-  @media (max-width: 640px) {
+  @media (max-width: 760px) {
+    nav { gap: 4px; padding: 0 10px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    nav h1 { font-size: 16px; margin-right: 10px; white-space: nowrap; }
+    nav button { padding: 6px 9px; font-size: 13px; white-space: nowrap; flex: none; }
+    #signOutBtn { margin-left: 8px; }
+    .page { padding: 18px 12px; }
+    .toolbar { flex-wrap: wrap; gap: 10px; }
+    .toolbar h2 { font-size: 18px; margin-right: 0; width: 100%; }
+    .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    table { min-width: 620px; }
+    .modal { padding: 22px 18px; }
+    .modal-footer { flex-direction: column-reverse; }
+    .modal-footer .btn { width: 100%; justify-content: center; }
     .form-grid.cols2 { grid-template-columns: 1fr; }
     .field.span2 { grid-column: span 1; }
+    #toast { left: 16px; right: 16px; bottom: 16px; text-align: center; }
+  }
+  @media (max-width: 400px) {
+    .auth-card { width: 100%; padding: 28px 22px; }
   }
 </style>
 </head>
@@ -161,6 +177,7 @@
     <h1>Ayant Админ</h1>
     <button onclick="showPage('venues')" id="navVenues" class="active">Заведения</button>
     <button onclick="showPage('deals')"  id="navDeals">Предложения</button>
+    <button onclick="showPage('categories')" id="navCategories">Категории</button>
     <button onclick="showPage('hosts')"  id="navHosts">Хосты</button>
     <button onclick="showPage('boosts')" id="navBoosts">Реклама</button>
     <button id="signOutBtn" onclick="signOut()">Выйти</button>
@@ -214,6 +231,22 @@
           </tr>
         </thead>
         <tbody id="dealsBody"><tr><td colspan="7" class="spinner">Загрузка…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- CATEGORIES PAGE -->
+  <div class="page" id="pageCategories">
+    <div class="toolbar">
+      <h2>Категории</h2>
+      <button class="btn btn-primary" onclick="openCategoryModal()">+ Добавить</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th></th><th>Название</th><th>Код</th><th>Иконка</th><th>Порядок</th><th>Статус</th><th></th></tr>
+        </thead>
+        <tbody id="categoriesBody"><tr><td colspan="7" class="spinner">Загрузка…</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -461,6 +494,50 @@
   </div>
 </div>
 
+<!-- ══ CATEGORY MODAL ═════════════════════════════════════════════════════ -->
+<div class="modal-overlay hidden" id="categoryModal">
+  <div class="modal" style="max-width:460px">
+    <h3 id="categoryModalTitle">Новая категория</h3>
+    <div class="form-grid cols2">
+      <div class="field span2">
+        <label>Название (как видят гости)</label>
+        <input id="cName" placeholder="Фаст-фуд" oninput="onCategoryNameInput()" />
+      </div>
+      <div class="field">
+        <label>Код (латиницей, уникальный)</label>
+        <input id="cSlug" placeholder="fastfood" />
+      </div>
+      <div class="field">
+        <label>Порядок</label>
+        <input id="cOrder" type="number" placeholder="0" />
+      </div>
+      <div class="field">
+        <label>Иконка (SF Symbol)</label>
+        <input id="cIcon" placeholder="fork.knife" />
+      </div>
+      <div class="field">
+        <label>Эмодзи (запасной вариант)</label>
+        <input id="cEmoji" placeholder="🍔" />
+      </div>
+      <div class="field span2">
+        <label>Статус</label>
+        <select id="cEnabled">
+          <option value="true">Включена</option>
+          <option value="false">Скрыта</option>
+        </select>
+      </div>
+    </div>
+    <p style="margin:10px 2px 0;color:var(--muted);font-size:12px">
+      Иконка — имя SF Symbol из приложения (напр. <code>fork.knife</code>, <code>takeoutbag.and.cup.and.straw.fill</code>).
+      Если символа нет — покажется эмодзи.
+    </p>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('categoryModal')">Отмена</button>
+      <button class="btn btn-primary"   onclick="saveCategory()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
 <!-- ══ CONFIRM MODAL ══════════════════════════════════════════════════════ -->
 <div class="modal-overlay hidden" id="confirmModal">
   <div class="modal" style="max-width:380px">
@@ -502,9 +579,22 @@ const db   = getFirestore(app);
 // ── STATE ─────────────────────────────────────────────────────────────────
 let venues = [];
 let deals  = [];
+let categories = [];
 let editingVenueId = null;
 let editingDealId  = null;
+let editingCategoryId = null;
 let pendingDeleteFn = null;
+
+// Встроенные категории — используются для первичного заполнения (seed),
+// если коллекция `categories` пуста.
+const BUILTIN_CATEGORIES = [
+  { slug:'cafe',       name:'Кафе',     icon:'fork.knife',                              emoji:'🍽', order:0 },
+  { slug:'coffee',     name:'Кофейня',  icon:'cup.and.saucer.fill',                     emoji:'☕️', order:1 },
+  { slug:'fastfood',   name:'Фастфуд',  icon:'takeoutbag.and.cup.and.straw.fill',       emoji:'🍔', order:2 },
+  { slug:'restaurant', name:'Ресторан', icon:'wineglass.fill',                          emoji:'🍷', order:3 },
+  { slug:'teahouse',   name:'Чайхана',  icon:'mug.fill',                                emoji:'🫖', order:4 },
+  { slug:'bakery',     name:'Пекарня',  icon:'birthday.cake.fill',                      emoji:'🧁', order:5 },
+];
 let currentItems = [];   // объекты для отзывов в открытом модале заведения
 
 function renderVenueItems() {
@@ -655,9 +745,121 @@ window.signOut = () => fbSignOut(auth);
 
 // ── LOAD ──────────────────────────────────────────────────────────────────
 async function loadAll() {
+  // Категории — первыми: от них зависят подписи и выпадающий список в форме заведения.
+  await loadCategories();
   // allSettled: сбой одной коллекции (напр. нет правил) не ломает остальные.
   await Promise.allSettled([loadVenues(), loadDeals(), loadHosts(), loadBoosts()]);
 }
+
+// ── CATEGORIES ──────────────────────────────────────────────────────────────
+async function loadCategories() {
+  try {
+    const snap = await getDocs(collection(db, 'categories'));
+    categories = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    // Первый запуск: коллекция пуста → засеваем встроенными категориями.
+    if (!categories.length) {
+      await Promise.allSettled(BUILTIN_CATEGORIES.map(c =>
+        setDoc(doc(db, 'categories', c.slug), { ...c, enabled: true })));
+      categories = BUILTIN_CATEGORIES.map(c => ({ id: c.slug, ...c, enabled: true }));
+    }
+  } catch (e) {
+    // Нет доступа/правил — работаем на встроенных, чтобы форма не ломалась.
+    categories = BUILTIN_CATEGORIES.map(c => ({ id: c.slug, ...c, enabled: true }));
+  }
+  categories.sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || (a.name || '').localeCompare(b.name || ''));
+  renderCategories();
+  populateCategorySelect();
+}
+
+function renderCategories() {
+  const tbody = document.getElementById('categoriesBody');
+  if (!tbody) return;
+  if (!categories.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="empty">Категорий нет</td></tr>';
+    return;
+  }
+  tbody.innerHTML = categories.map(c => `
+    <tr style="${c.enabled === false ? 'opacity:.5' : ''}">
+      <td class="emoji-cell">${c.emoji ?? '🏷️'}</td>
+      <td><strong>${c.name ?? c.slug}</strong></td>
+      <td><small style="color:var(--muted)">${c.slug}</small></td>
+      <td><small style="color:var(--muted)">${c.icon ?? '—'}</small></td>
+      <td>${c.order ?? 0}</td>
+      <td><span class="badge badge-${c.enabled === false ? 'rejected' : 'approved'}">${c.enabled === false ? 'Скрыта' : 'Включена'}</span></td>
+      <td>
+        <div class="row-actions">
+          <button class="btn btn-secondary btn-sm" onclick="openCategoryModal('${c.id}')">✏️</button>
+          <button class="btn btn-danger btn-sm"    onclick="askDelete('category','${c.id}','${(c.name ?? c.slug).replace(/'/g, "\\'")}')">🗑</button>
+        </div>
+      </td>
+    </tr>`).join('');
+}
+
+function populateCategorySelect() {
+  const sel = document.getElementById('vCategory');
+  if (!sel) return;
+  const current = sel.value;
+  const list = categories.filter(c => c.enabled !== false);
+  sel.innerHTML = (list.length ? list : BUILTIN_CATEGORIES)
+    .map(c => `<option value="${c.slug}">${c.name ?? c.slug}</option>`).join('');
+  if (current) sel.value = current;
+}
+
+function catTranslit(s) {
+  const map = { а:'a',б:'b',в:'v',г:'g',д:'d',е:'e',ё:'e',ж:'zh',з:'z',и:'i',й:'y',к:'k',л:'l',м:'m',
+    н:'n',о:'o',п:'p',р:'r',с:'s',т:'t',у:'u',ф:'f',х:'h',ц:'c',ч:'ch',ш:'sh',щ:'sch',ъ:'',ы:'y',ь:'',
+    э:'e',ю:'yu',я:'ya',' ':'-','_':'-' };
+  return (s || '').toLowerCase().split('').map(ch => map[ch] ?? ch).join('')
+    .replace(/[^a-z0-9-]/g, '').replace(/-+/g, '-').replace(/^-|-$/g, '');
+}
+
+window.onCategoryNameInput = () => {
+  // Автоподсказка кода из названия, только если поле кода ещё не трогали вручную.
+  const slugEl = document.getElementById('cSlug');
+  if (slugEl.dataset.touched === '1') return;
+  slugEl.value = catTranslit(document.getElementById('cName').value);
+};
+
+window.openCategoryModal = (id) => {
+  editingCategoryId = id ?? null;
+  const c = id ? categories.find(x => x.id === id) : null;
+  document.getElementById('categoryModalTitle').textContent = id ? 'Изменить категорию' : 'Новая категория';
+  document.getElementById('cName').value    = c?.name ?? '';
+  document.getElementById('cSlug').value     = c?.slug ?? '';
+  document.getElementById('cIcon').value     = c?.icon ?? 'tag.fill';
+  document.getElementById('cEmoji').value    = c?.emoji ?? '';
+  document.getElementById('cOrder').value    = c?.order ?? (categories.length);
+  document.getElementById('cEnabled').value  = String(c?.enabled !== false);
+  const slugEl = document.getElementById('cSlug');
+  slugEl.dataset.touched = id ? '1' : '';       // при редактировании код не перезаписываем
+  slugEl.oninput = () => { slugEl.dataset.touched = '1'; };
+  document.getElementById('categoryModal').classList.remove('hidden');
+};
+
+window.saveCategory = async () => {
+  const name = document.getElementById('cName').value.trim();
+  let slug   = document.getElementById('cSlug').value.trim() || catTranslit(name);
+  if (!name)  { toast('Введите название', 'error'); return; }
+  if (!slug)  { toast('Введите код категории', 'error'); return; }
+  const data = {
+    slug,
+    name,
+    icon:   document.getElementById('cIcon').value.trim() || 'tag.fill',
+    emoji:  document.getElementById('cEmoji').value.trim(),
+    order:  Number(document.getElementById('cOrder').value) || 0,
+    enabled: document.getElementById('cEnabled').value === 'true',
+  };
+  try {
+    // id документа = slug (стабильная ссылка). При смене кода удаляем старый док.
+    if (editingCategoryId && editingCategoryId !== slug) {
+      await deleteDoc(doc(db, 'categories', editingCategoryId));
+    }
+    await setDoc(doc(db, 'categories', slug), data);
+    closeModal('categoryModal');
+    await loadCategories();
+    toast('Категория сохранена', 'success');
+  } catch (e) { toast('Ошибка: ' + e.message, 'error'); }
+};
 
 // ── BOOSTS / PUSH ───────────────────────────────────────────────────────────
 function boostStatus(c) {
@@ -864,7 +1066,8 @@ window.openVenueModal = (id) => {
   document.getElementById('venueModalTitle').textContent = id ? 'Изменить заведение' : 'Новое заведение';
   const v = id ? venues.find(x => x.id === id) : null;
   document.getElementById('vName').value         = v?.name ?? '';
-  document.getElementById('vCategory').value     = v?.category ?? 'cafe';
+  populateCategorySelect();
+  document.getElementById('vCategory').value     = v?.category ?? (categories[0]?.slug ?? 'cafe');
   document.getElementById('vDistrict').value     = v?.district ?? '';
   document.getElementById('vAddress').value      = v?.address ?? '';
   document.getElementById('vPhone').value        = v?.phone ?? '';
@@ -1109,11 +1312,13 @@ window.saveDeal = async () => {
 // ── DELETE ────────────────────────────────────────────────────────────────
 window.askDelete = (type, id, name) => {
   document.getElementById('confirmText').textContent = `«${name}» будет удалено безвозвратно.`;
+  const coll = type === 'venue' ? 'venues' : (type === 'category' ? 'categories' : 'deals');
   pendingDeleteFn = async () => {
-    await deleteDoc(doc(db, type === 'venue' ? 'venues' : 'deals', id));
+    await deleteDoc(doc(db, coll, id));
     closeModal('confirmModal');
-    if (type === 'venue') { await loadVenues(); toast('Заведение удалено', 'success'); }
-    else                  { await loadDeals();  toast('Предложение удалено', 'success'); }
+    if (type === 'venue')         { await loadVenues();     toast('Заведение удалено', 'success'); }
+    else if (type === 'category') { await loadCategories(); toast('Категория удалена', 'success'); }
+    else                          { await loadDeals();      toast('Предложение удалено', 'success'); }
   };
   document.getElementById('confirmModal').classList.remove('hidden');
 };
@@ -1128,9 +1333,13 @@ window.showPage = (page) => {
   document.getElementById('page' + page.charAt(0).toUpperCase() + page.slice(1)).classList.add('active');
   document.getElementById('nav'  + page.charAt(0).toUpperCase() + page.slice(1)).classList.add('active');
   if (page === 'boosts') loadBoosts();
+  if (page === 'categories') loadCategories();
 };
 
 function categoryLabel(c) {
+  const found = categories.find(x => x.slug === c || x.id === c);
+  if (found) return found.name ?? found.slug;
+  // Фолбэк на встроенные, если категории ещё не загрузились.
   return { cafe:'Кафе', coffee:'Кофейня', fastfood:'Фастфуд',
            restaurant:'Ресторан', teahouse:'Чайхана', bakery:'Пекарня' }[c] ?? c;
 }

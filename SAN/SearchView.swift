@@ -12,6 +12,7 @@ struct SearchView: View {
     @State private var minRating = 0        // 0 | 3 | 4
     @State private var maxDistance: Double? = nil   // км: 0.5 | 1 | 3 | 5
     @State private var category: VenueCategory?
+    @ObservedObject private var catStore = CategoryStore.shared
     @State private var withDeals = false        // только с активными предложениями
     @State private var showMap = false
     @State private var mapSelection: Venue?
@@ -114,6 +115,7 @@ struct SearchView: View {
                     .refreshable { await store.load() }
                 }
             }
+            .background(Color.sanCanvas.ignoresSafeArea())
             .navigationTitle("Поиск")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -173,7 +175,7 @@ struct SearchView: View {
                     // текущей категории (иначе выбор визуально «терялся»).
                     Picker("Категория", selection: $category) {
                         Text("Все категории").tag(VenueCategory?.none)
-                        ForEach(VenueCategory.allCases) { cat in
+                        ForEach(catStore.categories) { cat in
                             Label(cat.locKey, systemImage: cat.icon).tag(VenueCategory?.some(cat))
                         }
                     }

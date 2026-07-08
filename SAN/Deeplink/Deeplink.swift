@@ -27,9 +27,7 @@ final class DeepLinkRouter: ObservableObject {
 
     private init() {}
 
-    /// Домен для Universal Links — бесплатный домен Firebase Hosting
-    /// (AASA размещён в web/.well-known/apple-app-site-association).
-    static let domain = "san-25d32.web.app"
+    static let domain = "ayant.kg"
 
     /// Парсит san://venue/<id> (кастомная схема) и https://<domain>/venue/<id> (Universal Link).
     func handle(url: URL) {

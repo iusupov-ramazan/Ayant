@@ -26,18 +26,51 @@ struct HostScannerView: View {
     private var venues: [HostVenueDTO] { host.venueDTOs }
     private var currentVenue: HostVenueDTO? { venues.first { $0.id == venueID } }
 
+    private let darkBG = Color(hex: 0x0E0D0C)
+    private let panel = Color(hex: 0x1A1917)
+    private let field = Color(hex: 0x201E1C)
+
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                if fixedVenueID == nil, venues.count > 1 { venuePicker }
-                scannerArea
-                resultBar
+            ZStack {
+                darkBG.ignoresSafeArea()
+                VStack(spacing: 20) {
+                    header
+                    if fixedVenueID == nil, venues.count > 1 { venuePicker }
+                    scannerArea
+                    Text("Наведите камеру на QR купона гостя")
+                        .font(.golos(15, .medium)).foregroundStyle(.white.opacity(0.7))
+                        .multilineTextAlignment(.center)
+                    codeEntry
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 20).padding(.top, 8)
+
+                if processing || result != nil {
+                    Color.black.opacity(0.35).ignoresSafeArea()
+                    resultCard
+                }
             }
-            .navigationTitle("Сканер купонов")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Закрыть") { dismiss() } } }
-            .onAppear {
-                venueID = fixedVenueID ?? venues.first?.id ?? ""
+            .toolbar(.hidden, for: .navigationBar)
+            .onAppear { venueID = fixedVenueID ?? venues.first?.id ?? "" }
+        }
+        .preferredColorScheme(.dark)
+    }
+
+    // MARK: Шапка
+
+    private var header: some View {
+        ZStack {
+            Text("Сканер купонов").font(.golos(20, .bold)).foregroundStyle(.white)
+            HStack {
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark").font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 44, height: 44)
+                        .background(.white.opacity(0.12), in: Circle())
+                }
+                .buttonStyle(.plain)
+                Spacer()
             }
         }
     }
@@ -45,97 +78,100 @@ struct HostScannerView: View {
     // MARK: Выбор заведения
 
     private var venuePicker: some View {
-        Picker("Заведение", selection: $venueID) {
-            ForEach(venues) { Text($0.name).tag($0.id) }
+        Menu {
+            ForEach(venues) { v in Button(v.name) { venueID = v.id } }
+        } label: {
+            HStack {
+                Text(currentVenue?.name ?? "Выберите заведение")
+                    .font(.golos(15, .semibold)).foregroundStyle(.white)
+                Spacer()
+                Image(systemName: "chevron.up.chevron.down").font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.6))
+            }
+            .padding(.horizontal, 16).padding(.vertical, 12)
+            .background(field, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
-        .pickerStyle(.menu)
-        .padding(.horizontal, 16).padding(.vertical, 8)
     }
 
-    // MARK: Камера / ручной ввод
+    // MARK: Камера / плейсхолдер
 
     @ViewBuilder
     private var scannerArea: some View {
-        if DataScannerViewController.isSupported && DataScannerViewController.isAvailable {
-            ZStack {
-                CodeScannerView(isPaused: processing || result != nil) { code in
-                    handle(code)
-                }
-                .ignoresSafeArea(edges: .horizontal)
-                VStack {
-                    Spacer()
-                    Text(currentVenue.map { "Заведение: \($0.name)" } ?? "Выберите заведение")
-                        .font(.caption).foregroundStyle(.white)
-                        .padding(.horizontal, 12).padding(.vertical, 6)
-                        .background(.black.opacity(0.5), in: Capsule())
-                        .padding(.bottom, 16)
+        ZStack {
+            RoundedRectangle(cornerRadius: 24, style: .continuous).fill(panel)
+            if DataScannerViewController.isSupported && DataScannerViewController.isAvailable {
+                CodeScannerView(isPaused: processing || result != nil) { code in handle(code) }
+                    .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            } else {
+                VStack(spacing: 12) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 18, style: .continuous).fill(.white)
+                            .frame(width: 150, height: 150)
+                        Image(systemName: "qrcode").font(.system(size: 92)).foregroundStyle(.black)
+                        Rectangle().fill(Color.sanAccent).frame(height: 2).frame(width: 150)
+                            .shadow(color: Color.sanAccent, radius: 6)
+                    }
+                    Text("AYANT-XXXXXX").font(.golos(15, .bold)).foregroundStyle(.white.opacity(0.5))
+                        .tracking(1)
                 }
             }
-            .frame(maxHeight: .infinity)
-        } else {
-            manualEntry
+            CornerBrackets(len: 30)
+                .stroke(Color.sanAccent, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                .padding(22)
         }
+        .frame(height: 320)
     }
 
-    private var manualEntry: some View {
+    // MARK: Ввод кода
+
+    private var codeEntry: some View {
         VStack(spacing: 14) {
-            Image(systemName: "qrcode.viewfinder").font(.system(size: 56)).foregroundStyle(.secondary)
-            Text("Камера недоступна (симулятор). Введите код купона вручную.")
-                .font(.subheadline).foregroundStyle(.secondary)
-                .multilineTextAlignment(.center).padding(.horizontal)
-            TextField("AYANT-XXXXXX", text: $manualCode)
+            Text("ИЛИ ВВЕДИТЕ КОД").font(.golos(12, .bold)).tracking(1.2)
+                .foregroundStyle(.white.opacity(0.45))
+            TextField("", text: $manualCode, prompt: Text("AYANT-XXXXXX").foregroundColor(.white.opacity(0.4)))
                 .textInputAutocapitalization(.characters)
+                .autocorrectionDisabled()
                 .multilineTextAlignment(.center)
-                .font(.headline.monospaced())
-                .padding(12)
-                .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal, 40)
-            Button("Проверить купон") {
+                .font(.golos(17, .bold))
+                .foregroundStyle(.white)
+                .padding(.vertical, 15)
+                .frame(maxWidth: .infinity)
+                .background(field, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            Button {
                 handle(manualCode.trimmingCharacters(in: .whitespaces).uppercased())
-            }
+            } label: { Text("Проверить купон") }
+            .buttonStyle(SanPrimaryButton())
             .disabled(manualCode.trimmingCharacters(in: .whitespaces).isEmpty || processing)
-            .frame(maxWidth: .infinity).padding(.vertical, 14)
-            .background(Color.sanAccent, in: RoundedRectangle(cornerRadius: 12))
-            .foregroundStyle(.white).padding(.horizontal, 40)
-            Spacer()
         }
-        .padding(.top, 40)
-        .frame(maxHeight: .infinity)
     }
 
     // MARK: Результат
 
-    @ViewBuilder
-    private var resultBar: some View {
-        if processing {
-            HStack { ProgressView(); Text("Проверяем купон…").font(.subheadline) }
-                .padding().frame(maxWidth: .infinity)
-                .background(Color(.secondarySystemBackground))
-        } else if let result {
-            VStack(spacing: 10) {
-                HStack(spacing: 10) {
-                    Image(systemName: result.ok ? "checkmark.seal.fill" : "xmark.octagon.fill")
-                        .font(.title2).foregroundStyle(result.ok ? .green : .red)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(result.title).font(.subheadline.weight(.bold))
-                        if let sub = result.subtitle {
-                            Text(sub).font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                    Spacer()
+    private var resultCard: some View {
+        VStack(spacing: 14) {
+            if processing {
+                ProgressView().tint(.white)
+                Text("Проверяем купон…").font(.golos(16, .semibold)).foregroundStyle(.white)
+            } else if let result {
+                Image(systemName: result.ok ? "checkmark.seal.fill" : "xmark.octagon.fill")
+                    .font(.system(size: 44)).foregroundStyle(result.ok ? Color.sanOpen : .red)
+                Text(result.title).font(.golos(18, .bold)).foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
+                if let sub = result.subtitle {
+                    Text(sub).font(.golos(14, .regular)).foregroundStyle(.white.opacity(0.75))
+                        .multilineTextAlignment(.center)
                 }
-                Button("Сканировать ещё") {
-                    self.result = nil
-                    lastCode = ""
-                    manualCode = ""
-                }
-                .frame(maxWidth: .infinity).padding(.vertical, 12)
-                .background(Color.sanAccent, in: RoundedRectangle(cornerRadius: 12))
-                .foregroundStyle(.white)
+                Button {
+                    self.result = nil; lastCode = ""; manualCode = ""
+                } label: { Text("Сканировать ещё") }
+                .buttonStyle(SanPrimaryButton())
+                .padding(.top, 4)
             }
-            .padding(16)
-            .background(Color(.systemBackground))
         }
+        .padding(24)
+        .frame(maxWidth: 340)
+        .background(panel, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .padding(.horizontal, 28)
     }
 
     // MARK: Логика
@@ -199,6 +235,32 @@ enum ScanResultUI {
             return "Штамп начислен: \(o.stamps) из \(o.goal)."
         case .error: return nil
         }
+    }
+}
+
+// MARK: - Уголки рамки сканера
+
+struct CornerBrackets: Shape {
+    var len: CGFloat = 28
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        // Верхний-левый
+        p.move(to: CGPoint(x: rect.minX, y: rect.minY + len))
+        p.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
+        p.addLine(to: CGPoint(x: rect.minX + len, y: rect.minY))
+        // Верхний-правый
+        p.move(to: CGPoint(x: rect.maxX - len, y: rect.minY))
+        p.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        p.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + len))
+        // Нижний-правый
+        p.move(to: CGPoint(x: rect.maxX, y: rect.maxY - len))
+        p.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        p.addLine(to: CGPoint(x: rect.maxX - len, y: rect.maxY))
+        // Нижний-левый
+        p.move(to: CGPoint(x: rect.minX + len, y: rect.maxY))
+        p.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        p.addLine(to: CGPoint(x: rect.minX, y: rect.maxY - len))
+        return p
     }
 }
 

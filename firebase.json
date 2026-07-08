@@ -10,6 +10,9 @@
     "public": "web",
     "appAssociation": "NONE",
     "ignore": ["firebase.json", "**/node_modules/**"],
+    "redirects": [
+      { "source": "/", "destination": "/about", "type": 302 }
+    ],
     "headers": [
       {
         "source": "/.well-known/apple-app-site-association",

@@ -57,25 +57,44 @@ enum DealStatus: String, CaseIterable, Identifiable, Codable {
 
 // MARK: - Категории заведений
 
-enum VenueCategory: String, CaseIterable, Identifiable {
-    case cafe = "Кафе"
-    case coffee = "Кофейня"
-    case fastfood = "Фастфуд"
-    case restaurant = "Ресторан"
-    case teahouse = "Чайхана"
-    case bakery = "Пекарня"
+/// Категория заведения. Раньше была `enum` из 6 значений; теперь — открытый
+/// тип (struct), чтобы категории можно было добавлять из бэкенда (админки).
+/// `rawValue` — отображаемое имя (RU), напр. «Кафе». Встроенные значения
+/// остаются как статические свойства (`.cafe`, `.coffee`…), поэтому весь
+/// существующий код (`== .cafe`, `?? .cafe`, `.rawValue`, `.icon`) работает.
+struct VenueCategory: RawRepresentable, Identifiable, Hashable {
+    let rawValue: String
+
+    init?(rawValue: String) {
+        guard !rawValue.isEmpty else { return nil }
+        self.rawValue = rawValue
+    }
 
     var id: String { rawValue }
 
+    // Встроенные категории (fallback, если бэкенд недоступен).
+    static let cafe       = VenueCategory(rawValue: "Кафе")!
+    static let coffee     = VenueCategory(rawValue: "Кофейня")!
+    static let fastfood   = VenueCategory(rawValue: "Фастфуд")!
+    static let restaurant = VenueCategory(rawValue: "Ресторан")!
+    static let teahouse   = VenueCategory(rawValue: "Чайхана")!
+    static let bakery     = VenueCategory(rawValue: "Пекарня")!
+
+    static let allCases: [VenueCategory] = [.cafe, .coffee, .fastfood, .restaurant, .teahouse, .bakery]
+
+    private static let builtinIcons: [String: String] = [
+        "Кафе": "fork.knife", "Кофейня": "cup.and.saucer.fill",
+        "Фастфуд": "takeoutbag.and.cup.and.straw.fill", "Ресторан": "wineglass.fill",
+        "Чайхана": "mug.fill", "Пекарня": "birthday.cake.fill",
+    ]
+    /// Иконки категорий из бэкенда (имя → SF Symbol). Заполняет CategoryStore.
+    static var iconRegistry: [String: String] = [:]
+    /// Код категории из бэкенда (slug → отображаемое имя). Заполняет CategoryStore.
+    static var slugRegistry: [String: String] = [:]
+
+    /// SF Symbol категории: бэкенд → встроенная карта → универсальная иконка.
     var icon: String {
-        switch self {
-        case .cafe: return "fork.knife"
-        case .coffee: return "cup.and.saucer.fill"
-        case .fastfood: return "takeoutbag.and.cup.and.straw.fill"
-        case .restaurant: return "wineglass.fill"
-        case .teahouse: return "mug.fill"
-        case .bakery: return "birthday.cake.fill"
-        }
+        VenueCategory.iconRegistry[rawValue] ?? VenueCategory.builtinIcons[rawValue] ?? "tag.fill"
     }
 }
 
@@ -355,7 +374,7 @@ struct Review: Identifiable, Hashable, Codable {
 // MARK: - Хелперы
 
 extension Color {
-    static let sanAccent = Color(red: 1.0, green: 0.30, blue: 0.16)
+    static let sanAccent = Color(hex: 0xFF5A1F)   // Ayant Refresh — яркий оранжевый акцент
 
     init(hex: UInt) {
         self.init(

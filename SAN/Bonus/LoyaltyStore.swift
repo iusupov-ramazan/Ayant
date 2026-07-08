@@ -70,11 +70,12 @@ struct LoyaltyView: View {
                     description: Text("Откройте страницу заведения с картой лояльности и покажите её QR сотруднику — за каждый визит штамп, а на финише награда."))
             } else {
                 ScrollView {
-                    VStack(spacing: 14) {
+                    VStack(spacing: 16) {
                         ForEach(loyalty.cards) { LoyaltyCardView(card: $0, userID: loyalty.userID) }
                     }
                     .padding(16)
                 }
+                .sanScreenBackground()
             }
         }
         .navigationTitle("Карты лояльности")
@@ -94,64 +95,70 @@ struct LoyaltyCardView: View {
     private var canScan: Bool { !userID.isEmpty }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top) {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .center, spacing: 12) {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(.white.opacity(0.92))
+                    .frame(width: 46, height: 46)
+                    .overlay(
+                        Text(String(card.venueName.prefix(1)).uppercased())
+                            .font(.golos(20, .heavy)).foregroundStyle(Color.sanAccentDeep))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(card.venueName).font(.headline).foregroundStyle(.white)
+                    Text(card.venueName).font(.golos(20, .heavy)).foregroundStyle(.white)
+                        .lineLimit(1).minimumScaleFactor(0.7)
                     Text("Награда: \(card.reward)")
-                        .font(.caption).foregroundStyle(.white.opacity(0.9))
+                        .font(.golos(13, .medium)).foregroundStyle(.white.opacity(0.92))
+                        .lineLimit(1).minimumScaleFactor(0.8)
                 }
-                Spacer()
+                Spacer(minLength: 4)
                 Text("\(card.stamps)/\(card.goal)")
-                    .font(.caption.weight(.bold)).foregroundStyle(.white)
-                    .padding(.horizontal, 9).padding(.vertical, 4)
-                    .background(.white.opacity(0.25), in: Capsule())
+                    .font(.golos(14, .bold)).foregroundStyle(.white)
+                    .padding(.horizontal, 11).padding(.vertical, 5)
+                    .background(.black.opacity(0.22), in: Capsule())
             }
             stampGrid
             if card.completedRounds > 0 {
                 Label("Наград получено: \(card.completedRounds)", systemImage: "gift.fill")
-                    .font(.caption2.weight(.semibold)).foregroundStyle(.white)
+                    .font(.golos(12, .semibold)).foregroundStyle(.white)
             }
             if showQR && canScan {
                 VStack(spacing: 8) {
                     QRCodeView(text: loyaltyCode, size: 168)
-                        .padding(12).background(.white, in: RoundedRectangle(cornerRadius: 14))
+                        .padding(12).background(.white, in: RoundedRectangle(cornerRadius: 16))
                     Text("Покажите сотруднику — он отсканирует для штампа")
-                        .font(.caption2).foregroundStyle(.white.opacity(0.9))
+                        .font(.golos(12, .medium)).foregroundStyle(.white.opacity(0.92))
                         .multilineTextAlignment(.center)
                 }
                 .frame(maxWidth: .infinity)
             }
-            HStack(spacing: 10) {
-                Button { showQR.toggle() } label: {
+            HStack(spacing: 12) {
+                Button { withAnimation(.snappy) { showQR.toggle() } } label: {
                     Label(showQR ? "Скрыть QR" : "Показать QR", systemImage: "qrcode")
-                        .font(.subheadline.weight(.semibold))
-                        .frame(maxWidth: .infinity).padding(.vertical, 11)
-                        .background(.white.opacity(0.22), in: RoundedRectangle(cornerRadius: 12))
-                        .foregroundStyle(.white)
+                        .font(.golos(15, .bold)).foregroundStyle(Color.sanAccentDeep)
+                        .frame(maxWidth: .infinity).padding(.vertical, 13)
+                        .background(.white.opacity(0.92), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
                 .buttonStyle(.plain).disabled(!canScan)
                 Button {
                     WalletService.addLoyaltyPass(card, userID: userID) { walletError = $0 }
                 } label: {
-                    Label("Wallet", systemImage: "wallet.pass")
-                        .font(.subheadline.weight(.semibold))
-                        .frame(maxWidth: .infinity).padding(.vertical, 11)
-                        .background(.black, in: RoundedRectangle(cornerRadius: 12))
-                        .foregroundStyle(.white)
+                    Label("Wallet", systemImage: "wallet.pass.fill")
+                        .font(.golos(15, .bold)).foregroundStyle(.white)
+                        .frame(maxWidth: .infinity).padding(.vertical, 13)
+                        .background(Color(hex: 0x1C1C1E), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
                 .buttonStyle(.plain).disabled(!canScan)
             }
             if !canScan {
                 Text("Войдите в аккаунт, чтобы копить штампы.")
-                    .font(.caption2).foregroundStyle(.white.opacity(0.9))
+                    .font(.golos(12, .medium)).foregroundStyle(.white.opacity(0.92))
             }
         }
-        .padding(18)
+        .padding(20)
         .background(
-            LinearGradient(colors: [Color(hex: 0xFF4D29), Color(hex: 0xFFB300)],
-                           startPoint: .topLeading, endPoint: .bottomTrailing),
-            in: RoundedRectangle(cornerRadius: 20))
+            LinearGradient.sanAccentGradient,
+            in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .shadow(color: Color.sanAccent.opacity(0.28), radius: 22, y: 12)
         .alert("Apple Wallet", isPresented: Binding(
             get: { walletError != nil }, set: { if !$0 { walletError = nil } })) {
             Button("Понятно", role: .cancel) {}
@@ -160,18 +167,25 @@ struct LoyaltyCardView: View {
 
     private var stampGrid: some View {
         let cols = min(max(card.goal, 1), 6)
-        return LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: cols), spacing: 8) {
+        return LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: cols), spacing: 10) {
             ForEach(0..<card.goal, id: \.self) { i in
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(i < card.stamps ? Color.white : Color.white.opacity(0.18))
+                let filled = i < card.stamps
+                let isLast = i == card.goal - 1
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(filled ? Color.white : Color.white.opacity(0.12))
                     .aspectRatio(1, contentMode: .fit)
                     .overlay {
-                        if i < card.stamps {
-                            Image(systemName: "checkmark").font(.headline.weight(.black))
-                                .foregroundStyle(Color(hex: 0xE8531F))
+                        if filled {
+                            Image(systemName: "checkmark").font(.system(size: 18, weight: .heavy))
+                                .foregroundStyle(Color.sanAccentDeep)
                         } else {
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .stroke(.white.opacity(0.55), lineWidth: 1.5)
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [4, 4]))
+                                .foregroundStyle(.white.opacity(0.6))
+                            if isLast {
+                                Image(systemName: "gift.fill").font(.system(size: 16, weight: .semibold))
+                                    .foregroundStyle(.white.opacity(0.85))
+                            }
                         }
                     }
             }
@@ -183,26 +197,36 @@ struct LoyaltyCardView: View {
 struct VenueLoyaltyScreen: View {
     let venue: Venue
     @EnvironmentObject private var loyalty: LoyaltyStore
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack {
+                    SanCircleButton(systemName: "chevron.left") { dismiss() }
+                    Spacer()
+                    Text("Карта лояльности").font(.golos(20, .bold)).foregroundStyle(Color.sanInk)
+                    Spacer()
+                    Color.clear.frame(width: 44, height: 44)
+                }
                 let card = loyalty.cardOrNew(venueID: venue.id, venueName: venue.name,
                                              goal: venue.loyaltyGoal, reward: venue.loyaltyReward)
                 LoyaltyCardView(card: card, userID: loyalty.userID)
-                VStack(alignment: .leading, spacing: 6) {
-                    Label("Как это работает", systemImage: "info.circle").font(.subheadline.weight(.semibold))
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("Как это работает", systemImage: "info.circle")
+                        .font(.golos(17, .bold)).foregroundStyle(Color.sanInk)
                     Text("Показывайте QR карты сотруднику при каждом визите — он сканирует его, и вам засчитывается штамп. Соберите \(venue.loyaltyGoal) штампов и получите «\(venue.loyaltyReward)».")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.golos(15, .regular)).foregroundStyle(Color.sanInkSoft)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(14)
+                .padding(16)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 14))
+                .sanCard(padding: 0)
             }
             .padding(16)
         }
-        .navigationTitle("Карта лояльности")
-        .navigationBarTitleDisplayMode(.inline)
+        .sanScreenBackground()
+        .toolbar(.hidden, for: .navigationBar)
     }
 }
 

@@ -4,6 +4,7 @@ import SwiftUI
 struct HomeFeedView: View {
     @EnvironmentObject private var store: AppStore
     @EnvironmentObject private var location: LocationManager
+    @ObservedObject private var catStore = CategoryStore.shared
     @State private var category: VenueCategory?
     @State private var path = NavigationPath()
     @State private var visibleCount = 8       // пагинация ленты
@@ -28,6 +29,7 @@ struct HomeFeedView: View {
                 }
                 .padding(.vertical, 10)
             }
+            .background(Color.sanCanvas.ignoresSafeArea())
             .refreshable { await store.load() }
             .navigationTitle("Ayant · \(store.selectedCity.name)")
             .navigationBarTitleDisplayMode(.inline)
@@ -45,7 +47,7 @@ struct HomeFeedView: View {
             HStack(spacing: 18) {
                 CategoryStoryCircle(label: "Все", icon: "square.grid.2x2.fill",
                                     color: .orange, isOn: category == nil) { category = nil }
-                ForEach(VenueCategory.allCases) { cat in
+                ForEach(catStore.categories) { cat in
                     CategoryStoryCircle(label: cat.rawValue, icon: cat.icon,
                                         color: .sanAccent, isOn: category == cat) {
                         category = (category == cat) ? nil : cat

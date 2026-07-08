@@ -1,0 +1,6 @@
+# Cloudflare Pages headers.
+# Apple Universal Links file must be served as JSON, no redirects, root-accessible.
+/.well-known/apple-app-site-association
+  Content-Type: application/json
+  Access-Control-Allow-Origin: *
+  Cache-Control: no-cache

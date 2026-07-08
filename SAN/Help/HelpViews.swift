@@ -78,7 +78,9 @@ struct FAQView: View {
                     Text(LocalizedStringKey(item.1)).font(.subheadline).foregroundStyle(.secondary)
                         .padding(.vertical, 4)
                 } label: {
-                    Text("❓ ") + Text(LocalizedStringKey(item.0))
+                    // Нельзя интерполировать LocalizedStringKey в строковый литерал —
+                    // тогда SwiftUI печатает «LocalizedStringKey(...)». Склеиваем через Text +.
+                    (Text(verbatim: "❓ ") + Text(LocalizedStringKey(item.0)))
                         .font(.subheadline.weight(.medium))
                 }
             }

@@ -41,6 +41,7 @@ struct HostOnboardingView: View {
     @State private var category: VenueCategory = .cafe
     @State private var phone = ""
     @State private var email = ""
+    @ObservedObject private var catStore = CategoryStore.shared
     // Шаг 2
     @State private var showVenueForm = false
 
@@ -49,6 +50,7 @@ struct HostOnboardingView: View {
             Group {
                 if step == 0 { basics } else { firstVenue }
             }
+            .sanFormBackground()
             .navigationTitle("Режим заведения")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -70,7 +72,7 @@ struct HostOnboardingView: View {
             Section("Бизнес") {
                 TextField("Название бизнеса", text: $businessName)
                 Picker("Категория", selection: $category) {
-                    ForEach(VenueCategory.allCases) { Text($0.locKey).tag($0) }
+                    ForEach(catStore.categories) { Text($0.locKey).tag($0) }
                 }
                 TextField("Контактный телефон", text: $phone).keyboardType(.phonePad)
                 TextField("Email", text: $email).keyboardType(.emailAddress)

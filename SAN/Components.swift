@@ -155,12 +155,13 @@ struct DealCard: View {
             .buttonStyle(.plain)
             actions
         }
-        .background(isAd ? Color.sanAccent.opacity(0.06) : Color(.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: isAd ? 22 : 20))
-        .overlay(RoundedRectangle(cornerRadius: isAd ? 22 : 20)
-            .stroke(isAd ? Color.sanAccent : Color(.systemGray5), lineWidth: isAd ? 2 : 1))
-        .shadow(color: isAd ? Color.sanAccent.opacity(0.18) : .black.opacity(0.04),
-                radius: isAd ? 12 : 6, y: isAd ? 5 : 3)
+        .background(isAd ? Color.sanAccent.opacity(0.06) : Color.sanSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
+            .strokeBorder(isAd ? Color.sanAccent.opacity(0.6) : Color.sanHairline,
+                          lineWidth: isAd ? 1.5 : 0.5))
+        .shadow(color: isAd ? Color.sanAccent.opacity(0.16) : .black.opacity(0.05),
+                radius: isAd ? 16 : 14, y: isAd ? 6 : 8)
         .padding(.vertical, isAd ? 4 : 0)
         .alert("Войдите в аккаунт", isPresented: $showGuestAlert) {
             Button("Понятно", role: .cancel) {}
@@ -493,12 +494,13 @@ struct VenueCard: View {
             cover
             info
         }
-        .background(isSponsored ? Color.sanAccent.opacity(0.06) : Color(.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 20))
-        .overlay(RoundedRectangle(cornerRadius: 20)
-            .stroke(isSponsored ? Color.sanAccent : Color(.systemGray5), lineWidth: isSponsored ? 2 : 1))
-        .shadow(color: isSponsored ? Color.sanAccent.opacity(0.18) : .black.opacity(0.05),
-                radius: isSponsored ? 10 : 7, y: 3)
+        .background(isSponsored ? Color.sanAccent.opacity(0.06) : Color.sanSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
+            .strokeBorder(isSponsored ? Color.sanAccent.opacity(0.6) : Color.sanHairline,
+                          lineWidth: isSponsored ? 1.5 : 0.5))
+        .shadow(color: isSponsored ? Color.sanAccent.opacity(0.16) : .black.opacity(0.05),
+                radius: isSponsored ? 16 : 14, y: 8)
         .alert("Войдите в аккаунт", isPresented: $showGuestAlert) {
             Button("Понятно", role: .cancel) {}
         } message: {
@@ -563,7 +565,7 @@ struct VenueCard: View {
                 Spacer()
                 Text(venue.isOpenNow ? "Открыто" : "Закрыто")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(venue.isOpenNow ? .green : .secondary)
+                    .foregroundStyle(venue.isOpenNow ? Color.sanOpen : Color.sanInkSoft)
             }
             HStack(spacing: 6) {
                 StarRatingView(rating: agg.rating, count: agg.count)
@@ -621,30 +623,32 @@ struct AdPlaceholderCard: View {
     }
 }
 
-// MARK: - Категория-сторис (круглая иконка как в Instagram)
+// MARK: - Категория — скруглённая плитка (Ayant Refresh)
 
 struct CategoryStoryCircle: View {
     let label: String
     let icon: String
-    let color: Color
+    var color: Color = .sanAccent   // не используется в рефреше, оставлено для совместимости
     let isOn: Bool
     var action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 6) {
-                ZStack {
-                    Circle()
-                        .strokeBorder(
-                            isOn
-                            ? AnyShapeStyle(LinearGradient(colors: [color, .yellow],
-                                                           startPoint: .topLeading, endPoint: .bottomTrailing))
-                            : AnyShapeStyle(Color(.systemGray4)),
-                            lineWidth: 2.5)
-                        .frame(width: 64, height: 64)
-                    Image(systemName: icon).font(.title3).foregroundStyle(color)
-                }
-                Text(L(label)).font(.caption2).foregroundStyle(isOn ? .primary : .secondary)
+            VStack(spacing: 7) {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(isOn ? AnyShapeStyle(LinearGradient(
+                                    colors: [Color.sanAccent, Color.sanAccentDeep],
+                                    startPoint: .topLeading, endPoint: .bottomTrailing))
+                               : AnyShapeStyle(Color.sanSurfaceMuted))
+                    .frame(width: 60, height: 60)
+                    .overlay(
+                        Image(systemName: icon)
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(isOn ? .white : Color.sanInkSoft))
+                    .shadow(color: isOn ? Color.sanAccent.opacity(0.25) : .clear, radius: 8, y: 4)
+                Text(L(label))
+                    .font(.caption2.weight(isOn ? .semibold : .regular))
+                    .foregroundStyle(isOn ? Color.sanInk : Color.sanInkSoft)
             }
         }
         .buttonStyle(.plain)

@@ -5,62 +5,51 @@ import MapKit
 
 struct HostVenuesView: View {
     @EnvironmentObject private var host: HostStore
+    @EnvironmentObject private var store: AppStore
     @State private var showAddVenue = false
     @State private var showScanner = false
     @State private var venueToDelete: HostVenueDTO?
+    @State private var editingVenue: HostVenueDTO?
+    @State private var addDealTarget: AddDealTarget?
+    @State private var statsTarget: VenueStatsTarget?
+    @State private var viewsTotal = 0
+
+    private var activeDeals: Int {
+        host.venueDTOs.reduce(0) { $0 + host.deals(forVenue: $1.id).filter { $0.status == .active }.count }
+    }
 
     var body: some View {
         NavigationStack {
-            Group {
-                if host.venueDTOs.isEmpty {
-                    ContentUnavailableView {
-                        Label("У вас пока нет заведений", systemImage: "storefront")
-                    } description: {
-                        Text("Добавьте первое заведение, чтобы начать привлекать гостей.")
-                    } actions: {
-                        Button("+ Добавить заведение") { showAddVenue = true }
-                            .buttonStyle(.borderedProminent).tint(.sanAccent)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    topBar
+                    SanScreenTitle("Мои заведения")
+                    if host.venueDTOs.isEmpty {
+                        emptyState
+                    } else {
+                        statsRow
+                        ForEach(host.venueDTOs) { v in venueCard(v) }
                     }
-                } else {
-                    List {
-                        ForEach(host.venueDTOs) { v in
-                            NavigationLink(value: v.id) { venueRow(v) }
-                                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                    Button(role: .destructive) { venueToDelete = v } label: {
-                                        Label("Удалить", systemImage: "trash")
-                                    }
-                                }
-                        }
-                    }
-                    .listStyle(.plain)
                 }
+                .padding(.horizontal, 16)
+                .padding(.top, 4)
+                .padding(.bottom, 28)
             }
-            .navigationTitle("Мои заведения")
+            .sanScreenBackground()
+            .toolbar(.hidden, for: .navigationBar)
             .refreshable { await host.sync() }
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    if !host.venueDTOs.isEmpty {
-                        Button { showScanner = true } label: {
-                            Image(systemName: "qrcode.viewfinder")
-                        }
-                    }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { showAddVenue = true } label: { Image(systemName: "plus") }
-                }
-            }
+            .task(id: host.venueDTOs.count) { await loadViews() }
             .navigationDestination(for: String.self) { id in
                 if let dto = host.venueDTO(id: id) { HostVenueDetailView(venueID: dto.id) }
             }
             .navigationDestination(for: HostPromoteTarget.self) {
                 HostPromoteCreateView(venueID: $0.venueID)
             }
-            .sheet(isPresented: $showAddVenue) {
-                HostVenueFormView(existing: nil)
-            }
-            .sheet(isPresented: $showScanner) {
-                HostScannerView().environmentObject(host)
-            }
+            .sheet(isPresented: $showAddVenue) { HostVenueFormView(existing: nil) }
+            .sheet(isPresented: $showScanner) { HostScannerView().environmentObject(host) }
+            .sheet(item: $editingVenue) { HostVenueFormView(existing: $0) }
+            .sheet(item: $addDealTarget) { HostDealFormView(venueID: $0.venueID, existing: nil) }
+            .sheet(item: $statsTarget) { HostVenueStatsSheet(venueID: $0.venueID) }
             .alert("Удалить заведение?", isPresented: Binding(
                 get: { venueToDelete != nil },
                 set: { if !$0 { venueToDelete = nil } }
@@ -73,35 +62,183 @@ struct HostVenuesView: View {
         }
     }
 
-    private func venueRow(_ v: HostVenueDTO) -> some View {
-        HStack(spacing: 12) {
-            VenuePhoto(urlString: v.imageURL)
-                .frame(width: 52, height: 52)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 5) {
-                    Text(v.name).font(.subheadline.weight(.semibold))
-                    if v.isVerified { Image(systemName: "checkmark.seal.fill").font(.caption2).foregroundStyle(.blue) }
-                }
-                Text("\(v.category.rawValue) · \(v.district)").font(.caption).foregroundStyle(.secondary)
-                let active = host.deals(forVenue: v.id).filter { $0.status == .active }.count
-                Text("\(active) активных предложений").font(.caption2).foregroundStyle(.secondary)
+    // MARK: Верхняя панель
+
+    private var topBar: some View {
+        HStack {
+            if !host.venueDTOs.isEmpty {
+                SanCircleButton(systemName: "qrcode.viewfinder") { showScanner = true }
             }
             Spacer()
-            VStack(alignment: .trailing, spacing: 3) {
-                Text(L(v.moderation.title))
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(v.moderation.color)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                if v.moderation == .approved {
-                    Text(v.isPaused ? "На паузе" : "Активно")
-                        .font(.system(size: 10))
-                        .foregroundStyle(v.isPaused ? .orange : .secondary)
-                        .lineLimit(1)
-                }
-            }
+            SanCircleButton(systemName: "plus", filled: true) { showAddVenue = true }
         }
+    }
+
+    // MARK: Статистика
+
+    private var statsRow: some View {
+        HStack(spacing: 12) {
+            SanStatCard(value: "\(host.venueDTOs.count)", label: Self.venuePlural(host.venueDTOs.count))
+            SanStatCard(value: "\(activeDeals)", label: "Активных акций")
+            SanStatCard(value: "\(viewsTotal)", label: "Просмотров", accent: true)
+        }
+    }
+
+    // MARK: Пусто
+
+    private var emptyState: some View {
+        VStack(spacing: 14) {
+            SanIconTile(systemName: "storefront.fill", filled: true, size: 64)
+            Text("У вас пока нет заведений").font(.golos(18, .bold)).foregroundStyle(Color.sanInk)
+            Text("Добавьте первое заведение, чтобы начать привлекать гостей.")
+                .font(.golos(15, .regular)).foregroundStyle(Color.sanInkSoft)
+                .multilineTextAlignment(.center)
+            Button { showAddVenue = true } label: { Text("Добавить заведение") }
+                .buttonStyle(SanPrimaryButton())
+                .padding(.top, 4)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(24)
+        .padding(.top, 40)
+    }
+
+    // MARK: Карточка заведения
+
+    private func venueCard(_ v: HostVenueDTO) -> some View {
+        VStack(spacing: 0) {
+            NavigationLink(value: v.id) {
+                HStack(alignment: .top, spacing: 12) {
+                    VenuePhoto(urlString: v.imageURL)
+                        .frame(width: 54, height: 54)
+                        .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 5) {
+                            Text(v.name).font(.golos(17, .bold)).foregroundStyle(Color.sanInk)
+                            if v.isVerified {
+                                Image(systemName: "checkmark.seal.fill").font(.system(size: 12))
+                                    .foregroundStyle(.blue)
+                            }
+                        }
+                        Text("\(v.category.rawValue) · \(v.district)")
+                            .font(.golos(13, .medium)).foregroundStyle(Color.sanInkSoft)
+                        let active = host.deals(forVenue: v.id).filter { $0.status == .active }.count
+                        Text("\(active) активных предложений")
+                            .font(.golos(13, .medium)).foregroundStyle(Color.sanInkSoft)
+                    }
+                    Spacer(minLength: 6)
+                    VStack(alignment: .trailing, spacing: 8) {
+                        statusPill(v)
+                        Image(systemName: "chevron.right").font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Color.sanInkSoft)
+                    }
+                }
+                .padding(14)
+            }
+            .buttonStyle(.plain)
+            .contextMenu {
+                Button(role: .destructive) { venueToDelete = v } label: { Label("Удалить", systemImage: "trash") }
+            }
+            SanHairline(leading: 14)
+            HStack(spacing: 10) {
+                Button { addDealTarget = AddDealTarget(venueID: v.id) } label: { Text("+ Акция") }
+                    .buttonStyle(SanPillButton(accent: true))
+                Button { statsTarget = VenueStatsTarget(venueID: v.id) } label: { Text("Аналитика") }
+                    .buttonStyle(SanPillButton())
+                Button { editingVenue = v } label: { Text("Изменить") }
+                    .buttonStyle(SanPillButton())
+            }
+            .padding(12)
+        }
+        .sanGroupCard()
+    }
+
+    private func statusPill(_ v: HostVenueDTO) -> some View {
+        HStack(spacing: 5) {
+            Circle().fill(v.moderation.color).frame(width: 6, height: 6)
+            Text(L(v.moderation.title))
+                .font(.golos(12, .bold)).foregroundStyle(v.moderation.color)
+                .lineLimit(1).minimumScaleFactor(0.8)
+        }
+        .padding(.horizontal, 9).padding(.vertical, 5)
+        .background(v.moderation.color.opacity(0.14), in: Capsule())
+    }
+
+    private func loadViews() async {
+        var total = 0
+        for v in host.venueDTOs {
+            total += await store.analyticsStats(venueID: v.id, days: 30)[AnalyticsMetric.views] ?? 0
+        }
+        viewsTotal = total
+    }
+
+    private static func venuePlural(_ n: Int) -> String {
+        let n10 = n % 10, n100 = n % 100
+        if n10 == 1 && n100 != 11 { return "Заведение" }
+        if (2...4).contains(n10) && !(12...14).contains(n100) { return "Заведения" }
+        return "Заведений"
+    }
+}
+
+/// Обёртки для .sheet(item:).
+struct AddDealTarget: Identifiable { var id: String { venueID }; let venueID: String }
+struct VenueStatsTarget: Identifiable { var id: String { venueID }; let venueID: String }
+
+// MARK: - Быстрая аналитика заведения (лист «Аналитика» на карточке)
+
+struct HostVenueStatsSheet: View {
+    let venueID: String
+    @EnvironmentObject private var host: HostStore
+    @EnvironmentObject private var store: AppStore
+    @Environment(\.dismiss) private var dismiss
+    @State private var period = 30
+    @State private var stats: [String: Int] = [:]
+    @State private var loading = false
+
+    private let days = [7, 30, 90]
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Picker("Период", selection: $period) {
+                        ForEach(days, id: \.self) { Text("\($0)д").tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    if loading { ProgressView().frame(maxWidth: .infinity) }
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 2), spacing: 12) {
+                        metric("Просмотры", AnalyticsMetric.views, "eye.fill")
+                        metric("Погашено купонов", AnalyticsMetric.redemptions, "checkmark.seal.fill")
+                        metric("Клики по акциям", AnalyticsMetric.dealTaps, "hand.tap.fill")
+                        metric("Сохранения", AnalyticsMetric.saves, "bookmark.fill")
+                        metric("Звонки", AnalyticsMetric.calls, "phone.fill")
+                        metric("Маршруты", AnalyticsMetric.maps, "map.fill")
+                    }
+                }
+                .padding(16)
+            }
+            .sanScreenBackground()
+            .navigationTitle(host.venueDTO(id: venueID)?.name ?? "Аналитика")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Готово") { dismiss() } } }
+            .task(id: period) { await load() }
+        }
+    }
+
+    private func metric(_ title: String, _ key: String, _ icon: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SanIconTile(systemName: icon, size: 36)
+            Text("\(stats[key] ?? 0)").font(.golos(26, .heavy)).foregroundStyle(Color.sanInk)
+            Text(title).font(.golos(13, .medium)).foregroundStyle(Color.sanInkSoft)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .sanCard(padding: 0)
+    }
+
+    private func load() async {
+        loading = true
+        stats = await store.analyticsStats(venueID: venueID, days: period)
+        loading = false
     }
 }
 
@@ -132,6 +269,7 @@ struct HostVenueDetailView: View {
                 .padding(.bottom, 28)
             }
         }
+        .sanScreenBackground()
         .navigationTitle(dto?.name ?? "Заведение")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { special = dto?.todaySpecial ?? "" }
@@ -152,7 +290,7 @@ struct HostVenueDetailView: View {
                 .frame(height: 130).clipShape(RoundedRectangle(cornerRadius: 16))
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(v.name).font(.headline)
+                    Text(v.name).font(.golos(18, .bold))
                     Text("\(v.category.rawValue) · \(v.district)").font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -187,7 +325,7 @@ struct HostVenueDetailView: View {
     private func itemsSection(_ v: HostVenueDTO) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Объекты для отзывов").font(.headline)
+                Text("Объекты для отзывов").font(.golos(18, .bold))
                 Spacer()
                 Button { activeSheet = .addItem } label: { Label("Добавить", systemImage: "plus") }
                     .font(.caption.weight(.semibold))
@@ -211,7 +349,7 @@ struct HostVenueDetailView: View {
                         .buttonStyle(.plain)
                     }
                     .padding(10)
-                    .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
+                    .background(Color.sanSurfaceMuted, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
             }
         }
@@ -238,7 +376,7 @@ struct HostVenueDetailView: View {
     private func dealsSection(_ v: HostVenueDTO) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Предложения").font(.headline)
+                Text("Предложения").font(.golos(18, .bold))
                 Spacer()
                 Button { activeSheet = .addDeal } label: { Label("Добавить", systemImage: "plus") }
                     .font(.caption.weight(.semibold))
@@ -309,9 +447,9 @@ struct HostVenueDetailView: View {
                     .font(.caption.weight(.semibold))
             }
         }
-        .padding(14)
+        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 14))
+        .sanCard(padding: 0)
         .padding(.horizontal, 16)
     }
 
@@ -319,28 +457,23 @@ struct HostVenueDetailView: View {
         VStack(spacing: 10) {
             Button { activeSheet = .scanCoupons } label: {
                 Label("Сканировать купоны гостей", systemImage: "qrcode.viewfinder")
-                    .frame(maxWidth: .infinity).padding(.vertical, 12)
-                    .background(Color.sanAccent, in: RoundedRectangle(cornerRadius: 12))
-                    .foregroundStyle(.white)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(SanPrimaryButton())
             Button { activeSheet = .editVenue } label: {
                 Label("Изменить данные заведения", systemImage: "pencil")
-                    .frame(maxWidth: .infinity).padding(.vertical, 12)
-                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(SanPillButton())
             NavigationLink(value: HostPromoteTarget(venueID: v.id)) {
                 Label("Продвигать это заведение", systemImage: "megaphone.fill")
-                    .frame(maxWidth: .infinity).padding(.vertical, 12)
-                    .background(Color.sanAccent.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
-                    .foregroundStyle(Color.sanAccent)
+                    .font(.golos(15, .semibold)).foregroundStyle(Color.sanAccent)
+                    .frame(maxWidth: .infinity).padding(.vertical, 14)
+                    .background(Color.sanAccent.opacity(0.12), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
             Button(role: .destructive) { showDeleteConfirm = true } label: {
                 Label("Удалить заведение", systemImage: "trash")
-                    .frame(maxWidth: .infinity).padding(.vertical, 12)
-                    .background(Color.red.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
-                    .foregroundStyle(.red)
+                    .font(.golos(15, .semibold)).foregroundStyle(.red)
+                    .frame(maxWidth: .infinity).padding(.vertical, 14)
+                    .background(Color.red.opacity(0.1), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
             .buttonStyle(.plain)
             .alert("Удалить заведение?", isPresented: $showDeleteConfirm) {
@@ -407,6 +540,7 @@ struct HostItemFormView: View {
                     ImagePickerField(imageURL: $imageURL)
                 }
             }
+            .sanFormBackground()
             .navigationTitle("Новый объект")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -429,6 +563,7 @@ struct HostItemFormView: View {
 struct HostVenueFormView: View {
     let existing: HostVenueDTO?
     @EnvironmentObject private var host: HostStore
+    @ObservedObject private var catStore = CategoryStore.shared
     @Environment(\.dismiss) private var dismiss
 
     @State private var name: String
@@ -487,7 +622,7 @@ struct HostVenueFormView: View {
                 Section("Основное") {
                     TextField("Название", text: $name)
                     Picker("Категория", selection: $category) {
-                        ForEach(VenueCategory.allCases) { Text($0.locKey).tag($0) }
+                        ForEach(catStore.categories) { Text($0.locKey).tag($0) }
                     }
                     TextField("Эмодзи", text: $emoji)
                     TextField("Район", text: $district)
@@ -503,12 +638,21 @@ struct HostVenueFormView: View {
                         .font(.caption2).foregroundStyle(.secondary)
                 }
                 Section("Соцсети") {
-                    TextField("WhatsApp (номер, напр. 996700123456)", text: $whatsapp)
-                        .keyboardType(.phonePad)
-                    TextField("Instagram (ник или ссылка)", text: $instagram)
-                        .autocapitalization(.none)
-                    TextField("Telegram (ник или ссылка)", text: $telegram)
-                        .autocapitalization(.none)
+                    HStack(spacing: 12) {
+                        brandTile("phone.fill", Color(hex: 0x25D366))
+                        TextField("WhatsApp (номер, напр. 996700123456)", text: $whatsapp)
+                            .keyboardType(.phonePad)
+                    }
+                    HStack(spacing: 12) {
+                        brandTile("camera.fill", Color(hex: 0xE1306C))
+                        TextField("Instagram (ник или ссылка)", text: $instagram)
+                            .autocapitalization(.none)
+                    }
+                    HStack(spacing: 12) {
+                        brandTile("paperplane.fill", Color(hex: 0x2AABEE))
+                        TextField("Telegram (ник или ссылка)", text: $telegram)
+                            .autocapitalization(.none)
+                    }
                 }
                 Section {
                     Toggle("Принимать купоны", isOn: $couponsEnabled.animation())
@@ -605,6 +749,7 @@ struct HostVenueFormView: View {
                     .font(.caption)
                 }
             }
+            .sanFormBackground()
             .navigationTitle(existing == nil ? "Новое заведение" : "Изменить заведение")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -623,6 +768,14 @@ struct HostVenueFormView: View {
                 HostBranchFormView { branches.append($0) }
             }
         }
+    }
+
+    /// Плитка-иконка соцсети с брендовым цветом.
+    private func brandTile(_ systemName: String, _ color: Color) -> some View {
+        RoundedRectangle(cornerRadius: 11, style: .continuous)
+            .fill(color)
+            .frame(width: 34, height: 34)
+            .overlay(Image(systemName: systemName).font(.system(size: 15, weight: .semibold)).foregroundStyle(.white))
     }
 
     /// Биндинг «минуты ↔ Date» для DatePicker часов работы.
@@ -739,6 +892,7 @@ struct HostBranchFormView: View {
                     }
                 }
             }
+            .sanFormBackground()
             .navigationTitle("Новый филиал")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -838,6 +992,7 @@ struct HostDealFormView: View {
                     Toggle("Сохранить как черновик", isOn: $isDraft)
                 }
             }
+            .sanFormBackground()
             .navigationTitle(existing == nil ? "Новое предложение" : "Изменить предложение")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

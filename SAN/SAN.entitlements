@@ -10,7 +10,9 @@
 	</array>
 	<key>com.apple.developer.associated-domains</key>
 	<array>
-		<string>applinks:san-25d32.web.app?mode=developer</string>
+		<string>applinks:ayant.kg</string>
+			<string>applinks:www.ayant.kg</string>
+			<string>applinks:san-25d32.web.app?mode=developer</string>
 		<string>applinks:san-25d32.firebaseapp.com?mode=developer</string>
 	</array>
 </dict>
