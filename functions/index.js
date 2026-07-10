@@ -36,6 +36,10 @@ const WEEKLY_CAP = capFromEnv(process.env.PUSH_WEEKLY_CAP, 3);
 // Награды за рефералку (бонусы).
 const REFERRAL_REWARD = 100;
 
+// Метрики телеметрии, которые клиент может логировать (redemptions — только через
+// countRedemption, клиенту недоступна). Всё, что вне списка, отбрасывается.
+const ANALYTICS_METRICS = ["views", "saves", "calls", "maps", "dealTaps"];
+
 function dayKey(d = new Date()) {
   return d.toISOString().slice(0, 10); // yyyy-MM-dd (UTC) — как в приложении
 }
@@ -178,6 +182,28 @@ exports.countRedemption = onDocumentCreated("redemptions/{id}", async (event) =>
 
   await snap.ref.set({ status: "counted", countedAt: new Date() }, { merge: true });
   console.log(`🎟️ redemption counted: venue=${venueID} deal=${r.dealID}`);
+});
+
+/* ───────────────────────────────────────────────────────────────────────────
+ * 3b) Телеметрия заведений → серверный авторитетный счётчик (analytics).
+ *     Клиент пишет analyticsEvents/{id} = { venueID, metric }; правила запрещают
+ *     ему писать в analytics/* напрямую. Здесь инкрементируем нужную метрику и
+ *     удаляем событие-триггер (документы не копятся). Метрика вне белого списка
+ *     (в т.ч. "redemptions") игнорируется — счётчики нельзя подделать.
+ * ─────────────────────────────────────────────────────────────────────────── */
+exports.countAnalyticsEvent = onDocumentCreated("analyticsEvents/{id}", async (event) => {
+  const snap = event.data;
+  if (!snap) return;
+  const e = snap.data() || {};
+  const venueID = String(e.venueID || "");
+  const metric = String(e.metric || "");
+  if (venueID && ANALYTICS_METRICS.includes(metric)) {
+    const day = dayKey();
+    await db.collection("analytics").doc(venueID)
+      .collection("days").doc(day)
+      .set({ [metric]: FieldValue.increment(1), date: day }, { merge: true });
+  }
+  await snap.ref.delete().catch(() => {}); // событие обработано — чистим
 });
 
 /* ───────────────────────────────────────────────────────────────────────────

@@ -360,31 +360,8 @@ final class HostStore: ObservableObject {
     }
 
     // MARK: Заведения
-
-    @discardableResult
-    func addVenue(name: String, category: VenueCategory, district: String, address: String,
-                  phone: String, emoji: String, latitude: Double, longitude: Double,
-                  openHour: Int, closeHour: Int, imageURL: String = "",
-                  weekHours: [DayHours] = Venue.defaultWeek(), pdfMenuURL: String = "",
-                  whatsapp: String = "", instagram: String = "", telegram: String = "",
-                  branches: [Branch] = []) -> HostVenueDTO {
-        var dto = HostVenueDTO(
-            id: "hv_\(UUID().uuidString.prefix(8))", name: name, categoryRaw: category.rawValue,
-            district: district, address: address, phone: phone, emoji: emoji,
-            latitude: latitude, longitude: longitude, openHour: openHour, closeHour: closeHour,
-            todaySpecial: nil, isPaused: false, isVerified: false)
-        dto.imageURL = imageURL
-        dto.weekHours = weekHours
-        dto.pdfMenuURL = pdfMenuURL
-        dto.whatsapp = whatsapp
-        dto.instagram = instagram
-        dto.telegram = telegram
-        dto.branches = branches
-        venueDTOs.append(dto)
-        persistVenues()
-        remoteSaveVenue(dto)
-        return dto
-    }
+    // Создание/правка заведения из формы — единая точка `saveVenueForm` ниже
+    // (сборка DTO живёт в сторе, не во вью).
 
     func updateVenue(_ dto: HostVenueDTO) {
         if let i = venueDTOs.firstIndex(where: { $0.id == dto.id }) { venueDTOs[i] = dto }

@@ -1,5 +1,6 @@
 package kg.ayant.app.data
 
+import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
@@ -50,7 +51,13 @@ class FirebaseDataRepository : DataRepository {
     override suspend fun updateReviewReply(reviewID: String, replyText: String?) {
         val doc = db.collection("reviews").document(reviewID)
         if (replyText != null) {
-            doc.set(mapOf("hostReply" to mapOf("text" to replyText, "updatedAt" to Date())), com.google.firebase.firestore.SetOptions.merge()).await()
+            // Сохраняем исходное время создания ответа, обновляем только updatedAt.
+            val existing = doc.get().await().get("hostReply") as? Map<*, *>
+            val createdAt = existing?.get("createdAt") ?: Date()
+            doc.set(
+                mapOf("hostReply" to mapOf("text" to replyText, "createdAt" to createdAt, "updatedAt" to Date())),
+                com.google.firebase.firestore.SetOptions.merge()
+            ).await()
         } else {
             doc.update("hostReply", com.google.firebase.firestore.FieldValue.delete()).await()
         }
@@ -201,7 +208,11 @@ class FirebaseDataRepository : DataRepository {
     private fun DocumentSnapshot.toReview(): Review? {
         val venueID = getString("venueID") ?: return null
         val reply = (get("hostReply") as? Map<String, Any?>)?.let { m ->
-            (m["text"] as? String)?.takeIf { it.isNotEmpty() }?.let { HostReply(it, Date(), Date()) }
+            (m["text"] as? String)?.takeIf { it.isNotEmpty() }?.let { text ->
+                val created = (m["createdAt"] as? Timestamp)?.toDate() ?: Date()
+                val updated = (m["updatedAt"] as? Timestamp)?.toDate() ?: created
+                HostReply(text, created, updated)
+            }
         }
         return Review(
             id = id, venueID = venueID,

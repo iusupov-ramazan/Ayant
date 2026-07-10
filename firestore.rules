@@ -88,14 +88,23 @@ service cloud.firestore {
     }
 
     // ── Аналитика ────────────────────────────────────────────────────────
-    // Документы analytics/{venueID}/days/{day} — счётчики событий (increment),
-    // которые пишет клиент-телеметрия. Читает статистику только владелец
-    // заведения или админ. Чувствительные счётчики (погашения) идут не сюда,
-    // а через Cloud Function countRedemption (admin SDK).
-    // TODO: перенести запись телеметрии в Cloud Function, тогда write закрыть.
+    // Счётчики analytics/{venueID}/days/{day} — server-authoritative: пишут ТОЛЬКО
+    // Cloud Functions (countAnalyticsEvent / countRedemption, admin SDK обходит
+    // правила). Клиент напрямую сюда писать не может (нельзя подделать статистику).
+    // Читает статистику владелец заведения или админ.
     match /analytics/{venueID}/{document=**} {
       allow read:  if isAdmin() || isVenueOwner(venueID);
-      allow write: if isSignedIn();
+      allow write: if false;
+    }
+
+    // Клиентская телеметрия: приложение создаёт событие, Cloud Function
+    // countAnalyticsEvent инкрементирует счётчик и удаляет документ. Разрешаем
+    // только create с известной метрикой; читать/менять/удалять клиент не может.
+    match /analyticsEvents/{id} {
+      allow create: if isSignedIn()
+                    && request.resource.data.venueID is string
+                    && request.resource.data.metric in ['views', 'saves', 'calls', 'maps', 'dealTaps'];
+      allow read, update, delete: if false;
     }
 
     // ── Профили хостов ───────────────────────────────────────────────────

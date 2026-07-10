@@ -1,6 +1,5 @@
 package kg.ayant.app.data
 
-import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
@@ -43,9 +42,11 @@ class FirebaseAnalyticsService : AnalyticsService {
     private val db = FirebaseFirestore.getInstance()
 
     override fun log(venueID: String, metric: String) {
-        val day = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-        db.collection("analytics").document(venueID).collection("days").document(day)
-            .set(mapOf(metric to FieldValue.increment(1)), com.google.firebase.firestore.SetOptions.merge())
+        // Событие телеметрии: счётчик инкрементирует Cloud Function countAnalyticsEvent
+        // (клиенту запрещено писать в analytics/* напрямую — см. firestore.rules).
+        db.collection("analyticsEvents").add(
+            mapOf("venueID" to venueID, "metric" to metric, "createdAt" to Date())
+        )
     }
 
     override suspend fun fetchStats(venueID: String, days: Int): Map<String, Int> {

@@ -234,10 +234,11 @@ final class FirebaseAnalyticsService: AnalyticsService {
 
     func log(venueID: String, metric: String) {
         guard !venueID.isEmpty else { return }
-        let day = Self.dayKey()
-        db.collection("analytics").document(venueID)
-            .collection("days").document(day)
-            .setData([metric: FieldValue.increment(Int64(1)), "date": day], merge: true)
+        // Событие телеметрии: счётчик инкрементирует Cloud Function countAnalyticsEvent
+        // (клиенту запрещено писать в analytics/* напрямую — см. firestore.rules).
+        db.collection("analyticsEvents").addDocument(data: [
+            "venueID": venueID, "metric": metric, "createdAt": Timestamp(date: .now)
+        ])
     }
 
     func fetchStats(venueID: String, days: Int) async throws -> [String: Int] {
