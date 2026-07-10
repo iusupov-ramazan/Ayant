@@ -75,9 +75,14 @@ service cloud.firestore {
     // ── Push-кампании ────────────────────────────────────────────────────
     // Хост создаёт кампанию по своему заведению ("pending"). Одобряет только
     // админ (status → approved/rejected); рассылку делает Cloud Function.
+    // Кампанию создаёт любой аутентифицированный хост ("pending"); это безвредно,
+    // т.к. рассылку запускает только Cloud Function ПОСЛЕ одобрения админом
+    // (update разрешён только админу). Владение заведением тут проверять нельзя:
+    // Android-хост не пишет venues в Firestore (только в SharedPreferences), а у
+    // засеянных заведений ownerID пустой — проверка isVenueOwner их бы заблокировала.
     match /pushCampaigns/{id} {
-      allow create: if isSignedIn() && (isAdmin() || isVenueOwner(request.resource.data.venueID));
-      allow read:   if isAdmin() || (isSignedIn() && isVenueOwner(resource.data.venueID));
+      allow create: if isSignedIn();
+      allow read:   if isSignedIn();
       allow update: if isAdmin();
       allow delete: if false;
     }
@@ -95,18 +100,19 @@ service cloud.firestore {
 
     // ── Профили хостов ───────────────────────────────────────────────────
     // Читают аутентифицированные (приложение показывает статус верификации).
-    // Пишет хост свой профиль (uid == документ). Флаг verified может выставить
-    // только админ — хост не может сам себя верифицировать.
+    // Пишет хост свой профиль (uid == документ). Статус верификации — строковое
+    // поле `verification` (none|pending|verified|rejected). Хост может лишь
+    // ЗАПРОСИТЬ верификацию (none/pending); выставить verified/rejected — только
+    // админ. Уже верифицированный хост может править прочие поля, не трогая статус.
     match /hosts/{hostUid} {
       allow read: if isSignedIn();
-      // Создание своего профиля: нельзя сразу выставить себе verified.
       allow create: if isAdmin()
                     || (isSignedIn() && hostUid == uid()
-                        && request.resource.data.get('verified', false) == false);
-      // Обновление: verified должен остаться прежним (менять его может только админ).
+                        && request.resource.data.get('verification', 'none') in ['none', 'pending']);
       allow update: if isAdmin()
                     || (isSignedIn() && hostUid == uid()
-                        && request.resource.data.get('verified', false) == resource.data.get('verified', false));
+                        && (request.resource.data.get('verification', 'none') == resource.data.get('verification', 'none')
+                            || request.resource.data.get('verification', 'none') in ['none', 'pending']));
       allow delete: if isAdmin();
     }
 
@@ -139,9 +145,18 @@ service cloud.firestore {
     }
 
     // ── Подарочные купоны ────────────────────────────────────────────────
+    // Купон адресуется по коду-ссылке (без uid получателя). Забрать можно РОВНО
+    // один раз: update разрешён только как переход claimed false→true и без
+    // подмены остального содержимого — иначе купон можно было бы «перезабрать».
     match /giftCoupons/{code} {
-      allow create: if isSignedIn();
-      allow read, update: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.get('claimed', false) == false;
+      allow read:   if isSignedIn();
+      allow update: if isSignedIn()
+                    && resource.data.get('claimed', false) == false
+                    && request.resource.data.claimed == true
+                    && request.resource.data.title == resource.data.title
+                    && request.resource.data.code == resource.data.code
+                    && request.resource.data.get('fromName', '') == resource.data.get('fromName', '');
       allow delete: if false;
     }
 

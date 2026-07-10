@@ -24,8 +24,14 @@ const DAY_MS = 86400000;
 // Частотные лимиты из спецификации (анти-спам): не более 1 push в день и 3 в неделю
 // на пользователя. Для локального теста можно временно поднять через переменные
 // окружения PUSH_DAILY_CAP / PUSH_WEEKLY_CAP — в продакшене они не задаются.
-const DAILY_CAP = Number(process.env.PUSH_DAILY_CAP) || 1;
-const WEEKLY_CAP = Number(process.env.PUSH_WEEKLY_CAP) || 3;
+// Разбор с сохранением явного 0 (отключить пуши в тесте): пустое/нечисловое → дефолт.
+function capFromEnv(raw, fallback) {
+  if (raw === undefined || raw === "") return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : fallback;
+}
+const DAILY_CAP = capFromEnv(process.env.PUSH_DAILY_CAP, 1);
+const WEEKLY_CAP = capFromEnv(process.env.PUSH_WEEKLY_CAP, 3);
 
 // Награды за рефералку (бонусы).
 const REFERRAL_REWARD = 100;
