@@ -35,8 +35,8 @@ fun CategoryTile(
     label: String,
     icon: ImageVector,
     isOn: Boolean,
-    onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    onClick: () -> Unit,
 ) {
     val c = AyantTheme.colors
     Column(

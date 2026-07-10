@@ -1,29 +1,19 @@
 package kg.ayant.app.data.model
 
-import androidx.compose.ui.graphics.Color
-import kg.ayant.app.ui.theme.Accent
-import kg.ayant.app.ui.theme.DealAnnouncement
-import kg.ayant.app.ui.theme.DealNovelty
-import kg.ayant.app.ui.theme.DealPromo
+import kotlinx.serialization.Serializable
 import java.util.Calendar
 import java.util.Date
 import kotlin.math.floor
 
 // MARK: - Deal type (mirrors Models.swift DealType)
+// Note: the per-type accent color lives in the UI layer (ui.theme.color extension);
+// the data layer stays free of Compose types.
 
 enum class DealType(val title: String) {
     DISCOUNT("Скидка"),
     PROMO("Акция"),
     NOVELTY("Новинка"),
-    ANNOUNCEMENT("Объявление");
-
-    val color: Color
-        get() = when (this) {
-            DISCOUNT -> Accent
-            PROMO -> DealPromo
-            NOVELTY -> DealNovelty
-            ANNOUNCEMENT -> DealAnnouncement
-        }
+    ANNOUNCEMENT("Объявление"),
 }
 
 // MARK: - Deal status
@@ -77,6 +67,7 @@ data class City(
 
 // MARK: - Venue item (dish/service for reviews)
 
+@Serializable
 data class VenueItem(
     val id: String,
     val name: String,
@@ -94,6 +85,7 @@ data class VenueItem(
 
 // MARK: - Branch
 
+@Serializable
 data class Branch(
     val id: String,
     val address: String,
@@ -104,6 +96,7 @@ data class Branch(
 
 // MARK: - Day hours (minutes from midnight)
 
+@Serializable
 data class DayHours(
     val closed: Boolean = false,
     val open: Int = 9 * 60,
@@ -127,7 +120,9 @@ data class Venue(
     val address: String,
     val phone: String,
     val emoji: String,
-    val gradient: List<Color>,
+    /** ARGB colors (0xAARRGGBB) for the venue card gradient. Mapped to Compose
+     *  Color in the UI layer via [kg.ayant.app.ui.theme.gradientColors]. */
+    val gradient: List<Long>,
     val imageURL: String? = null,
     val rating: Double = 0.0,
     val reviewCount: Int = 0,
@@ -150,12 +145,16 @@ data class Venue(
     val instagram: String = "",
     val telegram: String = "",
     val branches: List<Branch> = emptyList(),
+    val boostedUntil: Date? = null,
     val loyaltyEnabled: Boolean = false,
     val loyaltyGoal: Int = 6,
     val loyaltyReward: String = "Награда за лояльность",
     val couponsEnabled: Boolean = true,
 ) {
     val isApproved: Boolean get() = status == ModerationStatus.APPROVED
+
+    /** Paid boost is active right now. */
+    val isBoosted: Boolean get() = boostedUntil?.let { it.after(Date()) } ?: false
 
     fun hours(index: Int): DayHours =
         if (weekHours.size == 7) weekHours[index]

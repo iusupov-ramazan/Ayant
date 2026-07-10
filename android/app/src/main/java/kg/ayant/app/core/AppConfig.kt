@@ -1,7 +1,17 @@
 package kg.ayant.app.core
 
 import android.content.Context
+import kg.ayant.app.data.AnalyticsService
+import kg.ayant.app.data.AuthService
+import kg.ayant.app.data.CouponService
 import kg.ayant.app.data.DataRepository
+import kg.ayant.app.data.FirebaseAnalyticsService
+import kg.ayant.app.data.FirebaseAuthService
+import kg.ayant.app.data.FirebaseCouponService
+import kg.ayant.app.data.FirebaseDataRepository
+import kg.ayant.app.data.MockAnalyticsService
+import kg.ayant.app.data.MockAuthService
+import kg.ayant.app.data.MockCouponService
 import kg.ayant.app.data.MockDataRepository
 
 /**
@@ -19,6 +29,14 @@ object AppConfig {
     lateinit var applicationContext: Context
 
     fun makeDataRepository(): DataRepository =
-        // if (useFirebase) FirebaseDataRepository() else MockDataRepository()
-        MockDataRepository()
+        if (useFirebase) FirebaseDataRepository() else MockDataRepository()
+
+    fun makeAuthService(): AuthService =
+        if (useFirebase) FirebaseAuthService() else MockAuthService()
+
+    fun makeAnalyticsService(): AnalyticsService =
+        if (useFirebase) FirebaseAnalyticsService() else MockAnalyticsService()
+
+    fun makeCouponService(): CouponService =
+        if (useFirebase) FirebaseCouponService() else MockCouponService()
 }

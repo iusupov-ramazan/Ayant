@@ -11,13 +11,14 @@ import kg.ayant.app.ui.auth.AuthScreen
 import kg.ayant.app.ui.navigation.RootScaffold
 import kg.ayant.app.ui.onboarding.OnboardingScreen
 import kg.ayant.app.ui.vm.SessionViewModel
+import kg.ayant.app.ui.vm.ThemeViewModel
 
 /**
  * Top-level gate: Auth → Onboarding → main app. Mirrors SANApp gating
  * (isSignedIn ? SignedInRootView : AuthView) and the onboarded flag.
  */
 @Composable
-fun RootGate(session: SessionViewModel) {
+fun RootGate(session: SessionViewModel, initialDeepLink: String? = null, theme: ThemeViewModel? = null) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("ayant.flags", 0) }
     var onboarded by rememberSaveable { mutableStateOf(prefs.getBoolean("onboarded", false)) }
@@ -28,6 +29,6 @@ fun RootGate(session: SessionViewModel) {
             prefs.edit().putBoolean("onboarded", true).apply()
             onboarded = true
         }
-        else -> RootScaffold(session)
+        else -> RootScaffold(session, initialDeepLink = initialDeepLink, theme = theme)
     }
 }

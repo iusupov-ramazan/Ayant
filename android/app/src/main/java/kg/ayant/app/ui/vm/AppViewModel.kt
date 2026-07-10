@@ -9,7 +9,10 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kg.ayant.app.core.AppConfig
+import kg.ayant.app.data.AnalyticsService
+import kg.ayant.app.data.DataRepository
 import kg.ayant.app.data.MockData
+import kg.ayant.app.data.Ranking
 import kg.ayant.app.data.model.City
 import kg.ayant.app.data.model.Deal
 import kg.ayant.app.data.model.FeedItem
@@ -20,17 +23,25 @@ import kg.ayant.app.location.LocationManager
 import kotlinx.coroutines.launch
 import java.util.Date
 import java.util.UUID
-import kotlin.math.ln
-import kotlin.math.min
 
 /**
  * Global user-side app state. Mirrors AppStore.swift: feed ranking, saves,
  * reviews, aggregates and the selected city.
+ *
+ * DI: dependencies are constructor parameters with production defaults from [AppConfig].
+ * `@JvmOverloads` generates the `(Application)`-only constructor that `viewModel()` uses,
+ * while tests can inject fakes via `AppViewModel(app, repo, analytics)`.
  */
-class AppViewModel(app: Application) : AndroidViewModel(app) {
+class AppViewModel @JvmOverloads constructor(
+    app: Application,
+    private val repository: DataRepository = AppConfig.makeDataRepository(),
+    private val analytics: AnalyticsService = AppConfig.makeAnalyticsService(),
+) : AndroidViewModel(app) {
 
     private val prefs = app.getSharedPreferences("ayant.store", 0)
-    private val repository = AppConfig.makeDataRepository()
+
+    /** Log an analytics event (view/save/call/map/dealTap). Fire-and-forget. */
+    fun log(metric: String, venueID: String) = analytics.log(venueID, metric)
 
     // Data
     var venues by mutableStateOf<List<Venue>>(emptyList())
@@ -45,6 +56,30 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         private set
 
     private var baseReviews: List<Review> = MockData.reviews
+
+    // Raw repo data + host overlay (host edits win by id). Mirrors AppStore.recombine.
+    private var repoVenues: List<Venue> = emptyList()
+    private var repoDeals: List<Deal> = emptyList()
+    private var hostVenues: List<Venue> = emptyList()
+    private var hostDeals: List<Deal> = emptyList()
+
+    /** Host side pushes its venues/deals here so they appear in the user feed. */
+    fun setHostContent(venues: List<Venue>, deals: List<Deal>) {
+        hostVenues = venues
+        hostDeals = deals
+        recombine()
+    }
+
+    private fun recombine() {
+        val vmap = LinkedHashMap<String, Venue>()
+        repoVenues.forEach { vmap[it.id] = it }
+        hostVenues.forEach { vmap[it.id] = it }
+        venues = vmap.values.toList()
+        val dmap = LinkedHashMap<String, Deal>()
+        repoDeals.forEach { dmap[it.id] = it }
+        hostDeals.forEach { dmap[it.id] = it }
+        deals = dmap.values.toList()
+    }
 
     // Current user
     var currentUserID = "me"
@@ -76,13 +111,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             isLoading = true
             loadError = null
             try {
-                venues = repository.fetchVenues()
-                deals = repository.fetchDeals()
+                repoVenues = repository.fetchVenues()
+                repoDeals = repository.fetchDeals()
             } catch (e: Exception) {
                 loadError = e.localizedMessage
             }
+            // Never show a blank feed: if the backend read failed or returned nothing
+            // (empty collection / permission denied), fall back to demo data.
+            if (repoVenues.isEmpty()) {
+                repoVenues = MockData.venues
+                repoDeals = MockData.deals
+            }
+            recombine()
             baseReviews = try {
-                repository.fetchReviews()
+                repository.fetchReviews().ifEmpty { MockData.reviews }
             } catch (e: Exception) {
                 MockData.reviews
             }
@@ -122,26 +164,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun venueScore(v: Venue): Double {
         val agg = aggregate(v)
-        var s = 0.0
-        s += agg.first * 2.0
-        s += ln(agg.second + 1.0) * 1.5
-        s += ln(v.savedByCount + 1.0) * 1.0
-        if (v.isVerified) s += 3.0
-        if (v.hasTodaySpecial) s += 1.5
-        if (v.isOpenNow) s += 1.0
         val activeDeals = deals.count { it.venueID == v.id && it.isActive }
-        s += min(activeDeals.toDouble(), 5.0) * 0.8
-        return s
+        return Ranking.venueScore(
+            rating = agg.first, reviewCount = agg.second, savedByCount = v.savedByCount,
+            isVerified = v.isVerified, hasTodaySpecial = v.hasTodaySpecial,
+            isOpenNow = v.isOpenNow, activeDealCount = activeDeals,
+        )
     }
 
     fun dealScore(d: Deal): Double {
-        var s = venue(forDeal = d)?.let { venueScore(it) } ?: 0.0
-        if (d.isFresh) s += 6.0
-        d.startDate?.let { start ->
-            val days = (Date().time - start.time) / 86_400_000.0
-            s += maxOf(0.0, 10 - days)
-        }
-        return s
+        val base = venue(forDeal = d)?.let { venueScore(it) } ?: 0.0
+        val days = d.startDate?.let { (Date().time - it.time) / 86_400_000.0 }
+        return Ranking.dealScore(base, d.isFresh, days)
     }
 
     // MARK: - Deals
@@ -161,11 +195,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             .sortedByDescending { dealScore(it) }
     }
 
-    /** Sponsored venue cards are inserted at the 4th, 9th… positions (feedItems). */
-    fun feedItems(category: VenueCategory?): List<FeedItem> {
-        val feed = feedDeals(category)
-        return feed.map { FeedItem.DealItem(it) }
+    /** Boosted venues in rotation (for sponsored cards in the feed). Mirrors boostedVenuesRotated. */
+    fun boostedVenuesRotated(category: VenueCategory?): List<Venue> {
+        val rot = (System.currentTimeMillis() / 1_800_000).toInt()   // rotate every 30 min
+        return venuesInSelectedCity()
+            .filter { (category == null || it.category == category) && it.isBoosted }
+            .sortedBy { it.id.hashCode() + rot }
     }
+
+    /** Mixed feed: active deals with sponsored venue cards inserted at the 4th, 9th… slot. */
+    fun feedItems(category: VenueCategory?): List<FeedItem> =
+        Ranking.feed(feedDeals(category), boostedVenuesRotated(category))
 
     fun venue(forDeal: Deal): Venue? = venues.firstOrNull { it.id == forDeal.venueID }
     fun venue(id: String): Venue? = venues.firstOrNull { it.id == id }
@@ -180,7 +220,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun toggleSave(v: Venue) {
         if (isGuest) return
-        if (savedVenueIDs.contains(v.id)) savedVenueIDs.remove(v.id) else savedVenueIDs.add(v.id)
+        if (savedVenueIDs.contains(v.id)) {
+            savedVenueIDs.remove(v.id)
+            kg.ayant.app.push.Push.unsubscribeVenue(v.id)
+        } else {
+            savedVenueIDs.add(v.id)
+            kg.ayant.app.push.Push.subscribeVenue(v.id)   // new deals at this venue
+        }
         persistSaved()
     }
 
@@ -211,6 +257,46 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun myReviews(): List<Review> =
         reviews.filter { it.authorID == currentUserID }.sortedByDescending { it.updatedAt }
+
+    /** Reviews across a set of venues (host inbox). */
+    fun reviews(forVenueIDs: Set<String>): List<Review> = reviews.filter { it.venueID in forVenueIDs }
+
+    /** Owner replies to a review (visible to all on the venue page). Write-through to Firestore. */
+    fun setHostReply(reviewID: String, text: String) {
+        val i = reviews.indexOfFirst { it.id == reviewID }
+        if (i < 0) return
+        val trimmed = text.trim()
+        val now = Date()
+        reviews[i] = reviews[i].copy(
+            hostReply = if (trimmed.isEmpty()) null
+            else kg.ayant.app.data.model.HostReply(trimmed, reviews[i].hostReply?.createdAt ?: now, now)
+        )
+        viewModelScope.launch { runCatching { repository.updateReviewReply(reviewID, trimmed.ifEmpty { null }) } }
+    }
+
+    // MARK: - Referral + gift + redemption (backend)
+
+    /** Personal referral code = user id. */
+    val referralCode: String get() = currentUserID
+
+    /** Records a referral (backend rewards the inviter). */
+    fun recordReferral(referrerID: String) {
+        if (isGuest || referrerID.isEmpty() || referrerID == currentUserID) return
+        viewModelScope.launch { runCatching { repository.recordReferral(currentUserID, referrerID) } }
+    }
+
+    /** Claims server-granted bonuses (referral rewards). Returns total to add to the balance. */
+    suspend fun claimBonusGrantsTotal(): Int =
+        if (isGuest) 0 else runCatching { repository.claimBonusGrants(currentUserID) }.getOrDefault(0)
+
+    /** Creates a gift coupon doc so the receiver's link can claim it. */
+    fun createGiftBackend(title: String, code: String, fromName: String) {
+        viewModelScope.launch { runCatching { repository.createGiftCoupon(title, code, fromName) } }
+    }
+
+    /** Claims a gift by code (once). Returns title+code or null. */
+    suspend fun claimGift(code: String): kg.ayant.app.data.GiftInfo? =
+        if (isGuest || code.isEmpty()) null else runCatching { repository.claimGiftCoupon(code) }.getOrNull()
 
     fun myReview(venueID: String, itemID: String?): Review? =
         reviews.firstOrNull { it.venueID == venueID && it.authorID == currentUserID && it.itemID == itemID }
@@ -262,16 +348,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             .sortedByDescending { feedScore(it, location) }
 
     private fun feedScore(v: Venue, location: LocationManager): Double {
-        var score = 0.0
-        location.distanceKm(v.latitude, v.longitude)?.let { km ->
-            score += maxOf(0.0, 5 - km) * 3.0
-        }
         val agg = aggregate(v)
-        score += agg.first * ln(maxOf(agg.second, 1) + 1.0) * 1.5
-        if (allDeals(forVenue = v).any { it.isFresh }) score += 4
-        if (v.hasTodaySpecial) score += 4
-        score += deals(forVenue = v).size * 0.5
-        return score
+        return Ranking.feedScore(
+            distanceKm = location.distanceKm(v.latitude, v.longitude),
+            rating = agg.first, reviewCount = agg.second,
+            hasFreshDeal = allDeals(forVenue = v).any { it.isFresh },
+            hasTodaySpecial = v.hasTodaySpecial,
+            dealCount = deals(forVenue = v).size,
+        )
     }
 
     private fun persistSaved() {

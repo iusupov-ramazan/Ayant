@@ -718,14 +718,47 @@ window.seedDemo = async () => {
 };
 
 // ── AUTH ──────────────────────────────────────────────────────────────────
-onAuthStateChanged(auth, user => {
-  if (user) {
-    document.getElementById('authScreen').style.display = 'none';
-    document.getElementById('app').style.display = 'block';
+// Доступ к панели только у пользователей с кастомным claim `admin: true`
+// (выдаётся серверным скриптом scripts/set-admin-claim.js). Просто наличие
+// аккаунта Firebase больше НЕ даёт доступ — этого требуют и firestore.rules.
+// Возвращает 'admin' | 'denied' | 'unknown'. 'unknown' — не удалось проверить
+// (сеть/офлайн): в этом случае НЕ разлогиниваем — иначе честного админа выкинет
+// при кратковременном сбое сети. Сначала пробуем свежий токен, затем кэшированный.
+async function checkAdmin(user) {
+  if (!user) return 'denied';
+  try {
+    const token = await user.getIdTokenResult(true); // refresh — подхватить свежий claim
+    return token.claims.admin === true ? 'admin' : 'denied';
+  } catch (e) {
+    try {
+      const cached = await user.getIdTokenResult(false); // без сети, из кэша
+      return cached.claims.admin === true ? 'admin' : 'denied';
+    } catch (e2) {
+      return 'unknown';
+    }
+  }
+}
+
+onAuthStateChanged(auth, async user => {
+  const authScreen = document.getElementById('authScreen');
+  const app = document.getElementById('app');
+  const errEl = document.getElementById('authError');
+  const status = await checkAdmin(user);
+  if (status === 'admin') {
+    authScreen.style.display = 'none';
+    app.style.display = 'block';
     loadAll();
   } else {
-    document.getElementById('authScreen').style.display = 'flex';
-    document.getElementById('app').style.display = 'none';
+    if (user && status === 'denied') {
+      // Вошёл, но без прав администратора — выкидываем и показываем причину.
+      if (errEl) errEl.textContent = 'Недостаточно прав: аккаунт не является администратором';
+      await fbSignOut(auth);
+    } else if (user && status === 'unknown') {
+      // Сбой проверки (сеть) — не разлогиниваем, просим повторить.
+      if (errEl) errEl.textContent = 'Не удалось проверить права (сеть). Обновите страницу.';
+    }
+    authScreen.style.display = 'flex';
+    app.style.display = 'none';
   }
 });
 
@@ -736,6 +769,7 @@ window.signIn = async () => {
   errEl.textContent = '';
   try {
     await signInWithEmailAndPassword(auth, email, password);
+    // Проверку прав делает onAuthStateChanged — не-админа он тут же разлогинит.
   } catch (e) {
     errEl.textContent = 'Неверный email или пароль';
   }

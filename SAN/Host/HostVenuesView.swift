@@ -806,43 +806,16 @@ struct HostVenueFormView: View {
     }
 
     private func save() {
+        // Разбор координат из полей ввода; сборка DTO — в HostStore.saveVenueForm.
         let lat = Double(latitude.replacingOccurrences(of: ",", with: ".")) ?? City.bishkek.latitude
         let lng = Double(longitude.replacingOccurrences(of: ",", with: ".")) ?? City.bishkek.longitude
-        if var dto = existing {
-            dto.name = name; dto.categoryRaw = category.rawValue; dto.district = district
-            dto.address = address; dto.phone = phone; dto.emoji = emoji
-            dto.latitude = lat; dto.longitude = lng; dto.openHour = openHour; dto.closeHour = closeHour
-            dto.imageURL = imageURL.trimmingCharacters(in: .whitespaces)
-            dto.weekHours = weekHours
-            dto.pdfMenuURL = pdfMenuURL.trimmingCharacters(in: .whitespaces)
-            dto.whatsapp = whatsapp.trimmingCharacters(in: .whitespaces)
-            dto.instagram = instagram.trimmingCharacters(in: .whitespaces)
-            dto.telegram = telegram.trimmingCharacters(in: .whitespaces)
-            dto.branches = branches
-            dto.loyaltyEnabled = loyaltyEnabled
-            dto.loyaltyGoal = loyaltyGoal
-            dto.loyaltyReward = loyaltyReward.trimmingCharacters(in: .whitespaces)
-            dto.couponsEnabled = couponsEnabled
-            host.updateVenue(dto)
-        } else {
-            var dto = host.addVenue(name: name, category: category, district: district, address: address,
-                          phone: phone, emoji: emoji, latitude: lat, longitude: lng,
-                          openHour: openHour, closeHour: closeHour,
-                          imageURL: imageURL.trimmingCharacters(in: .whitespaces),
-                          weekHours: weekHours,
-                          pdfMenuURL: pdfMenuURL.trimmingCharacters(in: .whitespaces),
-                          whatsapp: whatsapp.trimmingCharacters(in: .whitespaces),
-                          instagram: instagram.trimmingCharacters(in: .whitespaces),
-                          telegram: telegram.trimmingCharacters(in: .whitespaces),
-                          branches: branches)
-            if loyaltyEnabled || !couponsEnabled {
-                dto.loyaltyEnabled = loyaltyEnabled
-                dto.loyaltyGoal = loyaltyGoal
-                dto.loyaltyReward = loyaltyReward.trimmingCharacters(in: .whitespaces)
-                dto.couponsEnabled = couponsEnabled
-                host.updateVenue(dto)
-            }
-        }
+        host.saveVenueForm(existing: existing, name: name, category: category, district: district,
+                           address: address, phone: phone, emoji: emoji, latitude: lat, longitude: lng,
+                           openHour: openHour, closeHour: closeHour, imageURL: imageURL,
+                           weekHours: weekHours, pdfMenuURL: pdfMenuURL, whatsapp: whatsapp,
+                           instagram: instagram, telegram: telegram, branches: branches,
+                           loyaltyEnabled: loyaltyEnabled, loyaltyGoal: loyaltyGoal,
+                           loyaltyReward: loyaltyReward, couponsEnabled: couponsEnabled)
         dismiss()
     }
 }
@@ -1005,16 +978,10 @@ struct HostDealFormView: View {
     }
 
     private func save() {
-        let dto = HostDealDTO(
-            id: existing?.id ?? host.newDealID(),
-            venueID: venueID, typeRaw: type.rawValue, title: title, details: details, emoji: emoji,
-            newPrice: Int(newPrice), discountPercent: Int(discount),
-            startDate: existing?.startDate ?? .now,
-            endDate: hasEnd ? endDate : nil,
-            statusRaw: (isDraft ? DealStatus.draft : .active).rawValue,
-            imageURL: imageURLs.first ?? "",
-            imageURLs: imageURLs)
-        host.saveDeal(dto)
+        host.saveDealForm(existing: existing, venueID: venueID, type: type, title: title,
+                          details: details, emoji: emoji, newPrice: Int(newPrice),
+                          discountPercent: Int(discount), endDate: hasEnd ? endDate : nil,
+                          isDraft: isDraft, imageURLs: imageURLs)
         dismiss()
     }
 }

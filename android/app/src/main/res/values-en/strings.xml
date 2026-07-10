@@ -1,0 +1,462 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Ayant</string>
+
+    <string name="tab_home">Home</string>
+    <string name="tab_search">Search</string>
+    <string name="tab_bonus">Bonuses</string>
+    <string name="tab_saved">Saved</string>
+    <string name="tab_profile">Profile</string>
+
+    <string name="htab_venues">Venues</string>
+    <string name="htab_promote">Promote</string>
+    <string name="htab_analytics">Analytics</string>
+    <string name="htab_reviews">Reviews</string>
+    <string name="htab_profile">Profile</string>
+
+    <string name="action_save">Save</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_done">Done</string>
+    <string name="action_ok">Got it</string>
+    <string name="action_back">Back</string>
+    <string name="action_delete">Delete</string>
+    <string name="action_edit">Edit</string>
+    <string name="action_add">Add</string>
+    <string name="action_share">Share</string>
+    <string name="action_open">Open</string>
+    <string name="action_publish">Publish</string>
+    <string name="action_close">Close</string>
+
+    <string name="auth_tagline">discounts • deals • new</string>
+    <string name="auth_sign_in">Sign in</string>
+    <string name="auth_register">Register</string>
+    <string name="auth_name">Name</string>
+    <string name="auth_email">Email</string>
+    <string name="auth_password">Password</string>
+    <string name="auth_do_sign_in">Sign in</string>
+    <string name="auth_create_account">Create account</string>
+    <string name="auth_or">or</string>
+    <string name="auth_google">Continue with Google</string>
+    <string name="auth_guest">Continue as guest</string>
+    <string name="auth_error">Error</string>
+
+    <string name="onb_location_title">Enable location</string>
+    <string name="onb_location_sub">Allow location access to see how far venues are from you. Everything works without it — just no distances.</string>
+    <string name="onb_location_allow">Allow location</string>
+    <string name="onb_not_now">Not now</string>
+    <string name="onb_notif_title">Don\'t miss new deals</string>
+    <string name="onb_notif_sub">We\'ll notify you when saved venues post a new offer. You can enable it later in settings.</string>
+    <string name="onb_notif_allow">Enable notifications</string>
+    <string name="onb_later">Later</string>
+
+    <string name="title_search">Search</string>
+    <string name="title_saved">Saved</string>
+    <string name="title_bonuses">Bonuses</string>
+    <string name="title_profile">Profile</string>
+    <string name="title_coupon">Coupon</string>
+    <string name="title_my_coupons">My coupons</string>
+    <string name="title_loyalty">Loyalty cards</string>
+
+    <string name="settings">Settings</string>
+    <string name="setting_city">City</string>
+    <string name="setting_language">Language</string>
+    <string name="setting_theme">Theme</string>
+    <string name="theme_system">System</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+    <string name="lang_ru">Русский</string>
+    <string name="lang_en">English</string>
+    <string name="lang_ky">Кыргызча</string>
+
+    <string name="help">Help</string>
+    <string name="help_about">About</string>
+    <string name="help_faq">FAQ</string>
+    <string name="help_support">Support</string>
+    <string name="account_sign_out">Sign out</string>
+    <string name="account_delete">Delete account</string>
+
+    <string name="saved_venues">Venues</string>
+    <string name="saved_deals">Deals</string>
+
+    <string name="guest_title">Sign in required</string>
+    <string name="guest_body">Guests can only browse. Sign in from your profile to save and leave reviews.</string>
+
+    <string name="act_call">Call</string>
+    <string name="act_route">Directions</string>
+    <string name="act_save">Save</string>
+    <string name="act_saved">Saved</string>
+    <string name="act_share">Share</string>
+    <string name="reviews">Reviews</string>
+    <string name="publications">Posts</string>
+    <string name="photos">Photos</string>
+    <string name="see_all">See all</string>
+    <string name="open_on_map">Open in maps</string>
+    <string name="venue_section">Venue</string>
+    <string name="today">Today</string>
+    <string name="rate_item">Rate a dish or service</string>
+    <string name="no_reviews">No reviews yet. Be the first!</string>
+
+    <string name="home_today_saved">Today at your favorites</string>
+    <string name="feed_empty_city_title">No venues yet</string>
+    <string name="feed_empty_cat_title">No deals in this category</string>
+    <string name="feed_empty_cat_body">No offers in this category yet.</string>
+
+    <string name="search_hint">Venue, category or deal</string>
+    <string name="search_empty_title">Nothing found</string>
+    <string name="search_empty_body">Try another name or widen the distance.</string>
+    <string name="filter_open">Open now</string>
+    <string name="filter_deals">With deals</string>
+    <string name="filter_rating">Rating</string>
+    <string name="filter_distance">Distance</string>
+    <string name="filter_category">Category</string>
+
+    <!-- ===== Batch: user-facing screen localization (EN) ===== -->
+    <!-- Venue detail -->
+    <string name="venue_not_found">Venue not found</string>
+    <string name="venue_distance_from_you">%1$s from you</string>
+    <string name="venue_saved_by_count">%1$d people saved this</string>
+    <string name="venue_share_text">%1$s, %2$s. Found it on Ayant! %3$s</string>
+    <string name="venue_loyalty_card">Loyalty card</string>
+    <string name="venue_loyalty_progress">%1$d visits → %2$s</string>
+    <string name="venue_pdf_menu">Price list / catalog (PDF)</string>
+    <string name="venue_see_all_count">See all (%1$d)</string>
+    <string name="venue_reviews_count">%1$d reviews</string>
+    <string name="venue_reviews_no_items">Reviews are left for specific dishes and services. This venue hasn\'t added items to rate yet.</string>
+    <string name="map_choose_app">Choose an app for directions.</string>
+    <!-- Reviews -->
+    <string name="review_report_thanks_title">Thank you</string>
+    <string name="review_report_title">Report review</string>
+    <string name="review_report_sent">Your report has been sent for moderation.</string>
+    <string name="review_report_choose">Choose a reason for the report.</string>
+    <string name="review_report_spam">Spam</string>
+    <string name="review_report_offensive">Offensive</string>
+    <string name="review_report_action">Report</string>
+    <string name="review_verified_visit">Visited</string>
+    <string name="review_about_item">Review of: %1$s</string>
+    <string name="review_host_reply">Venue reply</string>
+    <string name="review_new_title">New review</string>
+    <string name="review_edit_title">Edit review</string>
+    <string name="review_no_items_body">This venue has no items to review yet. You can rate a specific dish or service — ask the venue to add them.</string>
+    <string name="review_what_rating">What are you rating</string>
+    <string name="review_hint">Your review</string>
+    <string name="action_choose">Choose</string>
+    <!-- Deal detail -->
+    <string name="deal_not_found">Deal not found</string>
+    <string name="deal_title_fallback">Deal</string>
+    <string name="deal_share_text">%1$s — %2$s. Found it on Ayant! %3$s</string>
+    <string name="deal_valid_until">Valid until %1$s</string>
+    <string name="deal_coupon_title">Deal coupon</string>
+    <string name="deal_coupon_hint">An employee scans the QR and applies the deal before payment.</string>
+    <string name="deal_coupon_guest">Sign in to get the coupon.</string>
+    <string name="deal_get_coupon">Get coupon</string>
+    <string name="deal_show_coupon">Show coupon</string>
+    <!-- Profile -->
+    <string name="profile_guest_name">Guest</string>
+    <string name="profile_host_mode">Business mode</string>
+    <string name="profile_host_guest">Sign in to manage your business</string>
+    <string name="profile_host_sub">Manage your business</string>
+    <string name="profile_my_reviews">My reviews</string>
+    <string name="profile_no_reviews">You haven\'t left any reviews yet.</string>
+    <string name="profile_invite_friend">Invite a friend</string>
+    <string name="profile_referral_share">Catch your city\'s discounts and deals on Ayant. Join via my link — we both get bonuses! %1$s</string>
+    <string name="profile_share_invite">Share invitation</string>
+    <string name="profile_referral_desc">Your friend gets welcome bonuses, and you get rewarded for everyone who joins.</string>
+    <string name="app_version">Version 0.3 (MVP)</string>
+    <string name="account_delete_confirm_title">Delete account?</string>
+    <string name="account_delete_body">This action cannot be undone. All reviews and saved items will be deleted.</string>
+    <!-- Search -->
+    <string name="search_list">List</string>
+    <string name="search_map">Map</string>
+    <string name="filter_reset">Reset filters</string>
+    <string name="search_found">Found: %1$d</string>
+    <string name="filter_rating_any">Any rating</string>
+    <string name="filter_distance_any">Any distance</string>
+    <string name="filter_category_all">All categories</string>
+    <!-- Status -->
+    <string name="status_open">Open</string>
+    <string name="status_closed">Closed</string>
+    <!-- Coupons -->
+    <string name="coupon_empty_title">No coupons</string>
+    <string name="coupon_empty_body">Get a coupon for venue deals or exchange bonuses in the "Bonuses" tab.</string>
+    <string name="coupon_available">AVAILABLE · %1$d</string>
+    <string name="coupon_used_section">USED · %1$d</string>
+    <string name="coupon_status_used">Used</string>
+    <string name="coupon_status_active">Active</string>
+    <string name="coupon_not_found">Coupon not found</string>
+    <string name="coupon_badge_used">USED</string>
+    <string name="coupon_badge_active">ACTIVE · AYANT</string>
+    <string name="coupon_code_label">COUPON CODE</string>
+    <string name="coupon_used_msg">Coupon used</string>
+    <string name="coupon_show_qr_hint">Show the QR to an employee — they scan it and the deal is applied.</string>
+    <string name="coupon_use">Use coupon</string>
+    <string name="coupon_use_confirm_title">Use coupon?</string>
+    <string name="coupon_use_confirm_body">Confirm only in front of an employee — the coupon is single-use.</string>
+    <string name="coupon_use_confirm_yes">Yes, apply</string>
+    <!-- Bonus -->
+    <string name="bonus_balance">Your balance</string>
+    <string name="bonus_until_reward">%1$s more to reward</string>
+    <string name="bonus_spend">Spend bonuses</string>
+    <string name="bonus_games_header">Play and earn bonuses</string>
+    <string name="game_snake">Snake</string>
+    <string name="game_snake_sub">+1 / apple</string>
+    <string name="game_tetris">Tetris</string>
+    <string name="game_tetris_sub">+5 / line</string>
+    <string name="bonus_reward_toast">+%1$d bonuses 🎉</string>
+    <string name="bonus_cost">%1$d bonuses</string>
+    <string name="bonus_redeem_self">Redeem for myself</string>
+    <string name="bonus_gift_friend">Gift to a friend</string>
+    <string name="bonus_gift_share">🎁 A gift for you — a "%1$s" coupon on Ayant! Claim it here: https://ayant.kg/gift/%2$s</string>
+    <!-- Loyalty -->
+    <string name="loyalty_empty_title">No loyalty cards yet</string>
+    <string name="loyalty_empty_body">Open a venue with a loyalty card and show its QR to an employee.</string>
+    <string name="loyalty_reward">Reward: %1$s</string>
+    <string name="loyalty_rewards_earned">Rewards earned: %1$d</string>
+    <string name="loyalty_show_hint">Show it to an employee — they scan it for a stamp</string>
+    <string name="loyalty_hide_qr">Hide QR</string>
+    <string name="loyalty_show_qr">Show QR</string>
+    <string name="loyalty_signin_hint">Sign in to collect stamps.</string>
+    <string name="loyalty_how_title">How it works</string>
+    <string name="loyalty_how_body">Show the card QR to an employee on every visit — they scan it and you get a stamp. Collect %1$d stamps and get "%2$s".</string>
+    <!-- Help -->
+    <string name="help_about_body">Discounts, deals and new arrivals from venues in your city. Find places nearby, save favorites, get coupons and earn bonuses.</string>
+    <string name="help_about_region">Central Asia · Bishkek</string>
+    <string name="faq_q1">How do I get a coupon?</string>
+    <string name="faq_a1">Open a venue deal and tap "Get coupon". Show the QR to an employee when paying.</string>
+    <string name="faq_q2">What are bonuses?</string>
+    <string name="faq_a2">Bonuses are earned for activity in the app and mini-games. Exchange them for coupons in the "Bonuses" tab.</string>
+    <string name="faq_q3">How does a loyalty card work?</string>
+    <string name="faq_a3">Show the card QR to an employee on every visit. Collect the required number of stamps and get a reward.</string>
+    <string name="faq_q4">How do I add my venue?</string>
+    <string name="faq_a4">In your profile, open "Business mode" and fill in your business details.</string>
+    <string name="support_contact">Contact us</string>
+    <string name="support_email">Send us an email</string>
+    <!-- Home -->
+    <string name="home_title">Ayant · %1$s</string>
+    <string name="category_all">All</string>
+    <string name="home_empty_city_title">No venues in %1$s yet</string>
+    <string name="home_empty_city_body">Know a good spot? Help us — add a venue.</string>
+    <!-- Saved -->
+    <string name="saved_guest_title">Accounts only</string>
+    <string name="saved_guest_body">Sign in to save venues and deals. Guests can only browse.</string>
+    <string name="saved_empty_venues_title">Save your favorite places</string>
+    <string name="saved_empty_venues_body">They\'ll appear here — tap the bookmark on any venue.</string>
+    <string name="saved_empty_deals_title">Save deals</string>
+    <string name="saved_empty_deals_body">Tap the bookmark on any deal to save it here.</string>
+    <!-- Cards -->
+    <string name="card_ad_recommend">recommended venue</string>
+    <string name="card_deal_count">%1$d deals</string>
+    <string name="card_until">until %1$s</string>
+    <string name="card_ad_label">Ad</string>
+
+    <!-- ===== Host screens localization (EN) ===== -->
+    <!-- Host venue detail / common -->
+    <string name="host_active">Active</string>
+    <string name="host_paused">Paused</string>
+    <string name="host_rejected">Rejected</string>
+    <string name="host_pending">Under review</string>
+    <string name="host_approved">Approved</string>
+    <string name="host_rejected_body">The venue was rejected. Edit the details and save again.</string>
+    <string name="host_pending_body">The venue is under review. It will appear in the feed after approval.</string>
+    <string name="host_today_special">⭐️ Today\'s special</string>
+    <string name="host_special_placeholder">Up to 100 characters</string>
+    <string name="host_save_special">Save special</string>
+    <string name="host_enabled">Enabled</string>
+    <string name="host_disabled">Disabled</string>
+    <string name="host_loyalty_progress">%1$d visits → \"%2$s\"</string>
+    <string name="host_loyalty_disabled_hint">Enable the loyalty program in the venue settings.</string>
+    <string name="host_items_section">Items to review</string>
+    <string name="host_cd_add_item">Add item</string>
+    <string name="host_no_items">No items yet.</string>
+    <string name="host_cd_add_deal">Add deal</string>
+    <string name="host_no_deals">No deals yet. Add one to attract guests.</string>
+    <string name="host_resume">Resume</string>
+    <string name="host_pause">Pause</string>
+    <string name="host_expired">Ended</string>
+    <string name="host_draft">Draft</string>
+    <string name="host_scan_guest_coupons">Scan guest coupons</string>
+    <string name="host_edit_venue">Edit venue details</string>
+    <string name="host_promote_venue">Promote this venue</string>
+    <string name="host_delete_venue">Delete venue</string>
+    <string name="host_delete_venue_confirm">Delete venue?</string>
+    <string name="host_delete_venue_body">\"%1$s\" and all its deals will be deleted permanently.</string>
+    <string name="host_cd_scanner">Scanner</string>
+    <!-- Host item dialog -->
+    <string name="host_item_new_title">New item</string>
+    <string name="host_item_name">Name (e.g. Lagman)</string>
+    <string name="host_item_emoji">Emoji (if no photo)</string>
+    <string name="host_item_kind_label">Type</string>
+    <string name="host_item_kind_food">Dish</string>
+    <string name="host_item_kind_service">Service</string>
+    <string name="host_item_kind_other">Item</string>
+    <!-- Host scanner -->
+    <string name="host_scan_title">Scan coupon</string>
+    <string name="host_scan_hint">Point the camera at the guest\'s coupon / loyalty card QR.</string>
+    <string name="host_scan_manual">Enter code manually</string>
+    <string name="host_scan_code">Coupon code (e.g. AYANT-XXXXXX)</string>
+    <string name="host_scan_checking">Checking…</string>
+    <string name="host_scan_redeem">Redeem</string>
+    <string name="host_scan_error">Error: %1$s</string>
+    <string name="host_scan_failed">failed</string>
+    <string name="host_scan_stamp">✓ Stamp %1$d/%2$d</string>
+    <string name="host_scan_reward_suffix">" · Reward: %1$s!"</string>
+    <string name="host_scan_redeemed">✓ Redeemed: %1$s</string>
+    <!-- Host reviews -->
+    <string name="host_reviews_empty">No reviews yet. Share your venue to get your first reviews.</string>
+    <string name="host_your_reply">Your reply</string>
+    <string name="host_reply">Reply</string>
+    <string name="host_edit_reply">Edit reply</string>
+    <string name="host_reply_title">Reply to review</string>
+    <string name="host_reply_hint">Your reply (visible to all)</string>
+    <!-- Host onboarding / venues list -->
+    <string name="host_onb_body">Tell us about your business. No payment or verification required.</string>
+    <string name="host_onb_business_name">Business name</string>
+    <string name="host_onb_phone">Contact phone</string>
+    <string name="host_onb_continue">Continue</string>
+    <string name="host_my_venues">My venues</string>
+    <string name="host_no_venues_title">You have no venues yet</string>
+    <string name="host_no_venues_body">Add your first venue to start attracting guests.</string>
+    <string name="host_add_venue">Add venue</string>
+    <string name="host_stat_venues">Venues</string>
+    <string name="host_stat_active_deals">Active deals</string>
+    <string name="host_stat_views">Views</string>
+    <string name="host_active_deals_count">%1$d active deals</string>
+    <string name="host_add_deal_short">+ Deal</string>
+    <!-- Upload button -->
+    <string name="host_upload_photo">Upload photo from device</string>
+    <string name="host_upload_pdf">Upload PDF from device</string>
+    <string name="host_upload_failed">Upload failed</string>
+    <string name="host_uploading">Uploading…</string>
+    <!-- Venue form -->
+    <string name="venue_form_new_title">New venue</string>
+    <string name="venue_form_edit_title">Edit venue</string>
+    <string name="venue_form_section_main">General</string>
+    <string name="venue_form_name">Name</string>
+    <string name="venue_form_emoji">Emoji</string>
+    <string name="venue_form_district">District</string>
+    <string name="venue_form_address">Address</string>
+    <string name="venue_form_phone">Phone</string>
+    <string name="venue_form_phone_optional">Phone (optional)</string>
+    <string name="venue_form_photo_url">Photo link (https)</string>
+    <string name="venue_form_pdf_url">Price list / catalog PDF (link)</string>
+    <string name="venue_form_section_hours">Opening hours</string>
+    <string name="venue_form_hours_perday">By day of week</string>
+    <string name="venue_form_hours_same">Same every day</string>
+    <string name="venue_form_open_hour">Opening (hour)</string>
+    <string name="venue_form_close_hour">Closing (hour)</string>
+    <string name="venue_form_day_mon">Mon</string>
+    <string name="venue_form_day_tue">Tue</string>
+    <string name="venue_form_day_wed">Wed</string>
+    <string name="venue_form_day_thu">Thu</string>
+    <string name="venue_form_day_fri">Fri</string>
+    <string name="venue_form_day_sat">Sat</string>
+    <string name="venue_form_day_sun">Sun</string>
+    <string name="venue_form_from">from</string>
+    <string name="venue_form_to">to</string>
+    <string name="venue_form_dayoff">Closed</string>
+    <string name="venue_form_apply_monday">Apply Monday to all</string>
+    <string name="venue_form_section_branches">Branches (additional addresses)</string>
+    <string name="venue_form_add_branch">Add branch</string>
+    <string name="venue_form_new_branch">New branch</string>
+    <string name="venue_form_section_social">Social media</string>
+    <string name="venue_form_whatsapp">WhatsApp (number)</string>
+    <string name="venue_form_instagram">Instagram (handle or link)</string>
+    <string name="venue_form_telegram">Telegram (handle or link)</string>
+    <string name="venue_form_section_location">Location</string>
+    <string name="venue_form_pick_map">Pick a point on the map</string>
+    <string name="venue_form_lat">Latitude</string>
+    <string name="venue_form_lng">Longitude</string>
+    <string name="venue_form_section_loyalty">Coupons and loyalty</string>
+    <string name="venue_form_accept_coupons">Accept coupons</string>
+    <string name="venue_form_stamps_goal">Stamps until reward</string>
+    <string name="venue_form_reward">Reward</string>
+    <!-- Deal form -->
+    <string name="deal_form_new_title">New deal</string>
+    <string name="deal_form_edit_title">Edit deal</string>
+    <string name="deal_form_title">Title</string>
+    <string name="deal_form_type">Type (tap)</string>
+    <string name="deal_form_details">Description</string>
+    <string name="deal_form_new_price">New price, som</string>
+    <string name="deal_form_discount">Discount percent</string>
+    <string name="deal_form_has_end">Has an end date</string>
+    <string name="deal_form_days">Valid for days</string>
+    <string name="deal_form_draft">Save as draft</string>
+    <!-- Promote -->
+    <string name="promote_hero_title">More guests — faster</string>
+    <string name="promote_hero_body">Boost your venue in the feed or send a push about a deal. Launch in a minute.</string>
+    <string name="promote_add_venue_first">Add a venue first</string>
+    <string name="promote_launch">Launch promotion</string>
+    <string name="promote_type_boost">Feed boost</string>
+    <string name="promote_type_boost_sub">Your venue higher in the list, with an \"Ad\" label.</string>
+    <string name="promote_type_push">Push</string>
+    <string name="promote_type_push_sub">Tell guests about a deal with a notification.</string>
+    <string name="promote_empty">No active campaigns yet. Launch your first one and your venue will start getting more views.</string>
+    <string name="promote_your_campaigns">Your campaigns</string>
+    <string name="promote_cancel_campaign">Cancel campaign</string>
+    <string name="promote_spend">💳 %1$d som</string>
+    <string name="promote_new_campaign">New campaign</string>
+    <string name="promote_duration">Duration</string>
+    <string name="promote_days_price">%1$d days — %2$d som</string>
+    <string name="promote_all_venue">Entire venue showcase</string>
+    <string name="promote_what">What to promote</string>
+    <string name="promote_headline">Headline (up to 60)</string>
+    <string name="promote_text">Text (up to 120)</string>
+    <string name="promote_push_default_body">New deal at %1$s</string>
+    <string name="promote_pay_launch">Pay and launch</string>
+    <string name="promote_send_push">Send push</string>
+    <!-- Analytics -->
+    <string name="analytics_days">%1$d days</string>
+    <string name="analytics_days_short">%1$dd</string>
+    <string name="analytics_empty">No data yet. Stats will appear after the first views of your venue.</string>
+    <string name="analytics_profile_views">Profile views</string>
+    <string name="analytics_loading">loading…</string>
+    <string name="analytics_for_days">for %1$d days</string>
+    <string name="analytics_redemptions">Coupons redeemed</string>
+    <string name="analytics_deal_taps">Deal taps</string>
+    <string name="analytics_saves">Saves</string>
+    <string name="analytics_calls">Calls</string>
+    <string name="analytics_maps">Directions</string>
+    <string name="analytics_by_venue">By venue</string>
+    <string name="analytics_redeemed_count">%1$d redeemed</string>
+    <string name="analytics_views">Views</string>
+    <!-- Host profile -->
+    <string name="hprofile_title">Venue profile</string>
+    <string name="hprofile_your_business">Your business</string>
+    <string name="hprofile_unverified">Not verified</string>
+    <string name="hprofile_business_info">Business information</string>
+    <string name="hprofile_details_contacts">Details and contacts</string>
+    <string name="hprofile_inn">TIN %1$s</string>
+    <string name="hprofile_fill_details">Fill in details and contacts</string>
+    <string name="hprofile_verification">Verification</string>
+    <string name="hprofile_verified">Venue verified</string>
+    <string name="hprofile_verify_hint">A checkmark increases guest trust.</string>
+    <string name="hprofile_request_verify">Request \"Verified\"</string>
+    <string name="hprofile_notifications">Notifications</string>
+    <string name="hprofile_notif_desc">New reviews and campaign statuses</string>
+    <string name="hprofile_payment">Payment</string>
+    <string name="hprofile_payment_method">Payment method</string>
+    <string name="hprofile_payment_hint">Payment method setup will be available later.</string>
+    <string name="hprofile_exit_host">Back to user mode</string>
+    <string name="hprofile_email">Email</string>
+    <string name="hprofile_legal_form">Legal form</string>
+    <string name="hprofile_not_specified">Not specified</string>
+    <string name="hprofile_legal_name">Legal entity name</string>
+    <string name="hprofile_entrepreneur_name">Entrepreneur full name</string>
+    <string name="hprofile_inn_label">TIN / Registration no.</string>
+    <string name="hprofile_legal_address">Legal address</string>
+    <string name="hprofile_website">Website</string>
+    <string name="hprofile_about">About the business</string>
+    <!-- Map picker -->
+    <string name="map_pick_hint">Tap the map to drop a point</string>
+
+    <!-- Games -->
+    <string name="game_close">Close</string>
+    <string name="game_score">Score: %1$d</string>
+    <string name="game_play_again">Play again</string>
+    <string name="game_snake_title">🐍 Snake</string>
+    <string name="game_snake_bonus">+1 bonus per apple · left today: %1$d</string>
+    <string name="game_snake_over">Game over — score %1$d</string>
+    <string name="game_snake_hint">Swipe to steer the snake</string>
+    <string name="game_tetris_title">🧱 Tetris</string>
+    <string name="game_tetris_bonus">+5 bonuses per line · left today: %1$d</string>
+    <string name="game_tetris_over">Game over — lines: %1$d</string>
+</resources>

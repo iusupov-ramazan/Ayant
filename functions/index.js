@@ -21,12 +21,24 @@ initializeApp();
 const db = getFirestore();
 
 const DAY_MS = 86400000;
-// ⚠️ На время теста лимиты подняты. Для продакшена верни 1 и 3 (анти-спам из спеки).
-const DAILY_CAP = 20;
-const WEEKLY_CAP = 100;
+// Частотные лимиты из спецификации (анти-спам): не более 1 push в день и 3 в неделю
+// на пользователя. Для локального теста можно временно поднять через переменные
+// окружения PUSH_DAILY_CAP / PUSH_WEEKLY_CAP — в продакшене они не задаются.
+// Разбор с сохранением явного 0 (отключить пуши в тесте): пустое/нечисловое → дефолт.
+function capFromEnv(raw, fallback) {
+  if (raw === undefined || raw === "") return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : fallback;
+}
+const DAILY_CAP = capFromEnv(process.env.PUSH_DAILY_CAP, 1);
+const WEEKLY_CAP = capFromEnv(process.env.PUSH_WEEKLY_CAP, 3);
 
 // Награды за рефералку (бонусы).
 const REFERRAL_REWARD = 100;
+
+// Метрики телеметрии, которые клиент может логировать (redemptions — только через
+// countRedemption, клиенту недоступна). Всё, что вне списка, отбрасывается.
+const ANALYTICS_METRICS = ["views", "saves", "calls", "maps", "dealTaps"];
 
 function dayKey(d = new Date()) {
   return d.toISOString().slice(0, 10); // yyyy-MM-dd (UTC) — как в приложении
@@ -170,6 +182,28 @@ exports.countRedemption = onDocumentCreated("redemptions/{id}", async (event) =>
 
   await snap.ref.set({ status: "counted", countedAt: new Date() }, { merge: true });
   console.log(`🎟️ redemption counted: venue=${venueID} deal=${r.dealID}`);
+});
+
+/* ───────────────────────────────────────────────────────────────────────────
+ * 3b) Телеметрия заведений → серверный авторитетный счётчик (analytics).
+ *     Клиент пишет analyticsEvents/{id} = { venueID, metric }; правила запрещают
+ *     ему писать в analytics/* напрямую. Здесь инкрементируем нужную метрику и
+ *     удаляем событие-триггер (документы не копятся). Метрика вне белого списка
+ *     (в т.ч. "redemptions") игнорируется — счётчики нельзя подделать.
+ * ─────────────────────────────────────────────────────────────────────────── */
+exports.countAnalyticsEvent = onDocumentCreated("analyticsEvents/{id}", async (event) => {
+  const snap = event.data;
+  if (!snap) return;
+  const e = snap.data() || {};
+  const venueID = String(e.venueID || "");
+  const metric = String(e.metric || "");
+  if (venueID && ANALYTICS_METRICS.includes(metric)) {
+    const day = dayKey();
+    await db.collection("analytics").doc(venueID)
+      .collection("days").doc(day)
+      .set({ [metric]: FieldValue.increment(1), date: day }, { merge: true });
+  }
+  await snap.ref.delete().catch(() => {}); // событие обработано — чистим
 });
 
 /* ───────────────────────────────────────────────────────────────────────────

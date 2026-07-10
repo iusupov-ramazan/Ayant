@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -34,13 +35,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kg.ayant.app.R
 import kg.ayant.app.core.Links
 import kg.ayant.app.core.categoryIcon
 import kg.ayant.app.core.shareText
@@ -49,7 +53,9 @@ import kg.ayant.app.data.model.Venue
 import kg.ayant.app.location.LocationManager
 import kg.ayant.app.ui.components.CategoryTile
 import kg.ayant.app.ui.components.DealCard
+import kg.ayant.app.ui.components.VenueCard
 import kg.ayant.app.ui.theme.AyantTheme
+import kg.ayant.app.ui.theme.gradientColors
 import kg.ayant.app.ui.vm.AppViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -64,14 +70,14 @@ fun HomeScreen(
     val context = LocalContext.current
     var category by remember { mutableStateOf<VenueCategory?>(null) }
 
-    val feed = app.feedDeals(category)
+    val feedItems = app.feedItems(category)
     val specials = app.savedTodaySpecials
 
     Scaffold(
         containerColor = c.canvas,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Ayant · ${app.selectedCity.name}", fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.home_title, app.selectedCity.name), fontWeight = FontWeight.Bold) },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = c.canvas, titleContentColor = c.ink),
             )
         },
@@ -88,7 +94,7 @@ fun HomeScreen(
                     horizontalArrangement = Arrangement.spacedBy(18.dp),
                 ) {
                     item {
-                        CategoryTile("Все", Icons.Filled.GridView, category == null) { category = null }
+                        CategoryTile(stringResource(R.string.category_all), Icons.Filled.GridView, category == null) { category = null }
                     }
                     items(VenueCategory.all) { cat ->
                         CategoryTile(cat.rawValue, categoryIcon(cat.icon), category == cat) {
@@ -104,7 +110,7 @@ fun HomeScreen(
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Filled.Star, null, tint = c.accent, modifier = Modifier.size(16.dp))
-                            Text("  Сегодня в избранном", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = c.accent)
+                            Text("  " + stringResource(R.string.home_today_saved), fontSize = 14.sp, fontWeight = FontWeight.Bold, color = c.accent)
                         }
                         LazyRow(
                             contentPadding = PaddingValues(horizontal = 16.dp),
@@ -124,24 +130,45 @@ fun HomeScreen(
                     }
                 }
                 app.venuesInSelectedCity().isEmpty() -> item {
-                    EmptyState("Пока нет заведений в ${app.selectedCity.name}", "Знаешь хорошее место? Помоги нам — добавь заведение.")
+                    EmptyState(stringResource(R.string.home_empty_city_title, app.selectedCity.name), stringResource(R.string.home_empty_city_body))
                 }
-                feed.isEmpty() -> item {
-                    EmptyState("Нет предложений в категории", "В этой категории пока нет акций.")
+                feedItems.isEmpty() -> item {
+                    EmptyState(stringResource(R.string.feed_empty_cat_title), stringResource(R.string.feed_empty_cat_body))
                 }
-                else -> items(feed, key = { it.id }) { deal ->
-                    val venue = app.venue(forDeal = deal)
-                    DealCard(
-                        deal = deal,
-                        venue = venue,
-                        rating = venue?.let { app.aggregate(it).first } ?: 0.0,
-                        isFavorite = app.isFavorite(deal),
-                        onTap = { onDeal(deal.id) },
-                        onVenueTap = { venue?.let { onVenue(it.id) } },
-                        onFavoriteClick = { app.toggleFavorite(deal) },
-                        onShare = { context.shareText("${deal.title} — ${venue?.name ?: ""}. Нашёл в Ayant! ${Links.deal(deal.id)}", deal.title) },
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                    )
+                else -> items(feedItems, key = { it.id }) { item ->
+                    when (item) {
+                        is kg.ayant.app.data.model.FeedItem.DealItem -> {
+                            val deal = item.deal
+                            val venue = app.venue(forDeal = deal)
+                            DealCard(
+                                deal = deal,
+                                venue = venue,
+                                rating = venue?.let { app.aggregate(it).first } ?: 0.0,
+                                isFavorite = app.isFavorite(deal),
+                                onTap = { onDeal(deal.id) },
+                                onVenueTap = { venue?.let { onVenue(it.id) } },
+                                onFavoriteClick = { app.toggleFavorite(deal) },
+                                onShare = { context.shareText(context.getString(R.string.deal_share_text, deal.title, venue?.name ?: "", Links.deal(deal.id)), deal.title) },
+                                modifier = Modifier.padding(horizontal = 16.dp),
+                            )
+                        }
+                        is kg.ayant.app.data.model.FeedItem.AdVenue -> {
+                            val v = item.venue
+                            val agg = app.aggregate(v)
+                            VenueCard(
+                                venue = v,
+                                distanceKm = location.distanceKm(v.latitude, v.longitude),
+                                isSaved = app.isSaved(v),
+                                dealCount = app.deals(forVenue = v).size,
+                                rating = agg.first,
+                                ratingCount = agg.second,
+                                isSponsored = true,
+                                onSaveClick = { app.toggleSave(v) },
+                                onClick = { onVenue(v.id) },
+                                modifier = Modifier.padding(horizontal = 16.dp),
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -159,13 +186,13 @@ private fun SpecialCard(venue: Venue, onClick: () -> Unit) {
             .border(1.dp, c.accent.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
             .clickable(onClick = onClick),
     ) {
-        Box(Modifier.fillMaxWidth().height(90.dp).background(Brush.linearGradient(venue.gradient)), contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxWidth().height(90.dp).background(Brush.linearGradient(venue.gradientColors)), contentAlignment = Alignment.Center) {
             Text(venue.emoji, fontSize = 40.sp)
         }
         Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(venue.name, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (venue.isOpenNow) Text("  Открыто", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = c.open)
+                if (venue.isOpenNow) Text("  " + stringResource(R.string.status_open), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = c.open)
             }
             Text(venue.todaySpecialText ?: "", fontSize = 12.sp, color = c.inkSoft, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }

@@ -5,7 +5,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
-import java.util.UUID
+import androidx.lifecycle.viewModelScope
+import kg.ayant.app.core.AppConfig
+import kotlinx.coroutines.launch
 
 enum class AuthProvider { EMAIL, GOOGLE, GUEST }
 
@@ -17,15 +19,17 @@ data class AyantUser(
 )
 
 /**
- * Auth state. Mirrors SessionStore.swift. The UI only reads this and doesn't know
- * the implementation. Backed by a mock now; swap in FirebaseAuth once
- * google-services.json is added.
+ * Auth state. Mirrors SessionStore.swift — delegates to AuthService (Mock/Firebase
+ * via AppConfig) and caches the signed-in user in prefs for offline start.
  */
 class SessionViewModel(app: Application) : AndroidViewModel(app) {
 
     private val prefs = app.getSharedPreferences("ayant.session", 0)
+    private val service = AppConfig.makeAuthService()
 
-    var user by mutableStateOf<AyantUser?>(loadUser())
+    // Under Firebase, only trust a real Firebase session — a stale prefs cache would
+    // leave the app "signed in" with no auth token, so Firestore reads get denied.
+    var user by mutableStateOf(service.currentUser() ?: if (AppConfig.useFirebase) null else loadUser())
         private set
     var isWorking by mutableStateOf(false)
         private set
@@ -34,36 +38,35 @@ class SessionViewModel(app: Application) : AndroidViewModel(app) {
     val isSignedIn: Boolean get() = user != null
     val isGuest: Boolean get() = user?.provider == AuthProvider.GUEST
 
-    fun signInEmail(email: String, password: String) {
-        if (email.isBlank() || password.isBlank()) {
-            errorMessage = "Введите почту и пароль"; return
-        }
-        setUser(AyantUser(stableId(email), nameFromEmail(email), email, AuthProvider.EMAIL))
+    fun signInEmail(email: String, password: String) = run { service.signInEmail(email, password) }
+    fun registerEmail(name: String, email: String, password: String) = run { service.registerEmail(name, email, password) }
+    /** Real Google Sign-In (Credential Manager) when Firebase is on; mock otherwise. */
+    fun signInGoogle(context: android.content.Context) = run {
+        if (AppConfig.useFirebase) kg.ayant.app.data.GoogleAuth.signIn(context) else service.signInGoogle()
     }
-
-    fun registerEmail(name: String, email: String, password: String) {
-        if (name.isBlank() || email.isBlank() || password.isBlank()) {
-            errorMessage = "Заполните все поля"; return
-        }
-        setUser(AyantUser(stableId(email), name, email, AuthProvider.EMAIL))
-    }
-
-    fun signInGoogle() {
-        // Stub — wire Google Sign-In / Firebase Auth once configured.
-        setUser(AyantUser(UUID.randomUUID().toString(), "Пользователь Google", null, AuthProvider.GOOGLE))
-    }
-
-    fun continueAsGuest() {
-        setUser(AyantUser("guest_${UUID.randomUUID().toString().take(8)}", "Гость", null, AuthProvider.GUEST))
-    }
+    fun continueAsGuest() = run { service.continueAsGuest() }
 
     fun signOut() {
+        service.signOut()
         user = null
         errorMessage = null
         prefs.edit().clear().apply()
     }
 
-    private fun setUser(u: AyantUser) {
+    private fun run(op: suspend () -> AyantUser) {
+        isWorking = true
+        errorMessage = null
+        viewModelScope.launch {
+            try {
+                applyUser(op())
+            } catch (e: Exception) {
+                errorMessage = e.localizedMessage ?: "Ошибка входа"
+            }
+            isWorking = false
+        }
+    }
+
+    private fun applyUser(u: AyantUser) {
         user = u
         errorMessage = null
         prefs.edit()
@@ -78,10 +81,7 @@ class SessionViewModel(app: Application) : AndroidViewModel(app) {
             id = id,
             name = prefs.getString("name", "Вы") ?: "Вы",
             email = prefs.getString("email", null),
-            provider = AuthProvider.valueOf(prefs.getString("provider", "EMAIL") ?: "EMAIL"),
+            provider = runCatching { AuthProvider.valueOf(prefs.getString("provider", "EMAIL") ?: "EMAIL") }.getOrDefault(AuthProvider.EMAIL),
         )
     }
-
-    private fun nameFromEmail(email: String) = email.substringBefore("@").replaceFirstChar { it.uppercase() }
-    private fun stableId(email: String) = "u_" + email.lowercase().hashCode().toUInt().toString(16)
 }

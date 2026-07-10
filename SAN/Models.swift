@@ -96,6 +96,15 @@ struct VenueCategory: RawRepresentable, Identifiable, Hashable {
     var icon: String {
         VenueCategory.iconRegistry[rawValue] ?? VenueCategory.builtinIcons[rawValue] ?? "tag.fill"
     }
+
+    /// Заполняет реестры иконок и слагов из серверных категорий (вызывает CategoryStore).
+    static func applyRemote(_ cats: [RemoteCategory]) {
+        var icons: [String: String] = [:]
+        var slugs: [String: String] = [:]
+        for c in cats { icons[c.name] = c.icon; slugs[c.slug] = c.name }
+        iconRegistry = icons
+        slugRegistry = slugs
+    }
 }
 
 // MARK: - Город (масштабирование на города Центральной Азии)

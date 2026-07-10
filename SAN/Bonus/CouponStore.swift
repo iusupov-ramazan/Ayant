@@ -42,10 +42,13 @@ final class CouponStore: ObservableObject {
 
     @Published private(set) var coupons: [Coupon] = []
     private let key = "san.coupons"
-    private let backend = AppConfig.makeCouponService()
+    private let backend: CouponService
     private(set) var userID = ""
 
-    init() { load() }
+    init(backend: CouponService = AppConfig.makeCouponService()) {
+        self.backend = backend
+        load()
+    }
 
     var activeCount: Int { coupons.filter { !$0.used }.count }
 

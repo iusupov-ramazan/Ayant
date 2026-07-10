@@ -30,6 +30,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
+import kg.ayant.app.R
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -73,10 +75,10 @@ fun OnboardingScreen(onFinished: () -> Unit) {
         if (step == 0) {
             PrePrompt(
                 icon = Icons.Filled.LocationOn,
-                title = "Включи геолокацию",
-                subtitle = "Разреши доступ к локации, чтобы видеть, как далеко заведения от тебя. Без неё всё работает — просто без расстояний.",
-                primary = "Разрешить геолокацию",
-                secondary = "Не сейчас",
+                title = stringResource(R.string.onb_location_title),
+                subtitle = stringResource(R.string.onb_location_sub),
+                primary = stringResource(R.string.onb_location_allow),
+                secondary = stringResource(R.string.onb_not_now),
                 onPrimary = {
                     locationLauncher.launch(
                         arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
@@ -87,10 +89,10 @@ fun OnboardingScreen(onFinished: () -> Unit) {
         } else {
             PrePrompt(
                 icon = Icons.Filled.Notifications,
-                title = "Не пропусти новые акции",
-                subtitle = "Уведомим, когда сохранённые заведения опубликуют новое предложение. Включить можно позже в настройках.",
-                primary = "Включить уведомления",
-                secondary = "Позже",
+                title = stringResource(R.string.onb_notif_title),
+                subtitle = stringResource(R.string.onb_notif_sub),
+                primary = stringResource(R.string.onb_notif_allow),
+                secondary = stringResource(R.string.onb_later),
                 onPrimary = {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                         notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)

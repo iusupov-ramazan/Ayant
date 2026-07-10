@@ -1,0 +1,462 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Ayant</string>
+
+    <string name="tab_home">Башкы</string>
+    <string name="tab_search">Издөө</string>
+    <string name="tab_bonus">Бонустар</string>
+    <string name="tab_saved">Сакталган</string>
+    <string name="tab_profile">Профиль</string>
+
+    <string name="htab_venues">Мекемелер</string>
+    <string name="htab_promote">Жарнама</string>
+    <string name="htab_analytics">Аналитика</string>
+    <string name="htab_reviews">Пикирлер</string>
+    <string name="htab_profile">Профиль</string>
+
+    <string name="action_save">Сактоо</string>
+    <string name="action_cancel">Жокко чыгаруу</string>
+    <string name="action_done">Даяр</string>
+    <string name="action_ok">Түшүнүктүү</string>
+    <string name="action_back">Артка</string>
+    <string name="action_delete">Өчүрүү</string>
+    <string name="action_edit">Өзгөртүү</string>
+    <string name="action_add">Кошуу</string>
+    <string name="action_share">Бөлүшүү</string>
+    <string name="action_open">Ачуу</string>
+    <string name="action_publish">Жарыялоо</string>
+    <string name="action_close">Жабуу</string>
+
+    <string name="auth_tagline">арзандатуулар • акциялар • жаңылыктар</string>
+    <string name="auth_sign_in">Кирүү</string>
+    <string name="auth_register">Каттоо</string>
+    <string name="auth_name">Аты</string>
+    <string name="auth_email">Почта</string>
+    <string name="auth_password">Сырсөз</string>
+    <string name="auth_do_sign_in">Кирүү</string>
+    <string name="auth_create_account">Аккаунт түзүү</string>
+    <string name="auth_or">же</string>
+    <string name="auth_google">Google менен улантуу</string>
+    <string name="auth_guest">Конок катары кирүү</string>
+    <string name="auth_error">Ката</string>
+
+    <string name="onb_location_title">Геолокацияны кош</string>
+    <string name="onb_location_sub">Мекемелердин канчалык алыс экенин көрүү үчүн локацияга уруксат бер. Ансыз да иштейт — жөн гана аралыксыз.</string>
+    <string name="onb_location_allow">Геолокацияга уруксат</string>
+    <string name="onb_not_now">Азыр эмес</string>
+    <string name="onb_notif_title">Жаңы акцияларды өткөрүп жибербе</string>
+    <string name="onb_notif_sub">Сакталган мекемелер жаңы сунуш жарыялаганда билдиребиз. Кийин орнотуулардан күйгүзсө болот.</string>
+    <string name="onb_notif_allow">Билдирүүлөрдү күйгүзүү</string>
+    <string name="onb_later">Кийин</string>
+
+    <string name="title_search">Издөө</string>
+    <string name="title_saved">Сакталган</string>
+    <string name="title_bonuses">Бонустар</string>
+    <string name="title_profile">Профиль</string>
+    <string name="title_coupon">Купон</string>
+    <string name="title_my_coupons">Менин купондорум</string>
+    <string name="title_loyalty">Лоялдуулук карталары</string>
+
+    <string name="settings">Орнотуулар</string>
+    <string name="setting_city">Шаар</string>
+    <string name="setting_language">Тил</string>
+    <string name="setting_theme">Тема</string>
+    <string name="theme_system">Системалык</string>
+    <string name="theme_light">Ачык</string>
+    <string name="theme_dark">Караңгы</string>
+    <string name="lang_ru">Русский</string>
+    <string name="lang_en">English</string>
+    <string name="lang_ky">Кыргызча</string>
+
+    <string name="help">Жардам</string>
+    <string name="help_about">Колдонмо жөнүндө</string>
+    <string name="help_faq">Суроо-жооптор</string>
+    <string name="help_support">Колдоо</string>
+    <string name="account_sign_out">Чыгуу</string>
+    <string name="account_delete">Аккаунтту өчүрүү</string>
+
+    <string name="saved_venues">Мекемелер</string>
+    <string name="saved_deals">Сунуштар</string>
+
+    <string name="guest_title">Аккаунтка кириңиз</string>
+    <string name="guest_body">Конокторго көрүү гана жеткиликтүү. Сактоо жана пикир калтыруу үчүн профилден кириңиз.</string>
+
+    <string name="act_call">Чалуу</string>
+    <string name="act_route">Багыт</string>
+    <string name="act_save">Сактоо</string>
+    <string name="act_saved">Сакталды</string>
+    <string name="act_share">Бөлүшүү</string>
+    <string name="reviews">Пикирлер</string>
+    <string name="publications">Жарыялоолор</string>
+    <string name="photos">Сүрөттөр</string>
+    <string name="see_all">Баарын көрүү</string>
+    <string name="open_on_map">Картадан ачуу</string>
+    <string name="venue_section">Мекеме</string>
+    <string name="today">Бүгүн</string>
+    <string name="rate_item">Тамак же кызматка баа бериңиз</string>
+    <string name="no_reviews">Азырынча пикир жок. Биринчи болуңуз!</string>
+
+    <string name="home_today_saved">Бүгүн тандалмаларда</string>
+    <string name="feed_empty_city_title">Азырынча мекемелер жок</string>
+    <string name="feed_empty_cat_title">Бул категорияда сунуш жок</string>
+    <string name="feed_empty_cat_body">Бул категорияда азырынча акциялар жок.</string>
+
+    <string name="search_hint">Мекеме, категория же акция</string>
+    <string name="search_empty_title">Эч нерсе табылган жок</string>
+    <string name="search_empty_body">Башка ат менен издеп көрүңүз же аралыкты кеңейтиңиз.</string>
+    <string name="filter_open">Ачык</string>
+    <string name="filter_deals">Арзандатуу менен</string>
+    <string name="filter_rating">Рейтинг</string>
+    <string name="filter_distance">Аралык</string>
+    <string name="filter_category">Категория</string>
+
+    <!-- ===== Batch: user-facing screen localization (KY) ===== -->
+    <!-- Venue detail -->
+    <string name="venue_not_found">Мекеме табылган жок</string>
+    <string name="venue_distance_from_you">%1$s сизден</string>
+    <string name="venue_saved_by_count">%1$d киши сактады</string>
+    <string name="venue_share_text">%1$s, %2$s. Ayant колдонмосунан таптым! %3$s</string>
+    <string name="venue_loyalty_card">Лоялдуулук картасы</string>
+    <string name="venue_loyalty_progress">%1$d баруу → %2$s</string>
+    <string name="venue_pdf_menu">Прайс-барак / каталог (PDF)</string>
+    <string name="venue_see_all_count">Баарын көрүү (%1$d)</string>
+    <string name="venue_reviews_count">%1$d пикир</string>
+    <string name="venue_reviews_no_items">Пикирлер белгилүү тамактарга жана кызматтарга калтырылат. Мекеме азырынча баа берүү үчүн объекттерди кошо элек.</string>
+    <string name="map_choose_app">Багыт үчүн колдонмо тандаңыз.</string>
+    <!-- Reviews -->
+    <string name="review_report_thanks_title">Рахмат</string>
+    <string name="review_report_title">Пикирге даттануу</string>
+    <string name="review_report_sent">Даттануу модерацияга жөнөтүлдү.</string>
+    <string name="review_report_choose">Даттануунун себебин тандаңыз.</string>
+    <string name="review_report_spam">Спам</string>
+    <string name="review_report_offensive">Кемсинтүүчү</string>
+    <string name="review_report_action">Даттануу</string>
+    <string name="review_verified_visit">Болгон</string>
+    <string name="review_about_item">Объект боюнча пикир: %1$s</string>
+    <string name="review_host_reply">Мекеменин жообу</string>
+    <string name="review_new_title">Жаңы пикир</string>
+    <string name="review_edit_title">Пикирди өзгөртүү</string>
+    <string name="review_no_items_body">Мекемеде азырынча пикир калтыруу үчүн объекттер жок. Белгилүү тамакка же кызматка баа берсе болот — мекемеден кошууну сураныңыз.</string>
+    <string name="review_what_rating">Эмнеге баа бересиз</string>
+    <string name="review_hint">Сиздин пикириңиз</string>
+    <string name="action_choose">Тандоо</string>
+    <!-- Deal detail -->
+    <string name="deal_not_found">Сунуш табылган жок</string>
+    <string name="deal_title_fallback">Сунуш</string>
+    <string name="deal_share_text">%1$s — %2$s. Ayant колдонмосунан таптым! %3$s</string>
+    <string name="deal_valid_until">%1$s чейин жарактуу</string>
+    <string name="deal_coupon_title">Сунушка купон</string>
+    <string name="deal_coupon_hint">Кызматкер QR кодду скандап, төлөмдөн мурун сунушту колдонот.</string>
+    <string name="deal_coupon_guest">Купон алуу үчүн аккаунтка кириңиз.</string>
+    <string name="deal_get_coupon">Купон алуу</string>
+    <string name="deal_show_coupon">Купонду көрсөтүү</string>
+    <!-- Profile -->
+    <string name="profile_guest_name">Конок</string>
+    <string name="profile_host_mode">Мекеме режими</string>
+    <string name="profile_host_guest">Бизнесиңизди башкаруу үчүн кириңиз</string>
+    <string name="profile_host_sub">Бизнесиңизди башкарыңыз</string>
+    <string name="profile_my_reviews">Менин пикирлерим</string>
+    <string name="profile_no_reviews">Сиз азырынча бир да пикир калтыра элексиз.</string>
+    <string name="profile_invite_friend">Досту чакыр</string>
+    <string name="profile_referral_share">Шаардын арзандатууларын жана акцияларын Ayant колдонмосунан ал. Шилтемем аркылуу кир — экөөбүз тең бонус алабыз! %1$s</string>
+    <string name="profile_share_invite">Чакырууну бөлүшүү</string>
+    <string name="profile_referral_desc">Досуңуз тосуп алуу бонустарын алат, ал эми сиз кошулган ар бир адам үчүн бонус аласыз.</string>
+    <string name="app_version">Версия 0.3 (MVP)</string>
+    <string name="account_delete_confirm_title">Аккаунтту өчүрөсүзбү?</string>
+    <string name="account_delete_body">Бул аракетти артка кайтарууга болбойт. Бардык пикирлер жана сакталгандар өчүрүлөт.</string>
+    <!-- Search -->
+    <string name="search_list">Тизме</string>
+    <string name="search_map">Карта</string>
+    <string name="filter_reset">Чыпкаларды тазалоо</string>
+    <string name="search_found">Табылды: %1$d</string>
+    <string name="filter_rating_any">Каалаган рейтинг</string>
+    <string name="filter_distance_any">Каалаган аралык</string>
+    <string name="filter_category_all">Бардык категориялар</string>
+    <!-- Status -->
+    <string name="status_open">Ачык</string>
+    <string name="status_closed">Жабык</string>
+    <!-- Coupons -->
+    <string name="coupon_empty_title">Купондор жок</string>
+    <string name="coupon_empty_body">Мекемелердин акцияларына купон ал же «Бонустар» бөлүмүндө бонустарды алмаштыр.</string>
+    <string name="coupon_available">ЖЕТКИЛИКТҮҮ · %1$d</string>
+    <string name="coupon_used_section">КОЛДОНУЛГАН · %1$d</string>
+    <string name="coupon_status_used">Колдонулган</string>
+    <string name="coupon_status_active">Активдүү</string>
+    <string name="coupon_not_found">Купон табылган жок</string>
+    <string name="coupon_badge_used">КОЛДОНУЛГАН</string>
+    <string name="coupon_badge_active">АКТИВДҮҮ · AYANT</string>
+    <string name="coupon_code_label">КУПОН КОДУ</string>
+    <string name="coupon_used_msg">Купон колдонулду</string>
+    <string name="coupon_show_qr_hint">QR кодду кызматкерге көрсөтүңүз — ал скандайт да, сунуш колдонулат.</string>
+    <string name="coupon_use">Купонду колдонуу</string>
+    <string name="coupon_use_confirm_title">Купонду колдоносузбу?</string>
+    <string name="coupon_use_confirm_body">Купонду кызматкердин көзүнчө гана ырастаңыз — ал бир жолу колдонулат.</string>
+    <string name="coupon_use_confirm_yes">Ооба, колдонуу</string>
+    <!-- Bonus -->
+    <string name="bonus_balance">Сиздин балансыңыз</string>
+    <string name="bonus_until_reward">сыйлыкка %1$s калды</string>
+    <string name="bonus_spend">Бонустарды коротуу</string>
+    <string name="bonus_games_header">Ойноп бонус жый</string>
+    <string name="game_snake">Жылан</string>
+    <string name="game_snake_sub">+1 / алма</string>
+    <string name="game_tetris">Тетрис</string>
+    <string name="game_tetris_sub">+5 / сызык</string>
+    <string name="bonus_reward_toast">+%1$d бонус 🎉</string>
+    <string name="bonus_cost">%1$d бонус</string>
+    <string name="bonus_redeem_self">Өзүмө алмаштыруу</string>
+    <string name="bonus_gift_friend">Досума белек</string>
+    <string name="bonus_gift_share">🎁 Сага белек — Ayant колдонмосундагы «%1$s» купону! Шилтемеден ал: https://ayant.kg/gift/%2$s</string>
+    <!-- Loyalty -->
+    <string name="loyalty_empty_title">Азырынча лоялдуулук карталары жок</string>
+    <string name="loyalty_empty_body">Лоялдуулук картасы бар мекеменин барагын ачып, анын QR кодун кызматкерге көрсөтүңүз.</string>
+    <string name="loyalty_reward">Сыйлык: %1$s</string>
+    <string name="loyalty_rewards_earned">Алынган сыйлыктар: %1$d</string>
+    <string name="loyalty_show_hint">Кызматкерге көрсөтүңүз — ал штамп үчүн скандайт</string>
+    <string name="loyalty_hide_qr">QR жашыруу</string>
+    <string name="loyalty_show_qr">QR көрсөтүү</string>
+    <string name="loyalty_signin_hint">Штамп жыйноо үчүн аккаунтка кириңиз.</string>
+    <string name="loyalty_how_title">Кантип иштейт</string>
+    <string name="loyalty_how_body">Ар бир баруудо картанын QR кодун кызматкерге көрсөтүңүз — ал скандайт да, сизге штамп берилет. %1$d штамп чогултуп, «%2$s» алыңыз.</string>
+    <!-- Help -->
+    <string name="help_about_body">Шаарыңыздын мекемелеринин арзандатуулары, акциялары жана жаңылыктары. Жакын жерлерди табыңыз, сүйгөндөрүн сактаңыз, купондорду алып, бонус жыйнаңыз.</string>
+    <string name="help_about_region">Борбордук Азия · Бишкек</string>
+    <string name="faq_q1">Купонду кантип алам?</string>
+    <string name="faq_a1">Мекеменин акциясын ачып, «Купон алуу» баскычын басыңыз. Төлөгөндө QR кодду кызматкерге көрсөтүңүз.</string>
+    <string name="faq_q2">Бонустар деген эмне?</string>
+    <string name="faq_a2">Бонустар колдонмодогу активдүүлүк жана мини-оюндар үчүн берилет. Аларды «Бонустар» бөлүмүндө купондорго алмаштырыңыз.</string>
+    <string name="faq_q3">Лоялдуулук картасы кантип иштейт?</string>
+    <string name="faq_a3">Ар бир баруудо картанын QR кодун кызматкерге көрсөтүңүз. Керектүү сандагы штамп чогултуп, сыйлык алыңыз.</string>
+    <string name="faq_q4">Мекемемди кантип кошом?</string>
+    <string name="faq_a4">Профилден «Мекеме режимин» ачып, бизнестин маалыматтарын толтуруңуз.</string>
+    <string name="support_contact">Биз менен байланышыңыз</string>
+    <string name="support_email">Бизге кат жазыңыз</string>
+    <!-- Home -->
+    <string name="home_title">Ayant · %1$s</string>
+    <string name="category_all">Баары</string>
+    <string name="home_empty_city_title">%1$s шаарында азырынча мекемелер жок</string>
+    <string name="home_empty_city_body">Жакшы жер билесизби? Бизге жардам бериңиз — мекеме кошуңуз.</string>
+    <!-- Saved -->
+    <string name="saved_guest_title">Аккаунттар үчүн гана</string>
+    <string name="saved_guest_body">Мекемелерди жана сунуштарды сактоо үчүн кириңиз. Конокторго көрүү гана жеткиликтүү.</string>
+    <string name="saved_empty_venues_title">Сүйгөн жерлериңизди сактаңыз</string>
+    <string name="saved_empty_venues_body">Алар бул жерде пайда болот — каалаган мекемеде кыстырманы басыңыз.</string>
+    <string name="saved_empty_deals_title">Сунуштарды сактаңыз</string>
+    <string name="saved_empty_deals_body">Каалаган сунушту бул жерге сактоо үчүн кыстырманы басыңыз.</string>
+    <!-- Cards -->
+    <string name="card_ad_recommend">сунушталган мекеме</string>
+    <string name="card_deal_count">%1$d акция</string>
+    <string name="card_until">%1$s чейин</string>
+    <string name="card_ad_label">Жарнама</string>
+
+    <!-- ===== Host screens localization (KY) ===== -->
+    <!-- Host venue detail / common -->
+    <string name="host_active">Активдүү</string>
+    <string name="host_paused">Тыныгууда</string>
+    <string name="host_rejected">Четке кагылды</string>
+    <string name="host_pending">Текшерүүдө</string>
+    <string name="host_approved">Жактырылды</string>
+    <string name="host_rejected_body">Мекеме четке кагылды. Маалыматты оңдоп, кайра сактаңыз.</string>
+    <string name="host_pending_body">Мекеме текшерүүдө. Жактыргандан кийин лентада пайда болот.</string>
+    <string name="host_today_special">⭐️ Бүгүнкү өзгөчө сунуш</string>
+    <string name="host_special_placeholder">100 белгиге чейин</string>
+    <string name="host_save_special">Өзгөчө сунушту сактоо</string>
+    <string name="host_enabled">Күйгүзүлгөн</string>
+    <string name="host_disabled">Өчүрүлгөн</string>
+    <string name="host_loyalty_progress">%1$d баруу → «%2$s»</string>
+    <string name="host_loyalty_disabled_hint">Мекеменин орнотууларынан лоялдуулук программасын күйгүзүңүз.</string>
+    <string name="host_items_section">Пикир үчүн объекттер</string>
+    <string name="host_cd_add_item">Объект кошуу</string>
+    <string name="host_no_items">Азырынча объекттер жок.</string>
+    <string name="host_cd_add_deal">Акция кошуу</string>
+    <string name="host_no_deals">Азырынча сунуштар жок. Конокторду тартуу үчүн кошуңуз.</string>
+    <string name="host_resume">Улантуу</string>
+    <string name="host_pause">Тыныктыруу</string>
+    <string name="host_expired">Аяктады</string>
+    <string name="host_draft">Долбоор</string>
+    <string name="host_scan_guest_coupons">Конактардын купондорун скандоо</string>
+    <string name="host_edit_venue">Мекеменин маалыматын өзгөртүү</string>
+    <string name="host_promote_venue">Бул мекемени жарнамалоо</string>
+    <string name="host_delete_venue">Мекемени өчүрүү</string>
+    <string name="host_delete_venue_confirm">Мекемени өчүрөсүзбү?</string>
+    <string name="host_delete_venue_body">«%1$s» жана анын бардык сунуштары калыбына келтирүүсүз өчүрүлөт.</string>
+    <string name="host_cd_scanner">Сканер</string>
+    <!-- Host item dialog -->
+    <string name="host_item_new_title">Жаңы объект</string>
+    <string name="host_item_name">Аталышы (мис. Лагман)</string>
+    <string name="host_item_emoji">Эмодзи (сүрөтсүз болсо)</string>
+    <string name="host_item_kind_label">Түрү</string>
+    <string name="host_item_kind_food">Тамак</string>
+    <string name="host_item_kind_service">Кызмат</string>
+    <string name="host_item_kind_other">Объект</string>
+    <!-- Host scanner -->
+    <string name="host_scan_title">Купонду скандоо</string>
+    <string name="host_scan_hint">Камераны конактын купон / лоялдуулук картасынын QR кодуна багыттаңыз.</string>
+    <string name="host_scan_manual">Кодду кол менен киргизүү</string>
+    <string name="host_scan_code">Купон коду (мис. AYANT-XXXXXX)</string>
+    <string name="host_scan_checking">Текшерүү…</string>
+    <string name="host_scan_redeem">Колдонуу</string>
+    <string name="host_scan_error">Ката: %1$s</string>
+    <string name="host_scan_failed">болбоду</string>
+    <string name="host_scan_stamp">✓ Штамп %1$d/%2$d</string>
+    <string name="host_scan_reward_suffix">" · Сыйлык: %1$s!"</string>
+    <string name="host_scan_redeemed">✓ Колдонулду: %1$s</string>
+    <!-- Host reviews -->
+    <string name="host_reviews_empty">Азырынча пикирлер жок. Алгачкы пикирлерди алуу үчүн мекемени бөлүшүңүз.</string>
+    <string name="host_your_reply">Сиздин жообуңуз</string>
+    <string name="host_reply">Жооп берүү</string>
+    <string name="host_edit_reply">Жоопту өзгөртүү</string>
+    <string name="host_reply_title">Пикирге жооп</string>
+    <string name="host_reply_hint">Сиздин жообуңуз (баарына көрүнөт)</string>
+    <!-- Host onboarding / venues list -->
+    <string name="host_onb_body">Бизнесиңиз жөнүндө айтып бериңиз. Төлөм жана верификация талап кылынбайт.</string>
+    <string name="host_onb_business_name">Бизнестин аталышы</string>
+    <string name="host_onb_phone">Байланыш телефону</string>
+    <string name="host_onb_continue">Улантуу</string>
+    <string name="host_my_venues">Менин мекемелерим</string>
+    <string name="host_no_venues_title">Сизде азырынча мекемелер жок</string>
+    <string name="host_no_venues_body">Конокторду тарта баштоо үчүн биринчи мекемени кошуңуз.</string>
+    <string name="host_add_venue">Мекеме кошуу</string>
+    <string name="host_stat_venues">Мекемелер</string>
+    <string name="host_stat_active_deals">Активдүү акциялар</string>
+    <string name="host_stat_views">Көрүүлөр</string>
+    <string name="host_active_deals_count">%1$d активдүү сунуш</string>
+    <string name="host_add_deal_short">+ Акция</string>
+    <!-- Upload button -->
+    <string name="host_upload_photo">Түзмөктөн сүрөт жүктөө</string>
+    <string name="host_upload_pdf">Түзмөктөн PDF жүктөө</string>
+    <string name="host_upload_failed">Жүктөө ишке ашкан жок</string>
+    <string name="host_uploading">Жүктөлүүдө…</string>
+    <!-- Venue form -->
+    <string name="venue_form_new_title">Жаңы мекеме</string>
+    <string name="venue_form_edit_title">Мекемени өзгөртүү</string>
+    <string name="venue_form_section_main">Негизги</string>
+    <string name="venue_form_name">Аталышы</string>
+    <string name="venue_form_emoji">Эмодзи</string>
+    <string name="venue_form_district">Район</string>
+    <string name="venue_form_address">Дарек</string>
+    <string name="venue_form_phone">Телефон</string>
+    <string name="venue_form_phone_optional">Телефон (милдеттүү эмес)</string>
+    <string name="venue_form_photo_url">Сүрөткө шилтеме (https)</string>
+    <string name="venue_form_pdf_url">Прайс-барак / каталог PDF (шилтеме)</string>
+    <string name="venue_form_section_hours">Иштөө убактысы</string>
+    <string name="venue_form_hours_perday">Жума күндөрү боюнча</string>
+    <string name="venue_form_hours_same">Күн сайын бирдей</string>
+    <string name="venue_form_open_hour">Ачылуу (саат)</string>
+    <string name="venue_form_close_hour">Жабылуу (саат)</string>
+    <string name="venue_form_day_mon">Дш</string>
+    <string name="venue_form_day_tue">Шш</string>
+    <string name="venue_form_day_wed">Шр</string>
+    <string name="venue_form_day_thu">Бш</string>
+    <string name="venue_form_day_fri">Жм</string>
+    <string name="venue_form_day_sat">Иш</string>
+    <string name="venue_form_day_sun">Жк</string>
+    <string name="venue_form_from">-дан</string>
+    <string name="venue_form_to">чейин</string>
+    <string name="venue_form_dayoff">Дем алыш</string>
+    <string name="venue_form_apply_monday">Дүйшөмбүнү баарына колдонуу</string>
+    <string name="venue_form_section_branches">Филиалдар (кошумча даректер)</string>
+    <string name="venue_form_add_branch">Филиал кошуу</string>
+    <string name="venue_form_new_branch">Жаңы филиал</string>
+    <string name="venue_form_section_social">Социалдык тармактар</string>
+    <string name="venue_form_whatsapp">WhatsApp (номер)</string>
+    <string name="venue_form_instagram">Instagram (ник же шилтеме)</string>
+    <string name="venue_form_telegram">Telegram (ник же шилтеме)</string>
+    <string name="venue_form_section_location">Жайгашкан жери</string>
+    <string name="venue_form_pick_map">Картадан чекит тандоо</string>
+    <string name="venue_form_lat">Кеңдик</string>
+    <string name="venue_form_lng">Узундук</string>
+    <string name="venue_form_section_loyalty">Купондор жана лоялдуулук</string>
+    <string name="venue_form_accept_coupons">Купондорду кабыл алуу</string>
+    <string name="venue_form_stamps_goal">Сыйлыкка чейин штамптар</string>
+    <string name="venue_form_reward">Сыйлык</string>
+    <!-- Deal form -->
+    <string name="deal_form_new_title">Жаңы сунуш</string>
+    <string name="deal_form_edit_title">Сунушту өзгөртүү</string>
+    <string name="deal_form_title">Аталышы</string>
+    <string name="deal_form_type">Түрү (басыңыз)</string>
+    <string name="deal_form_details">Сүрөттөмө</string>
+    <string name="deal_form_new_price">Жаңы баа, сом</string>
+    <string name="deal_form_discount">Арзандатуу пайызы</string>
+    <string name="deal_form_has_end">Жарактуулук мөөнөтү бар</string>
+    <string name="deal_form_days">Канча күн жарактуу</string>
+    <string name="deal_form_draft">Долбоор катары сактоо</string>
+    <!-- Promote -->
+    <string name="promote_hero_title">Көбүрөөк конок — тезирээк</string>
+    <string name="promote_hero_body">Мекемени лентада жогорулатыңыз же акция жөнүндө push жөнөтүңүз. Бир мүнөттө ишке киргизиңиз.</string>
+    <string name="promote_add_venue_first">Адегенде мекеме кошуңуз</string>
+    <string name="promote_launch">Жарнаманы ишке киргизүү</string>
+    <string name="promote_type_boost">Лентада буст</string>
+    <string name="promote_type_boost_sub">Мекеме тизмеде жогору, «Жарнама» белгиси менен.</string>
+    <string name="promote_type_push">Push</string>
+    <string name="promote_type_push_sub">Конактарга акция жөнүндө билдирүү менен айтыңыз.</string>
+    <string name="promote_empty">Азырынча активдүү кампаниялар жок. Биринчисин ишке киргизиңиз — мекеме көбүрөөк көрүүлөрдү ала баштайт.</string>
+    <string name="promote_your_campaigns">Сиздин кампанияларыңыз</string>
+    <string name="promote_cancel_campaign">Кампанияны жокко чыгаруу</string>
+    <string name="promote_spend">💳 %1$d сом</string>
+    <string name="promote_new_campaign">Жаңы кампания</string>
+    <string name="promote_duration">Узактыгы</string>
+    <string name="promote_days_price">%1$d күн — %2$d сом</string>
+    <string name="promote_all_venue">Мекеменин бардык витринасы</string>
+    <string name="promote_what">Эмнени жарнамалайбыз</string>
+    <string name="promote_headline">Аталышы (60га чейин)</string>
+    <string name="promote_text">Текст (120га чейин)</string>
+    <string name="promote_push_default_body">%1$s жеринде жаңы сунуш</string>
+    <string name="promote_pay_launch">Төлөп ишке киргизүү</string>
+    <string name="promote_send_push">Push жөнөтүү</string>
+    <!-- Analytics -->
+    <string name="analytics_days">%1$d күн</string>
+    <string name="analytics_days_short">%1$dк</string>
+    <string name="analytics_empty">Азырынча маалымат жок. Статистика мекеменин алгачкы көрүүлөрүнөн кийин пайда болот.</string>
+    <string name="analytics_profile_views">Профилдин көрүүлөрү</string>
+    <string name="analytics_loading">жүктөлүүдө…</string>
+    <string name="analytics_for_days">%1$d күн үчүн</string>
+    <string name="analytics_redemptions">Колдонулган купондор</string>
+    <string name="analytics_deal_taps">Акцияларга басуулар</string>
+    <string name="analytics_saves">Сактоолор</string>
+    <string name="analytics_calls">Чалуулар</string>
+    <string name="analytics_maps">Багыттар</string>
+    <string name="analytics_by_venue">Мекемелер боюнча</string>
+    <string name="analytics_redeemed_count">%1$d колдонулду</string>
+    <string name="analytics_views">Көрүүлөр</string>
+    <!-- Host profile -->
+    <string name="hprofile_title">Мекеменин профили</string>
+    <string name="hprofile_your_business">Сиздин бизнесиңиз</string>
+    <string name="hprofile_unverified">Тастыкталган эмес</string>
+    <string name="hprofile_business_info">Бизнес жөнүндө маалымат</string>
+    <string name="hprofile_details_contacts">Реквизиттер жана байланыштар</string>
+    <string name="hprofile_inn">ИНН %1$s</string>
+    <string name="hprofile_fill_details">Реквизиттерди жана байланыштарды толтуруу</string>
+    <string name="hprofile_verification">Верификация</string>
+    <string name="hprofile_verified">Мекеме текшерилген</string>
+    <string name="hprofile_verify_hint">Белги конактардын ишенимин жогорулатат.</string>
+    <string name="hprofile_request_verify">«Текшерилген» суроо</string>
+    <string name="hprofile_notifications">Билдирүүлөр</string>
+    <string name="hprofile_notif_desc">Жаңы пикирлер жана кампания статустары</string>
+    <string name="hprofile_payment">Төлөм</string>
+    <string name="hprofile_payment_method">Төлөм ыкмасы</string>
+    <string name="hprofile_payment_hint">Төлөм ыкмаларын туташтыруу кийинчерээк пайда болот.</string>
+    <string name="hprofile_exit_host">Колдонуучу режимине кайтуу</string>
+    <string name="hprofile_email">Email</string>
+    <string name="hprofile_legal_form">Ишкердик формасы</string>
+    <string name="hprofile_not_specified">Көрсөтүлгөн эмес</string>
+    <string name="hprofile_legal_name">Юр. жактын аталышы</string>
+    <string name="hprofile_entrepreneur_name">Ишкердин аты-жөнү</string>
+    <string name="hprofile_inn_label">ИНН / ОГРНИП</string>
+    <string name="hprofile_legal_address">Юридикалык дарек</string>
+    <string name="hprofile_website">Сайт</string>
+    <string name="hprofile_about">Бизнес жөнүндө</string>
+    <!-- Map picker -->
+    <string name="map_pick_hint">Чекит коюу үчүн картаны басыңыз</string>
+
+    <!-- Games -->
+    <string name="game_close">Жабуу</string>
+    <string name="game_score">Эсеп: %1$d</string>
+    <string name="game_play_again">Кайра ойноо</string>
+    <string name="game_snake_title">🐍 Жылан</string>
+    <string name="game_snake_bonus">+1 бонус ар бир алма үчүн · бүгүн калды: %1$d</string>
+    <string name="game_snake_over">Оюн бүттү — эсеп %1$d</string>
+    <string name="game_snake_hint">Жыланды башкаруу үчүн сүрүңүз</string>
+    <string name="game_tetris_title">🧱 Тетрис</string>
+    <string name="game_tetris_bonus">+5 бонус ар бир сызык үчүн · бүгүн калды: %1$d</string>
+    <string name="game_tetris_over">Оюн бүттү — сызыктар: %1$d</string>
+</resources>

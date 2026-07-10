@@ -209,6 +209,22 @@ final class FirebaseDataRepository: DataRepository {
             try await doc.updateData(["hostReply": FieldValue.delete()])
         }
     }
+
+    func fetchCategories() async throws -> [RemoteCategory] {
+        let snap = try await db.collection("categories").getDocuments()
+        return snap.documents.compactMap { doc in
+            let d = doc.data()
+            let name = (d["name"] as? String)?.trimmingCharacters(in: .whitespaces) ?? ""
+            guard !name.isEmpty else { return nil }
+            return RemoteCategory(
+                slug:    (d["slug"] as? String) ?? doc.documentID,
+                name:    name,
+                icon:    (d["icon"] as? String) ?? "tag.fill",
+                emoji:   (d["emoji"] as? String) ?? "",
+                order:   (d["order"] as? NSNumber)?.intValue ?? 0,
+                enabled: (d["enabled"] as? Bool) ?? true)
+        }
+    }
 }
 
 // MARK: - Analytics (Firestore)
@@ -218,10 +234,11 @@ final class FirebaseAnalyticsService: AnalyticsService {
 
     func log(venueID: String, metric: String) {
         guard !venueID.isEmpty else { return }
-        let day = Self.dayKey()
-        db.collection("analytics").document(venueID)
-            .collection("days").document(day)
-            .setData([metric: FieldValue.increment(Int64(1)), "date": day], merge: true)
+        // Событие телеметрии: счётчик инкрементирует Cloud Function countAnalyticsEvent
+        // (клиенту запрещено писать в analytics/* напрямую — см. firestore.rules).
+        db.collection("analyticsEvents").addDocument(data: [
+            "venueID": venueID, "metric": metric, "createdAt": Timestamp(date: .now)
+        ])
     }
 
     func fetchStats(venueID: String, days: Int) async throws -> [String: Int] {
@@ -296,6 +313,66 @@ private let typeKeyMap: [DealType: String] = [
 func firestoreCategoryKey(_ c: VenueCategory) -> String { categoryKeyMap[c] ?? c.rawValue }
 func firestoreTypeKey(_ t: DealType) -> String { typeKeyMap[t] ?? t.rawValue }
 
+/// Общий разбор полей заведения из Firestore — тех, что кодируются ОДИНАКОВО
+/// у `Venue` и `HostVenueDTO`. Список этих полей определён здесь один раз.
+///
+/// Поля с расходящейся семантикой сюда НЕ входят и разбираются в каждом init
+/// отдельно (см. комментарии там):
+///  • `category` — у Venue проще (`categoryMap ?? rawValue`), у DTO добавлен
+///    поиск по `slugRegistry` и фолбэк `.cafe`;
+///  • `weekHours` — DTO подставляет `Venue.defaultWeek()` при пустом массиве;
+///  • `imageURL` / `pdfMenuURL` / `todaySpecial` — у Venue опциональны, у DTO — `""`;
+///  • только у Venue: `gradient`, `rating`, `reviewCount`, `savedByCount`,
+///    `city`, `photoEmojis`, `ownerID` — публичные поля, которых нет у
+///    редактируемого хостом DTO.
+struct VenueFirestoreCommonFields {
+    let district: String
+    let address: String
+    let phone: String
+    let emoji: String
+    let latitude: Double
+    let longitude: Double
+    let openHour: Int
+    let closeHour: Int
+    let isPaused: Bool
+    let isVerified: Bool
+    let status: String
+    let items: [VenueItem]
+    let whatsapp: String
+    let instagram: String
+    let telegram: String
+    let branches: [Branch]
+    let boostedUntil: Date?
+    let loyaltyEnabled: Bool
+    let loyaltyGoal: Int
+    let loyaltyReward: String
+    let couponsEnabled: Bool
+
+    init(_ d: [String: Any]) {
+        district = d["district"] as? String ?? ""
+        address = d["address"] as? String ?? ""
+        phone = d["phone"] as? String ?? ""
+        emoji = d["emoji"] as? String ?? "🍽"
+        latitude = (d["latitude"] as? NSNumber)?.doubleValue ?? City.bishkek.latitude
+        longitude = (d["longitude"] as? NSNumber)?.doubleValue ?? City.bishkek.longitude
+        openHour = (d["openHour"] as? NSNumber)?.intValue ?? 9
+        closeHour = (d["closeHour"] as? NSNumber)?.intValue ?? 22
+        isPaused = d["isPaused"] as? Bool ?? false
+        isVerified = d["isVerified"] as? Bool ?? false
+        status = d["status"] as? String ?? ModerationStatus.approved.rawValue
+        items = VenueItem.parse(d["items"])
+        whatsapp = d["whatsapp"] as? String ?? ""
+        instagram = d["instagram"] as? String ?? ""
+        telegram = d["telegram"] as? String ?? ""
+        branches = Branch.parseArray(d["branches"])
+        boostedUntil = (d["boostedUntil"] as? Timestamp)?.dateValue()
+        loyaltyEnabled = d["loyaltyEnabled"] as? Bool ?? false
+        loyaltyGoal = (d["loyaltyGoal"] as? NSNumber)?.intValue ?? 6
+        loyaltyReward = d["loyaltyReward"] as? String ?? "Награда за лояльность"
+        couponsEnabled = d["couponsEnabled"] as? Bool ?? true
+    }
+}
+
 extension Venue {
     init?(firestore d: [String: Any], id: String) {
         guard let name = d["name"] as? String,
@@ -303,14 +380,15 @@ extension Venue {
               let category = categoryMap[categoryKey] ?? VenueCategory(rawValue: categoryKey)
         else { return nil }
 
+        let f = VenueFirestoreCommonFields(d)
         self.init(
             id: id,
             name: name,
             category: category,
-            district: d["district"] as? String ?? "",
-            address: d["address"] as? String ?? "",
-            phone: d["phone"] as? String ?? "",
-            emoji: d["emoji"] as? String ?? "🍽",
+            district: f.district,
+            address: f.address,
+            phone: f.phone,
+            emoji: f.emoji,
             gradient: [
                 Color(hexString: d["gradientFrom"] as? String) ?? .sanAccent,
                 Color(hexString: d["gradientTo"] as? String) ?? .orange
@@ -318,30 +396,30 @@ extension Venue {
             imageURL: d["imageURL"] as? String,
             rating: (d["rating"] as? NSNumber)?.doubleValue ?? 0,
             reviewCount: (d["reviewCount"] as? NSNumber)?.intValue ?? 0,
-            isVerified: d["isVerified"] as? Bool ?? false,
+            isVerified: f.isVerified,
             savedByCount: (d["savedByCount"] as? NSNumber)?.intValue ?? 0,
             citySlug: d["city"] as? String ?? City.bishkek.id,
-            latitude: (d["latitude"] as? NSNumber)?.doubleValue ?? City.bishkek.latitude,
-            longitude: (d["longitude"] as? NSNumber)?.doubleValue ?? City.bishkek.longitude,
+            latitude: f.latitude,
+            longitude: f.longitude,
             todaySpecialText: d["todaySpecial"] as? String,
-            openHour: (d["openHour"] as? NSNumber)?.intValue ?? 9,
-            closeHour: (d["closeHour"] as? NSNumber)?.intValue ?? 22,
+            openHour: f.openHour,
+            closeHour: f.closeHour,
             weekHours: DayHours.parseArray(d["weekHours"]),
             pdfMenuURL: d["pdfMenuURL"] as? String,
             photoEmojis: d["photoEmojis"] as? [String] ?? [],
             ownerID: d["ownerID"] as? String ?? "",
-            items: VenueItem.parse(d["items"]),
-            statusRaw: d["status"] as? String ?? ModerationStatus.approved.rawValue,
-            isPaused: d["isPaused"] as? Bool ?? false,
-            whatsapp: d["whatsapp"] as? String ?? "",
-            instagram: d["instagram"] as? String ?? "",
-            telegram: d["telegram"] as? String ?? "",
-            branches: Branch.parseArray(d["branches"]),
-            boostedUntil: (d["boostedUntil"] as? Timestamp)?.dateValue(),
-            loyaltyEnabled: d["loyaltyEnabled"] as? Bool ?? false,
-            loyaltyGoal: (d["loyaltyGoal"] as? NSNumber)?.intValue ?? 6,
-            loyaltyReward: d["loyaltyReward"] as? String ?? "Награда за лояльность",
-            couponsEnabled: d["couponsEnabled"] as? Bool ?? true
+            items: f.items,
+            statusRaw: f.status,
+            isPaused: f.isPaused,
+            whatsapp: f.whatsapp,
+            instagram: f.instagram,
+            telegram: f.telegram,
+            branches: f.branches,
+            boostedUntil: f.boostedUntil,
+            loyaltyEnabled: f.loyaltyEnabled,
+            loyaltyGoal: f.loyaltyGoal,
+            loyaltyReward: f.loyaltyReward,
+            couponsEnabled: f.couponsEnabled
         )
     }
 }
@@ -559,33 +637,34 @@ extension HostVenueDTO {
             ?? VenueCategory(rawValue: key)
             ?? .cafe
         let special = d["todaySpecial"] as? String
+        let f = VenueFirestoreCommonFields(d)
         self.init(
             id: id, name: name, categoryRaw: cat.rawValue,
-            district: d["district"] as? String ?? "",
-            address: d["address"] as? String ?? "",
-            phone: d["phone"] as? String ?? "",
-            emoji: d["emoji"] as? String ?? "🍽",
-            latitude: (d["latitude"] as? NSNumber)?.doubleValue ?? City.bishkek.latitude,
-            longitude: (d["longitude"] as? NSNumber)?.doubleValue ?? City.bishkek.longitude,
-            openHour: (d["openHour"] as? NSNumber)?.intValue ?? 9,
-            closeHour: (d["closeHour"] as? NSNumber)?.intValue ?? 22,
+            district: f.district,
+            address: f.address,
+            phone: f.phone,
+            emoji: f.emoji,
+            latitude: f.latitude,
+            longitude: f.longitude,
+            openHour: f.openHour,
+            closeHour: f.closeHour,
             todaySpecial: (special?.isEmpty == false) ? special : nil,
-            isPaused: d["isPaused"] as? Bool ?? false,
-            isVerified: d["isVerified"] as? Bool ?? false,
-            status: d["status"] as? String ?? ModerationStatus.approved.rawValue,
-            items: VenueItem.parse(d["items"]),
+            isPaused: f.isPaused,
+            isVerified: f.isVerified,
+            status: f.status,
+            items: f.items,
             imageURL: d["imageURL"] as? String ?? "",
             weekHours: { let w = DayHours.parseArray(d["weekHours"]); return w.isEmpty ? Venue.defaultWeek() : w }(),
             pdfMenuURL: d["pdfMenuURL"] as? String ?? "",
-            whatsapp: d["whatsapp"] as? String ?? "",
-            instagram: d["instagram"] as? String ?? "",
-            telegram: d["telegram"] as? String ?? "",
-            branches: Branch.parseArray(d["branches"]),
-            boostedUntil: (d["boostedUntil"] as? Timestamp)?.dateValue(),
-            loyaltyEnabled: d["loyaltyEnabled"] as? Bool ?? false,
-            loyaltyGoal: (d["loyaltyGoal"] as? NSNumber)?.intValue ?? 6,
-            loyaltyReward: d["loyaltyReward"] as? String ?? "Награда за лояльность",
-            couponsEnabled: d["couponsEnabled"] as? Bool ?? true)
+            whatsapp: f.whatsapp,
+            instagram: f.instagram,
+            telegram: f.telegram,
+            branches: f.branches,
+            boostedUntil: f.boostedUntil,
+            loyaltyEnabled: f.loyaltyEnabled,
+            loyaltyGoal: f.loyaltyGoal,
+            loyaltyReward: f.loyaltyReward,
+            couponsEnabled: f.couponsEnabled)
     }
 }
 
@@ -703,7 +782,7 @@ final class FirebaseHostRepository: HostRepository {
 
 final class FirebaseCouponService: CouponService {
     private let db = Firestore.firestore()
-    private let scanURL = "https://us-central1-san-25d32.cloudfunctions.net/scanCoupon"
+    private let scanURL = AppConfig.functionURL("scanCoupon")
 
     func saveCoupon(_ c: Coupon, userID: String) async throws {
         let data: [String: Any] = [
@@ -793,33 +872,18 @@ final class CategoryStore: ObservableObject {
     /// Категории для UI (встроенные — как фолбэк до загрузки).
     @Published private(set) var categories: [VenueCategory] = VenueCategory.allCases
 
-    private init() {}
+    private let repository: DataRepository
+    /// По умолчанию — через AppConfig; в тестах можно подставить свой репозиторий.
+    nonisolated init(repository: DataRepository = AppConfig.makeDataRepository()) {
+        self.repository = repository
+    }
 
     func load() async {
-        guard AppConfig.useFirebase else { return }
-        do {
-            let snap = try await Firestore.firestore().collection("categories").getDocuments()
-            struct Row { let name: String; let slug: String; let icon: String; let order: Int; let enabled: Bool }
-            let rows: [Row] = snap.documents.compactMap { doc in
-                let d = doc.data()
-                let name = (d["name"] as? String)?.trimmingCharacters(in: .whitespaces) ?? ""
-                guard !name.isEmpty else { return nil }
-                let slug = (d["slug"] as? String) ?? doc.documentID
-                let icon = (d["icon"] as? String) ?? "tag.fill"
-                let order = (d["order"] as? NSNumber)?.intValue ?? 0
-                let enabled = (d["enabled"] as? Bool) ?? true
-                return Row(name: name, slug: slug, icon: icon, order: order, enabled: enabled)
-            }
-            guard !rows.isEmpty else { return }   // пусто → остаёмся на встроенных
-            let visible = rows.filter { $0.enabled }.sorted { $0.order < $1.order }
-            var icons: [String: String] = [:]
-            var slugs: [String: String] = [:]
-            for r in rows { icons[r.name] = r.icon; slugs[r.slug] = r.name }
-            VenueCategory.iconRegistry = icons
-            VenueCategory.slugRegistry = slugs
-            categories = visible.compactMap { VenueCategory(rawValue: $0.name) }
-        } catch {
-            // Нет доступа/ошибка — тихо остаёмся на встроенных категориях.
-        }
+        // Категории идут через тот же протокол данных, что и остальной каталог —
+        // никаких прямых обращений к Firestore здесь. Пусто/ошибка → встроенные.
+        guard let rows = try? await repository.fetchCategories(), !rows.isEmpty else { return }
+        VenueCategory.applyRemote(rows)
+        categories = rows.filter { $0.enabled }.sorted { $0.order < $1.order }
+            .compactMap { VenueCategory(rawValue: $0.name) }
     }
 }
