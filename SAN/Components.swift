@@ -683,8 +683,7 @@ struct VenueCompactRow: View {
                     }
                 }
             }
-            Spacer()
-            Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+            Spacer(minLength: 0)
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())

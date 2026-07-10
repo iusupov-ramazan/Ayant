@@ -8,10 +8,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
-import kotlin.math.atan2
-import kotlin.math.cos
-import kotlin.math.sin
-import kotlin.math.sqrt
+import kg.ayant.app.data.Ranking
 
 /**
  * "While using" location. Publishes only the last position (no history), mirroring
@@ -50,14 +47,7 @@ class LocationManager(app: Application) : AndroidViewModel(app) {
     }
 
     companion object {
-        fun haversine(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-            val r = 6371.0
-            val dLat = (lat2 - lat1) * Math.PI / 180
-            val dLon = (lon2 - lon1) * Math.PI / 180
-            val a = sin(dLat / 2) * sin(dLat / 2) +
-                cos(lat1 * Math.PI / 180) * cos(lat2 * Math.PI / 180) *
-                sin(dLon / 2) * sin(dLon / 2)
-            return r * 2 * atan2(sqrt(a), sqrt(1 - a))
-        }
+        fun haversine(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double =
+            Ranking.haversineKm(lat1, lon1, lat2, lon2)
     }
 }

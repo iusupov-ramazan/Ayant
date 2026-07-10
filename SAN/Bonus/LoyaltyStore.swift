@@ -22,9 +22,12 @@ final class LoyaltyStore: ObservableObject {
     @Published private(set) var cards: [LoyaltyCard] = []
     private(set) var userID = ""
     private let key = "san.loyalty"
-    private let backend = AppConfig.makeCouponService()
+    private let backend: CouponService
 
-    init() { load() }
+    init(backend: CouponService = AppConfig.makeCouponService()) {
+        self.backend = backend
+        load()
+    }
 
     func card(for venueID: String) -> LoyaltyCard? { cards.first { $0.venueID == venueID } }
 
@@ -234,7 +237,7 @@ struct VenueLoyaltyScreen: View {
 
 enum WalletService {
     /// URL Cloud Function, которая подписывает .pkpass (после деплоя и настройки сертификата).
-    static let passEndpoint = "https://us-central1-san-25d32.cloudfunctions.net/generateLoyaltyPass"
+    static let passEndpoint = AppConfig.functionURL("generateLoyaltyPass")
 
     static func addLoyaltyPass(_ card: LoyaltyCard, userID: String, onError: @escaping (String) -> Void) {
         guard var comps = URLComponents(string: passEndpoint) else { return }
@@ -259,7 +262,7 @@ enum WalletService {
         }.resume()
     }
 
-    static let couponPassEndpoint = "https://us-central1-san-25d32.cloudfunctions.net/generateCouponPass"
+    static let couponPassEndpoint = AppConfig.functionURL("generateCouponPass")
 
     /// Кладёт купон в Apple Wallet (.pkpass со сканируемым QR = code).
     static func addCouponPass(_ coupon: Coupon, onError: @escaping (String) -> Void) {

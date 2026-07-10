@@ -18,10 +18,17 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Apartment
+import androidx.compose.material.icons.filled.ConfirmationNumber
+import androidx.compose.material.icons.filled.Contrast
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Storefront
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
+import kg.ayant.app.R
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -52,10 +59,18 @@ import kg.ayant.app.ui.vm.SessionViewModel
 import androidx.compose.ui.platform.LocalContext
 
 @Composable
-fun ProfileScreen(app: AppViewModel, session: SessionViewModel) {
+fun ProfileScreen(
+    app: AppViewModel,
+    session: SessionViewModel,
+    theme: kg.ayant.app.ui.vm.ThemeViewModel? = null,
+    onCoupons: () -> Unit = {},
+    onHost: () -> Unit = {},
+    onHelp: (String) -> Unit = {},
+) {
     val c = AyantTheme.colors
     val context = LocalContext.current
-    val username = session.user?.name ?: "Гость"
+    val coupons: kg.ayant.app.ui.vm.CouponViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val username = session.user?.name ?: stringResource(R.string.profile_guest_name)
     var showDelete by remember { mutableStateOf(false) }
 
     Column(
@@ -67,7 +82,7 @@ fun ProfileScreen(app: AppViewModel, session: SessionViewModel) {
             .padding(top = 16.dp, bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(22.dp),
     ) {
-        AyantScreenTitle("Профиль")
+        AyantScreenTitle(stringResource(R.string.title_profile))
 
         // Profile card
         Row(Modifier.fillMaxWidth().ayantCard(padding = 16), verticalAlignment = Alignment.CenterVertically) {
@@ -87,43 +102,64 @@ fun ProfileScreen(app: AppViewModel, session: SessionViewModel) {
             }
         }
 
+        // My coupons
+        Row(
+            Modifier.fillMaxWidth().ayantGroupCard().clickable(onClick = onCoupons).padding(horizontal = 14.dp, vertical = 13.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            AyantIconTile(Icons.Filled.ConfirmationNumber, size = 34)
+            Text(stringResource(R.string.title_my_coupons), fontSize = 16.sp, color = c.ink, modifier = Modifier.padding(start = 12.dp))
+            Spacer(Modifier.weight(1f))
+            if (coupons.activeCount > 0) {
+                Text(
+                    "${coupons.activeCount}", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White,
+                    modifier = Modifier.clip(androidx.compose.foundation.shape.CircleShape).background(c.accent).padding(horizontal = 9.dp, vertical = 3.dp),
+                )
+            }
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = c.inkSoft, modifier = Modifier.padding(start = 8.dp).size(18.dp))
+        }
+
         // Settings
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            AyantSectionHeader("Настройки")
+            AyantSectionHeader(stringResource(R.string.settings))
             Column(Modifier.fillMaxWidth().ayantGroupCard()) {
-                SettingRow(Icons.Filled.Apartment, "Город", app.selectedCity.name)
+                SettingRow(Icons.Filled.Apartment, stringResource(R.string.setting_city), app.selectedCity.name)
                 AyantHairline(leading = 60)
-                SettingRow(Icons.Filled.Language, "Язык", "Русский")
+                LanguageRow()
+                if (theme != null) {
+                    AyantHairline(leading = 60)
+                    ThemeRow(theme)
+                }
             }
         }
 
-        // Host mode (stub — full host side is a later pass)
+        // Host mode
         Row(
-            Modifier.fillMaxWidth().ayantGroupCard().padding(14.dp),
+            Modifier.fillMaxWidth().ayantGroupCard().clickable(enabled = !session.isGuest, onClick = onHost).padding(14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             AyantIconTile(Icons.Filled.Storefront, filled = true, size = 44)
             Column(Modifier.padding(start = 14.dp).weight(1f)) {
-                Text("Режим заведения", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = c.accent)
-                Text("Управляйте своим бизнесом (скоро)", fontSize = 13.sp, color = c.inkSoft)
+                Text(stringResource(R.string.profile_host_mode), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = c.accent)
+                Text(if (session.isGuest) stringResource(R.string.profile_host_guest) else stringResource(R.string.profile_host_sub), fontSize = 13.sp, color = c.inkSoft)
             }
             Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = c.accent, modifier = Modifier.size(18.dp))
         }
 
         // My reviews
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            AyantSectionHeader("Мои отзывы")
+            AyantSectionHeader(stringResource(R.string.profile_my_reviews))
             val reviews = app.myReviews()
             if (reviews.isEmpty()) {
                 Box(Modifier.fillMaxWidth().ayantGroupCard().padding(16.dp)) {
-                    Text("Ты ещё не оставил ни одного отзыва.", fontSize = 15.sp, color = c.inkSoft)
+                    Text(stringResource(R.string.profile_no_reviews), fontSize = 15.sp, color = c.inkSoft)
                 }
             } else {
                 Column(Modifier.fillMaxWidth().ayantGroupCard()) {
                     reviews.forEachIndexed { i, r ->
                         Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 13.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(app.venue(id = r.venueID)?.name ?: "Заведение", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = c.ink)
+                                Text(app.venue(id = r.venueID)?.name ?: stringResource(R.string.venue_section), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = c.ink)
                                 Spacer(Modifier.weight(1f))
                                 StarRating(rating = r.rating.toDouble(), size = 11)
                             }
@@ -137,45 +173,61 @@ fun ProfileScreen(app: AppViewModel, session: SessionViewModel) {
             }
         }
 
-        // Referral
+        // Referral (card like iOS: icon tile + share action + description)
         if (!session.isGuest) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                AyantSectionHeader("Пригласить друга")
-                Row(
+                AyantSectionHeader(stringResource(R.string.profile_invite_friend))
+                Column(
                     Modifier.fillMaxWidth().ayantGroupCard()
                         .clickable {
                             context.shareText(
-                                "Лови скидки и акции города в Ayant. Заходи по моей ссылке — бонусы получим оба! ${Links.referral(app.currentUserID)}",
+                                context.getString(R.string.profile_referral_share, Links.referral(app.currentUserID)),
                                 "Ayant",
                             )
                         }
                         .padding(14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Text("Поделиться приглашением", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = c.ink)
-                    Spacer(Modifier.weight(1f))
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = c.accent, modifier = Modifier.size(18.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        AyantIconTile(Icons.Filled.Group, size = 34)
+                        Text(stringResource(R.string.profile_share_invite), fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = c.ink, modifier = Modifier.padding(start = 12.dp))
+                        Spacer(Modifier.weight(1f))
+                        Icon(Icons.Filled.Share, null, tint = c.accent, modifier = Modifier.size(18.dp))
+                    }
+                    Text(stringResource(R.string.profile_referral_desc), fontSize = 13.sp, color = c.inkSoft)
                 }
+            }
+        }
+
+        // Help
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            AyantSectionHeader(stringResource(R.string.help))
+            Column(Modifier.fillMaxWidth().ayantGroupCard()) {
+                HelpRow(stringResource(R.string.help_about)) { onHelp("about") }
+                AyantHairline(leading = 14)
+                HelpRow(stringResource(R.string.help_faq)) { onHelp("faq") }
+                AyantHairline(leading = 14)
+                HelpRow(stringResource(R.string.help_support)) { onHelp("support") }
             }
         }
 
         // Account
         Column(Modifier.fillMaxWidth().ayantGroupCard()) {
-            AccountRow(Icons.AutoMirrored.Filled.Logout, "Выйти") { session.signOut() }
+            AccountRow(Icons.AutoMirrored.Filled.Logout, stringResource(R.string.account_sign_out)) { session.signOut() }
             AyantHairline(leading = 14)
-            AccountRow(Icons.Filled.Delete, "Удалить аккаунт") { showDelete = true }
+            AccountRow(Icons.Filled.Delete, stringResource(R.string.account_delete)) { showDelete = true }
         }
 
-        Text("Версия 0.3 (MVP)", fontSize = 13.sp, color = c.inkSoft, modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        Text(stringResource(R.string.app_version), fontSize = 13.sp, color = c.inkSoft, modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
     }
 
     if (showDelete) {
         AlertDialog(
             onDismissRequest = { showDelete = false },
-            title = { Text("Удалить аккаунт?") },
-            text = { Text("Это действие необратимо. Все отзывы и сохранённое будут удалены.") },
-            confirmButton = { TextButton(onClick = { showDelete = false; session.signOut() }) { Text("Удалить", color = Color(0xFFD32F2F)) } },
-            dismissButton = { TextButton(onClick = { showDelete = false }) { Text("Отмена") } },
+            title = { Text(stringResource(R.string.account_delete_confirm_title)) },
+            text = { Text(stringResource(R.string.account_delete_body)) },
+            confirmButton = { TextButton(onClick = { showDelete = false; session.signOut() }) { Text(stringResource(R.string.action_delete), color = Color(0xFFD32F2F)) } },
+            dismissButton = { TextButton(onClick = { showDelete = false }) { Text(stringResource(R.string.action_cancel)) } },
         )
     }
 }
@@ -188,6 +240,63 @@ private fun SettingRow(icon: androidx.compose.ui.graphics.vector.ImageVector, ti
         Text(title, fontSize = 16.sp, color = c.ink, modifier = Modifier.padding(start = 12.dp))
         Spacer(Modifier.weight(1f))
         Text(value, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = c.inkSoft)
+    }
+}
+
+@Composable
+private fun LanguageRow() {
+    val c = AyantTheme.colors
+    val context = LocalContext.current
+    var open by remember { mutableStateOf(false) }
+    val current = kg.ayant.app.core.LocaleUtil.currentLang(context)
+    val currentTitle = when (current) { "en" -> "English"; "ky" -> "Кыргызча"; else -> "Русский" }
+    Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically) {
+        AyantIconTile(Icons.Filled.Language, size = 34)
+        Text(stringResource(R.string.setting_language), fontSize = 16.sp, color = c.ink, modifier = Modifier.padding(start = 12.dp))
+        Spacer(Modifier.weight(1f))
+        Box {
+            Text(currentTitle, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = c.accent, modifier = Modifier.clickable { open = true })
+            androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                listOf("ru" to "Русский", "en" to "English", "ky" to "Кыргызча").forEach { (code, title) ->
+                    androidx.compose.material3.DropdownMenuItem(text = { Text(title) }, onClick = {
+                        open = false
+                        kg.ayant.app.core.LocaleUtil.setLang(context, code)
+                        (context as? android.app.Activity)?.recreate()
+                    })
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ThemeRow(theme: kg.ayant.app.ui.vm.ThemeViewModel) {
+    val c = AyantTheme.colors
+    var open by remember { mutableStateOf(false) }
+    Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically) {
+        AyantIconTile(Icons.Filled.Contrast, size = 34)
+        Text(stringResource(R.string.setting_theme), fontSize = 16.sp, color = c.ink, modifier = Modifier.padding(start = 12.dp))
+        Spacer(Modifier.weight(1f))
+        Box {
+            Text(theme.theme.title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = c.accent, modifier = Modifier.clickable { open = true })
+            androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                kg.ayant.app.ui.vm.AppTheme.entries.forEach { t ->
+                    androidx.compose.material3.DropdownMenuItem(text = { Text(t.title) }, onClick = { theme.set(t); open = false })
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HelpRow(title: String, onClick: () -> Unit) {
+    val c = AyantTheme.colors
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(title, fontSize = 16.sp, color = c.ink, modifier = Modifier.weight(1f))
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = c.inkSoft, modifier = Modifier.size(18.dp))
     }
 }
 

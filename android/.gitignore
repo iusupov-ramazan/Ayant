@@ -1,0 +1,18 @@
+*.iml
+.gradle/
+/local.properties
+/.idea
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# Firebase config holds project keys — don't commit to a public repo.
+app/google-services.json
+
+# Release signing secrets
+keystore.properties
+*.jks
+*.keystore

@@ -3,9 +3,13 @@ package kg.ayant.app.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -28,6 +32,81 @@ import coil.compose.SubcomposeAsyncImage
 import kg.ayant.app.core.storefrontIcon
 import kg.ayant.app.data.model.Deal
 import kg.ayant.app.ui.theme.AyantTheme
+import kg.ayant.app.ui.theme.color
+
+// MARK: - Responsive deal image (card height follows the photo's aspect ratio,
+// clamped to the Instagram range 1.91:1 … 4:5). Mirrors DealImage.
+
+@Composable
+fun DealImage(
+    urlString: String?,
+    gradient: List<Color>,
+    emoji: String,
+    modifier: Modifier = Modifier,
+    emojiSize: Int = 80,
+) {
+    val minAR = 0.8f   // tallest (4:5)
+    val maxAR = 1.91f  // widest (1.91:1)
+    if (urlString.isNullOrEmpty()) {
+        Box(
+            modifier.fillMaxWidth().aspectRatio(1f).background(Brush.linearGradient(gradient)),
+            contentAlignment = Alignment.Center,
+        ) { Text(emoji, fontSize = emojiSize.sp) }
+        return
+    }
+    val painter = coil.compose.rememberAsyncImagePainter(urlString)
+    val size = painter.intrinsicSize
+    val aspect = if (size.isSpecified && size.height > 0f) (size.width / size.height).coerceIn(minAR, maxAR) else 1f
+    Box(
+        modifier.fillMaxWidth().aspectRatio(aspect).background(Brush.linearGradient(gradient)),
+        contentAlignment = Alignment.Center,
+    ) {
+        androidx.compose.foundation.Image(
+            painter = painter, contentDescription = null,
+            contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize(),
+        )
+        if (painter.state !is coil.compose.AsyncImagePainter.State.Success) {
+            Text(emoji, fontSize = emojiSize.sp)
+        }
+    }
+}
+
+// MARK: - Image carousel (swipe + dots), falls back to a single responsive image.
+// Mirrors ImageCarousel.
+
+@Composable
+fun ImageCarousel(
+    urls: List<String>,
+    gradient: List<Color>,
+    emoji: String,
+    modifier: Modifier = Modifier,
+    height: Int = 260,
+    emojiSize: Int = 90,
+) {
+    val imgs = urls.filter { it.isNotEmpty() }
+    if (imgs.size <= 1) {
+        DealImage(imgs.firstOrNull(), gradient, emoji, modifier, emojiSize)
+        return
+    }
+    val pager = androidx.compose.foundation.pager.rememberPagerState { imgs.size }
+    Box(modifier.fillMaxWidth().height(height.dp)) {
+        androidx.compose.foundation.pager.HorizontalPager(state = pager, modifier = Modifier.fillMaxSize()) { i ->
+            CoverImage(imgs[i], gradient, emoji, Modifier.fillMaxSize(), emojiSize)
+        }
+        Row(
+            Modifier.align(Alignment.BottomCenter).padding(bottom = 10.dp),
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp),
+        ) {
+            repeat(imgs.size) { i ->
+                Box(
+                    Modifier.size(if (i == pager.currentPage) 8.dp else 6.dp)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(if (i == pager.currentPage) Color.White else Color.White.copy(alpha = 0.5f))
+                )
+            }
+        }
+    }
+}
 
 // MARK: - Cover image (photo over gradient, emoji fallback). Mirrors CoverImage.
 

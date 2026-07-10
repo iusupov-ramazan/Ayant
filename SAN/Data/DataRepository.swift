@@ -22,12 +22,25 @@ protocol DataRepository {
     func createGiftCoupon(title: String, code: String, fromName: String) async throws
     /// Забирает подарок по коду (один раз). nil — если уже забран или не найден.
     func claimGiftCoupon(code: String) async throws -> GiftInfo?
+    /// Гибкий список категорий заведений (управляется из админки).
+    /// Пустой массив → приложение остаётся на встроенных категориях.
+    func fetchCategories() async throws -> [RemoteCategory]
 }
 
 /// Данные забранного подарочного купона.
 struct GiftInfo: Equatable {
     let title: String
     let code: String
+}
+
+/// Категория из бэкенда (коллекция `categories`).
+struct RemoteCategory: Equatable {
+    let slug: String
+    let name: String
+    let icon: String
+    let emoji: String
+    let order: Int
+    let enabled: Bool
 }
 
 /// Запись/чтение контента хоста в Firestore (заведения и предложения с владельцем).
@@ -113,6 +126,8 @@ final class MockDataRepository: DataRepository {
     func claimBonusGrants(userID: String) async throws -> Int { 0 }
     func createGiftCoupon(title: String, code: String, fromName: String) async throws {}
     func claimGiftCoupon(code: String) async throws -> GiftInfo? { nil }
+    /// Пусто → приложение оставит встроенные категории (VenueCategory.allCases).
+    func fetchCategories() async throws -> [RemoteCategory] { [] }
 }
 
 /// Mock купон-сервиса: без бэкенда. Сканирование всегда «успех + штамп» для демо.

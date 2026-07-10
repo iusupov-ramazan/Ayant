@@ -2,109 +2,161 @@ rules_version = '2';
 
 // Правила доступа для каталога САН.
 // Чтение каталога — публичное (лента работает и для гостей).
-// Запись — только аутентифицированным (админ / хост).
+// Запись каталога — только владелец-хост (по ownerID) или админ (custom claim).
+//
+// Роль администратора выдаётся через кастомный claim `admin: true`
+// (см. scripts/set-admin-claim.js). Раньше запись была разрешена ЛЮБОМУ
+// аутентифицированному пользователю — теперь это закрыто.
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Заведения и предложения теперь хранят ownerID (uid владельца-хоста).
-    // Пока запись разрешена любому аутентифицированному (нужно для админ-панели).
-    // Когда появятся роли, можно ужесточить, напр.:
-    //   allow write: if request.auth != null &&
-    //     (request.resource.data.ownerID == request.auth.uid || isAdmin());
+    // ── Хелперы ──────────────────────────────────────────────────────────
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    // Админ определяется кастомным claim'ом (выдаётся серверным скриптом).
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.admin == true;
+    }
+    function uid() {
+      return request.auth.uid;
+    }
+    // Владелец заведения (по документу venues/{venueID}).
+    function isVenueOwner(venueID) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/venues/$(venueID))
+        && get(/databases/$(database)/documents/venues/$(venueID)).data.ownerID == uid();
+    }
+    // Создаваемый/изменяемый документ принадлежит текущему хосту.
+    function ownsIncoming() {
+      return isSignedIn() && request.resource.data.ownerID == uid();
+    }
+    function ownsExisting() {
+      return isSignedIn() && resource.data.ownerID == uid();
+    }
+
+    // ── Заведения ────────────────────────────────────────────────────────
+    // Читают все. Создаёт/меняет владелец (ownerID == uid) или админ.
+    // При создании ownerID обязателен и должен совпадать с uid (кроме админа).
     match /venues/{id} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow create: if isAdmin() || (ownsIncoming() && request.resource.data.ownerID is string);
+      allow update: if isAdmin() || (ownsExisting() && request.resource.data.ownerID == resource.data.ownerID);
+      allow delete: if isAdmin() || ownsExisting();
     }
 
+    // ── Предложения (акции) ──────────────────────────────────────────────
     match /deals/{id} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow create: if isAdmin() || (ownsIncoming() && request.resource.data.ownerID is string);
+      allow update: if isAdmin() || (ownsExisting() && request.resource.data.ownerID == resource.data.ownerID);
+      allow delete: if isAdmin() || ownsExisting();
     }
 
-    // Категории заведений — гибкий список, управляемый из админ-панели.
-    // Чтение публичное (приложение строит фильтры даже для гостей),
-    // запись — только аутентифицированному (админ).
+    // ── Категории заведений ──────────────────────────────────────────────
+    // Гибкий список, управляется только из админ-панели. Читают все.
     match /categories/{id} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow write: if isAdmin();
     }
 
-    // Новая коллекция отзывов — без неё in-app чтение падало с permission-denied.
+    // ── Отзывы ───────────────────────────────────────────────────────────
+    // Читают все. Создаёт автор (authorID == uid). Менять/удалять может автор,
+    // владелец заведения (ответ хоста hostReply) или админ.
     match /reviews/{id} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow create: if isSignedIn() && request.resource.data.authorID == uid();
+      allow update: if isAdmin()
+                    || (isSignedIn() && resource.data.authorID == uid())
+                    || isVenueOwner(resource.data.venueID);
+      allow delete: if isAdmin() || (isSignedIn() && resource.data.authorID == uid());
     }
 
-    // Push-кампании: хост создаёт ("pending"); админ-панель читает и одобряет
-    // (status → approved/rejected). Рассылку делает Cloud Function по одобрению.
+    // ── Push-кампании ────────────────────────────────────────────────────
+    // Хост создаёт кампанию по своему заведению ("pending"). Одобряет только
+    // админ (status → approved/rejected); рассылку делает Cloud Function.
     match /pushCampaigns/{id} {
-      allow create: if request.auth != null;
-      allow read, update: if request.auth != null;
+      allow create: if isSignedIn() && (isAdmin() || isVenueOwner(request.resource.data.venueID));
+      allow read:   if isAdmin() || (isSignedIn() && isVenueOwner(resource.data.venueID));
+      allow update: if isAdmin();
       allow delete: if false;
     }
 
-    // Аналитика: любой аутентифицированный логирует события; читает владелец/админ.
+    // ── Аналитика ────────────────────────────────────────────────────────
+    // Документы analytics/{venueID}/days/{day} — счётчики событий (increment),
+    // которые пишет клиент-телеметрия. Читает статистику только владелец
+    // заведения или админ. Чувствительные счётчики (погашения) идут не сюда,
+    // а через Cloud Function countRedemption (admin SDK).
+    // TODO: перенести запись телеметрии в Cloud Function, тогда write закрыть.
     match /analytics/{venueID}/{document=**} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null;
+      allow read:  if isAdmin() || isVenueOwner(venueID);
+      allow write: if isSignedIn();
     }
 
-    // Профили хостов: хост пишет свой, админ выставляет верификацию.
-    match /hosts/{uid} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null;
+    // ── Профили хостов ───────────────────────────────────────────────────
+    // Читают аутентифицированные (приложение показывает статус верификации).
+    // Пишет хост свой профиль (uid == документ). Флаг verified может выставить
+    // только админ — хост не может сам себя верифицировать.
+    match /hosts/{hostUid} {
+      allow read: if isSignedIn();
+      // Создание своего профиля: нельзя сразу выставить себе verified.
+      allow create: if isAdmin()
+                    || (isSignedIn() && hostUid == uid()
+                        && request.resource.data.get('verified', false) == false);
+      // Обновление: verified должен остаться прежним (менять его может только админ).
+      allow update: if isAdmin()
+                    || (isSignedIn() && hostUid == uid()
+                        && request.resource.data.get('verified', false) == resource.data.get('verified', false));
+      allow delete: if isAdmin();
     }
 
-    // FCM-токены пользователей (для адресной рассылки с частотным лимитом).
+    // ── FCM-токены пользователей ─────────────────────────────────────────
     match /userTokens/{token} {
-      allow write: if request.auth != null;
+      allow write: if isSignedIn();
       allow read: if false;
     }
 
-    // Погашения купонов: пользователь создаёт документ (id = uid_dealID).
-    // Счётчик и пометку "counted" делает Cloud Function (admin SDK обходит правила).
+    // ── Погашения купонов ────────────────────────────────────────────────
+    // Пользователь создаёт документ (id = uid_dealID). Счётчик и пометку
+    // "counted" делает Cloud Function (admin SDK обходит правила).
     match /redemptions/{id} {
-      allow create: if request.auth != null;
+      allow create: if isSignedIn();
       allow read, update, delete: if false;
     }
 
-    // Рефералы: приглашённый создаёт документ referrals/{его uid}.
-    // Награду пригласившему начисляет Cloud Function.
+    // ── Рефералы ─────────────────────────────────────────────────────────
     match /referrals/{inviteeID} {
-      allow create: if request.auth != null && request.auth.uid == inviteeID;
+      allow create: if isSignedIn() && uid() == inviteeID;
       allow read, update, delete: if false;
     }
 
-    // Начисленные сервером бонусы: пользователь читает свои и помечает claimed.
-    // Создаёт только Cloud Function (admin SDK).
+    // ── Серверные бонусы ─────────────────────────────────────────────────
     match /bonusGrants/{id} {
-      allow read: if request.auth != null && resource.data.userID == request.auth.uid;
-      allow update: if request.auth != null && resource.data.userID == request.auth.uid
+      allow read: if isSignedIn() && resource.data.userID == uid();
+      allow update: if isSignedIn() && resource.data.userID == uid()
                     && request.resource.data.userID == resource.data.userID;
       allow create, delete: if false;
     }
 
-    // Подарочные купоны: создаёт даритель, забирает получатель (помечает claimed).
+    // ── Подарочные купоны ────────────────────────────────────────────────
     match /giftCoupons/{code} {
-      allow create: if request.auth != null;
-      allow read, update: if request.auth != null;
+      allow create: if isSignedIn();
+      allow read, update: if isSignedIn();
       allow delete: if false;
     }
 
-    // Купоны пользователя (бэкенд-трекинг). Пользователь создаёт свои (deal-купоны),
-    // читает свои. Пометку used ставит только Cloud Function scanCoupon (admin SDK
-    // обходит правила) — поэтому update/delete из клиента запрещены (анти-чит).
-    // Купоны-награды лояльности тоже создаёт Cloud Function.
+    // ── Купоны пользователя (анти-чит) ───────────────────────────────────
+    // Пометку used ставит только Cloud Function scanCoupon (admin SDK).
     match /coupons/{id} {
-      allow read:   if request.auth != null && resource.data.userID == request.auth.uid;
-      allow create: if request.auth != null && request.resource.data.userID == request.auth.uid
+      allow read:   if isSignedIn() && resource.data.userID == uid();
+      allow create: if isSignedIn() && request.resource.data.userID == uid()
                     && request.resource.data.used == false;
       allow update, delete: if false;
     }
 
-    // Карты лояльности гостей: гость читает свои; пишет только Cloud Function.
+    // ── Карты лояльности ─────────────────────────────────────────────────
     match /loyaltyCards/{id} {
-      allow read:  if request.auth != null && resource.data.userID == request.auth.uid;
+      allow read:  if isSignedIn() && resource.data.userID == uid();
       allow write: if false;
     }
   }

@@ -44,9 +44,9 @@ extension Color {
 // MARK: - Градиент акцента (для шапок, баланса, кнопок)
 
 extension ShapeStyle where Self == LinearGradient {
-    /// Фирменный оранжевый градиент.
+    /// Фирменный оранжевый градиент (как в исходной версии: оранжевый → янтарный).
     static var sanAccentGradient: LinearGradient {
-        LinearGradient(colors: [Color.sanAccent, Color.sanAccentDeep],
+        LinearGradient(colors: [Color(hex: 0xFF4D29), Color(hex: 0xFFB300)],
                        startPoint: .topLeading, endPoint: .bottomTrailing)
     }
 }

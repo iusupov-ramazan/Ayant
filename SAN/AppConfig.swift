@@ -11,6 +11,11 @@ enum AppConfig {
     /// Переключатель mock ⇄ Firebase. Ставь true, когда настроишь консоль/ключи.
     static let useFirebase = true
 
+    /// Базовый URL Cloud Functions — одно место вместо разбросанных по коду ссылок.
+    /// При смене региона/проекта/бэкенда правится только здесь.
+    static let functionsBaseURL = "https://us-central1-san-25d32.cloudfunctions.net"
+    static func functionURL(_ name: String) -> String { "\(functionsBaseURL)/\(name)" }
+
     static func makeAuthService() -> AuthService {
         useFirebase ? FirebaseAuthService() : MockAuthService()
     }

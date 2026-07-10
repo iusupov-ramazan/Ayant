@@ -33,10 +33,11 @@ data class AyantColors(
     val open: Color,
     val isDark: Boolean,
 ) {
-    /** Brand orange gradient (headers, primary buttons, balance card). */
+    /** Brand gradient (headers, primary buttons, balance card, hero cards).
+     *  iOS brand gradient: orange #FF4D29 → gold #FFB300 (top-leading → bottom-trailing). */
     val accentGradient: Brush
         get() = Brush.linearGradient(
-            colors = listOf(accent, accentDeep),
+            colors = listOf(Color(0xFFFF4D29), Color(0xFFFFB300)),
             start = Offset(0f, 0f),
             end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY),
         )

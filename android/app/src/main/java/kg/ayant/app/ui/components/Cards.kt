@@ -33,15 +33,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kg.ayant.app.R
 import kg.ayant.app.core.distanceText
 import kg.ayant.app.core.sanShort
 import kg.ayant.app.data.model.Deal
 import kg.ayant.app.data.model.Venue
 import kg.ayant.app.ui.theme.AyantTheme
+import kg.ayant.app.ui.theme.gradientColors
 
 private val AdGradient = Brush.horizontalGradient(listOf(Color(0xFFFF4D29), Color(0xFFFFB300)))
 
@@ -70,10 +73,10 @@ fun VenueCard(
             .border(if (isSponsored) 1.5.dp else 0.5.dp, if (isSponsored) c.accent.copy(alpha = 0.6f) else c.hairline, shape)
             .clickable(onClick = onClick),
     ) {
-        if (isSponsored) AdBanner("рекомендуем заведение")
+        if (isSponsored) AdBanner(stringResource(R.string.card_ad_recommend))
         // Cover
         Box(Modifier.fillMaxWidth().height(180.dp)) {
-            VenuePhoto(venue.imageURL, venue.gradient, Modifier.fillMaxWidth().height(180.dp))
+            VenuePhoto(venue.imageURL, venue.gradientColors, Modifier.fillMaxWidth().height(180.dp))
             Box(
                 Modifier
                     .align(Alignment.TopEnd)
@@ -91,7 +94,7 @@ fun VenueCard(
             }
             if (venue.hasTodaySpecial) {
                 Text(
-                    "⭐️ Сегодня",
+                    "⭐️ " + stringResource(R.string.today),
                     fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White,
                     modifier = Modifier
                         .align(Alignment.BottomStart)
@@ -111,7 +114,7 @@ fun VenueCard(
                 }
                 Spacer(Modifier.weight(1f))
                 Text(
-                    if (venue.isOpenNow) "Открыто" else "Закрыто",
+                    if (venue.isOpenNow) stringResource(R.string.status_open) else stringResource(R.string.status_closed),
                     fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
                     color = if (venue.isOpenNow) c.open else c.inkSoft,
                 )
@@ -131,7 +134,7 @@ fun VenueCard(
                         modifier = Modifier.clip(RoundedCornerShape(50)).background(c.accent.copy(alpha = 0.12f)).padding(horizontal = 8.dp, vertical = 3.dp),
                     ) {
                         Icon(Icons.Filled.LocalOffer, null, tint = c.accent, modifier = Modifier.size(11.dp))
-                        Text(" $dealCount акц.", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = c.accent)
+                        Text(" " + stringResource(R.string.card_deal_count, dealCount), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = c.accent)
                     }
                 }
             }
@@ -167,7 +170,7 @@ fun DealCard(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth().clickable(onClick = onVenueTap).padding(horizontal = 14.dp, vertical = 12.dp),
         ) {
-            if (venue != null) VenueAvatar(venue.gradient, venue.imageURL, 46)
+            if (venue != null) VenueAvatar(venue.gradientColors, venue.imageURL, 46)
             Column(Modifier.padding(start = 12.dp).weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(venue?.name ?: "", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = c.ink)
@@ -183,7 +186,7 @@ fun DealCard(
         // Visual + caption → deal
         Column(Modifier.clickable(onClick = onTap)) {
             Box {
-                CoverImage(deal.imageURL, venue?.gradient ?: listOf(c.accent, c.accentDeep), deal.emoji, Modifier.fillMaxWidth().height(240.dp), emojiSize = 90)
+                ImageCarousel(deal.allImages, venue?.gradientColors ?: listOf(c.accent, c.accentDeep), deal.emoji, Modifier.fillMaxWidth(), emojiSize = 90)
                 deal.discountPercent?.let { pct ->
                     Text(
                         "−$pct%",
@@ -208,7 +211,7 @@ fun DealCard(
         // Actions
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(14.dp)) {
             Icon(Icons.Filled.Schedule, null, tint = c.inkSoft, modifier = Modifier.size(14.dp))
-            Text(" до ${deal.validUntil.sanShort()}", fontSize = 12.sp, color = c.inkSoft)
+            Text(" " + stringResource(R.string.card_until, deal.validUntil.sanShort()), fontSize = 12.sp, color = c.inkSoft)
             Spacer(Modifier.weight(1f))
             Icon(
                 if (isFavorite) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
@@ -227,7 +230,7 @@ private fun AdBanner(trailing: String) {
         modifier = Modifier.fillMaxWidth().background(AdGradient).padding(horizontal = 14.dp, vertical = 8.dp),
     ) {
         Icon(Icons.Filled.Campaign, null, tint = Color.White, modifier = Modifier.size(14.dp))
-        Text(" Реклама", fontSize = 12.sp, fontWeight = FontWeight.Black, color = Color.White)
+        Text(" " + stringResource(R.string.card_ad_label), fontSize = 12.sp, fontWeight = FontWeight.Black, color = Color.White)
         Spacer(Modifier.weight(1f))
         Text(trailing, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.9f))
     }
@@ -249,7 +252,7 @@ fun VenueCompactRow(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 8.dp, horizontal = 4.dp),
     ) {
-        VenueAvatar(venue.gradient, venue.imageURL, 62)
+        VenueAvatar(venue.gradientColors, venue.imageURL, 62)
         Column(Modifier.padding(start = 14.dp).weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(venue.name, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -286,7 +289,7 @@ fun CompactDealRow(
         Column(Modifier.padding(start = 14.dp).weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Text(deal.title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = c.ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(
-                (venueName?.let { "$it • " } ?: "") + "до ${deal.validUntil.sanShort()}",
+                (venueName?.let { "$it • " } ?: "") + stringResource(R.string.card_until, deal.validUntil.sanShort()),
                 fontSize = 12.sp, color = c.inkSoft,
             )
         }

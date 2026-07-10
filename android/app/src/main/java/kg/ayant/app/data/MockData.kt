@@ -1,6 +1,5 @@
 package kg.ayant.app.data
 
-import androidx.compose.ui.graphics.Color
 import kg.ayant.app.data.model.City
 import kg.ayant.app.data.model.Deal
 import kg.ayant.app.data.model.DealType
@@ -23,11 +22,8 @@ object MockData {
     private fun daysAgo(n: Int): Date =
         Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -n) }.time
 
-    private fun hex(rgb: Int) = Color(
-        red = ((rgb shr 16) and 0xFF) / 255f,
-        green = ((rgb shr 8) and 0xFF) / 255f,
-        blue = (rgb and 0xFF) / 255f,
-    )
+    /** Opaque ARGB (0xFFRRGGBB) as a Long — the UI maps it to a Compose Color. */
+    private fun hex(rgb: Int): Long = 0xFF000000L or (rgb.toLong() and 0xFFFFFFL)
 
     val cities = listOf(
         City("bishkek", "Бишкек", "Кыргызстан", 42.8746, 74.5698),

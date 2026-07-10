@@ -21,9 +21,11 @@ initializeApp();
 const db = getFirestore();
 
 const DAY_MS = 86400000;
-// ⚠️ На время теста лимиты подняты. Для продакшена верни 1 и 3 (анти-спам из спеки).
-const DAILY_CAP = 20;
-const WEEKLY_CAP = 100;
+// Частотные лимиты из спецификации (анти-спам): не более 1 push в день и 3 в неделю
+// на пользователя. Для локального теста можно временно поднять через переменные
+// окружения PUSH_DAILY_CAP / PUSH_WEEKLY_CAP — в продакшене они не задаются.
+const DAILY_CAP = Number(process.env.PUSH_DAILY_CAP) || 1;
+const WEEKLY_CAP = Number(process.env.PUSH_WEEKLY_CAP) || 3;
 
 // Награды за рефералку (бонусы).
 const REFERRAL_REWARD = 100;

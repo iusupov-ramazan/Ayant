@@ -718,14 +718,35 @@ window.seedDemo = async () => {
 };
 
 // ── AUTH ──────────────────────────────────────────────────────────────────
-onAuthStateChanged(auth, user => {
-  if (user) {
-    document.getElementById('authScreen').style.display = 'none';
-    document.getElementById('app').style.display = 'block';
+// Доступ к панели только у пользователей с кастомным claim `admin: true`
+// (выдаётся серверным скриптом scripts/set-admin-claim.js). Просто наличие
+// аккаунта Firebase больше НЕ даёт доступ — этого требуют и firestore.rules.
+async function isAdminUser(user) {
+  if (!user) return false;
+  try {
+    const token = await user.getIdTokenResult(true); // refresh — подхватить свежий claim
+    return token.claims.admin === true;
+  } catch (e) {
+    return false;
+  }
+}
+
+onAuthStateChanged(auth, async user => {
+  const authScreen = document.getElementById('authScreen');
+  const app = document.getElementById('app');
+  const errEl = document.getElementById('authError');
+  if (user && await isAdminUser(user)) {
+    authScreen.style.display = 'none';
+    app.style.display = 'block';
     loadAll();
   } else {
-    document.getElementById('authScreen').style.display = 'flex';
-    document.getElementById('app').style.display = 'none';
+    if (user) {
+      // Вошёл, но без прав администратора — выкидываем и показываем причину.
+      if (errEl) errEl.textContent = 'Недостаточно прав: аккаунт не является администратором';
+      await fbSignOut(auth);
+    }
+    authScreen.style.display = 'flex';
+    app.style.display = 'none';
   }
 });
 
@@ -736,6 +757,7 @@ window.signIn = async () => {
   errEl.textContent = '';
   try {
     await signInWithEmailAndPassword(auth, email, password);
+    // Проверку прав делает onAuthStateChanged — не-админа он тут же разлогинит.
   } catch (e) {
     errEl.textContent = 'Неверный email или пароль';
   }

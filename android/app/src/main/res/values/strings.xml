@@ -1,4 +1,475 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Ayant</string>
+
+    <!-- Tabs -->
+    <string name="tab_home">Главная</string>
+    <string name="tab_search">Поиск</string>
+    <string name="tab_bonus">Бонусы</string>
+    <string name="tab_saved">Сохранённое</string>
+    <string name="tab_profile">Профиль</string>
+
+    <!-- Host tabs -->
+    <string name="htab_venues">Заведения</string>
+    <string name="htab_promote">Продвижение</string>
+    <string name="htab_analytics">Аналитика</string>
+    <string name="htab_reviews">Отзывы</string>
+    <string name="htab_profile">Профиль</string>
+
+    <!-- Common actions -->
+    <string name="action_save">Сохранить</string>
+    <string name="action_cancel">Отмена</string>
+    <string name="action_done">Готово</string>
+    <string name="action_ok">Понятно</string>
+    <string name="action_back">Назад</string>
+    <string name="action_delete">Удалить</string>
+    <string name="action_edit">Изменить</string>
+    <string name="action_add">Добавить</string>
+    <string name="action_share">Поделиться</string>
+    <string name="action_open">Открыть</string>
+    <string name="action_publish">Опубликовать</string>
+    <string name="action_close">Закрыть</string>
+
+    <!-- Auth -->
+    <string name="auth_tagline">скидки • акции • новинки</string>
+    <string name="auth_sign_in">Вход</string>
+    <string name="auth_register">Регистрация</string>
+    <string name="auth_name">Имя</string>
+    <string name="auth_email">Почта</string>
+    <string name="auth_password">Пароль</string>
+    <string name="auth_do_sign_in">Войти</string>
+    <string name="auth_create_account">Создать аккаунт</string>
+    <string name="auth_or">или</string>
+    <string name="auth_google">Продолжить с Google</string>
+    <string name="auth_guest">Зайти как гость</string>
+    <string name="auth_error">Ошибка</string>
+
+    <!-- Onboarding -->
+    <string name="onb_location_title">Включи геолокацию</string>
+    <string name="onb_location_sub">Разреши доступ к локации, чтобы видеть, как далеко заведения от тебя. Без неё всё работает — просто без расстояний.</string>
+    <string name="onb_location_allow">Разрешить геолокацию</string>
+    <string name="onb_not_now">Не сейчас</string>
+    <string name="onb_notif_title">Не пропусти новые акции</string>
+    <string name="onb_notif_sub">Уведомим, когда сохранённые заведения опубликуют новое предложение. Включить можно позже в настройках.</string>
+    <string name="onb_notif_allow">Включить уведомления</string>
+    <string name="onb_later">Позже</string>
+
+    <!-- Screen titles / sections -->
+    <string name="title_search">Поиск</string>
+    <string name="title_saved">Сохранённое</string>
+    <string name="title_bonuses">Бонусы</string>
+    <string name="title_profile">Профиль</string>
+    <string name="title_coupon">Купон</string>
+    <string name="title_my_coupons">Мои купоны</string>
+    <string name="title_loyalty">Карты лояльности</string>
+
+    <!-- Settings -->
+    <string name="settings">Настройки</string>
+    <string name="setting_city">Город</string>
+    <string name="setting_language">Язык</string>
+    <string name="setting_theme">Тема</string>
+    <string name="theme_system">Системная</string>
+    <string name="theme_light">Светлая</string>
+    <string name="theme_dark">Тёмная</string>
+    <string name="lang_ru">Русский</string>
+    <string name="lang_en">English</string>
+    <string name="lang_ky">Кыргызча</string>
+
+    <!-- Help / account -->
+    <string name="help">Помощь</string>
+    <string name="help_about">О приложении</string>
+    <string name="help_faq">Вопросы и ответы</string>
+    <string name="help_support">Поддержка</string>
+    <string name="account_sign_out">Выйти</string>
+    <string name="account_delete">Удалить аккаунт</string>
+
+    <!-- Saved tabs -->
+    <string name="saved_venues">Заведения</string>
+    <string name="saved_deals">Предложения</string>
+
+    <!-- Guest -->
+    <string name="guest_title">Войдите в аккаунт</string>
+    <string name="guest_body">Гостям доступен только просмотр. Войдите в профиле, чтобы сохранять и оставлять отзывы.</string>
+
+    <!-- Venue actions -->
+    <string name="act_call">Позвонить</string>
+    <string name="act_route">Маршрут</string>
+    <string name="act_save">Сохранить</string>
+    <string name="act_saved">Сохранено</string>
+    <string name="act_share">Поделиться</string>
+    <string name="reviews">Отзывы</string>
+    <string name="publications">Публикации</string>
+    <string name="photos">Фото</string>
+    <string name="see_all">Смотреть все</string>
+    <string name="open_on_map">Открыть на карте</string>
+    <string name="venue_section">Заведение</string>
+    <string name="today">Сегодня</string>
+    <string name="rate_item">Оценить блюдо или услугу</string>
+    <string name="no_reviews">Пока нет отзывов. Будь первым!</string>
+
+    <!-- Home / feed -->
+    <string name="home_today_saved">Сегодня в избранном</string>
+    <string name="feed_empty_city_title">Пока нет заведений</string>
+    <string name="feed_empty_cat_title">Нет предложений в категории</string>
+    <string name="feed_empty_cat_body">В этой категории пока нет акций.</string>
+
+    <!-- Search -->
+    <string name="search_hint">Заведение, категория или акция</string>
+    <string name="search_empty_title">Ничего не нашлось</string>
+    <string name="search_empty_body">Попробуй другое название или расширь расстояние.</string>
+    <string name="filter_open">Открыто</string>
+    <string name="filter_deals">Со скидкой</string>
+    <string name="filter_rating">Рейтинг</string>
+    <string name="filter_distance">Расстояние</string>
+    <string name="filter_category">Категория</string>
+
+    <!-- ===== Batch: user-facing screen localization (RU) ===== -->
+    <!-- Venue detail -->
+    <string name="venue_not_found">Заведение не найдено</string>
+    <string name="venue_distance_from_you">%1$s от вас</string>
+    <string name="venue_saved_by_count">Сохранили %1$d человек</string>
+    <string name="venue_share_text">%1$s, %2$s. Нашёл в Ayant! %3$s</string>
+    <string name="venue_loyalty_card">Карта лояльности</string>
+    <string name="venue_loyalty_progress">%1$d визитов → %2$s</string>
+    <string name="venue_pdf_menu">Прайс-лист / каталог (PDF)</string>
+    <string name="venue_see_all_count">Смотреть все (%1$d)</string>
+    <string name="venue_reviews_count">%1$d отзывов</string>
+    <string name="venue_reviews_no_items">Отзывы оставляются на конкретные блюда и услуги. Заведение пока не добавило объекты для оценки.</string>
+    <string name="map_choose_app">Выберите приложение для маршрута.</string>
+    <!-- Reviews -->
+    <string name="review_report_thanks_title">Спасибо</string>
+    <string name="review_report_title">Пожаловаться на отзыв</string>
+    <string name="review_report_sent">Жалоба отправлена на модерацию.</string>
+    <string name="review_report_choose">Выберите причину жалобы.</string>
+    <string name="review_report_spam">Спам</string>
+    <string name="review_report_offensive">Оскорбительное</string>
+    <string name="review_report_action">Пожаловаться</string>
+    <string name="review_verified_visit">Был здесь</string>
+    <string name="review_about_item">Отзыв об объекте: %1$s</string>
+    <string name="review_host_reply">Ответ заведения</string>
+    <string name="review_new_title">Новый отзыв</string>
+    <string name="review_edit_title">Изменить отзыв</string>
+    <string name="review_no_items_body">У заведения пока нет объектов для отзыва. Оценить можно конкретное блюдо или услугу — попросите заведение добавить их.</string>
+    <string name="review_what_rating">Что оцениваете</string>
+    <string name="review_hint">Ваш отзыв</string>
+    <string name="action_choose">Выбрать</string>
+    <!-- Deal detail -->
+    <string name="deal_not_found">Предложение не найдено</string>
+    <string name="deal_title_fallback">Предложение</string>
+    <string name="deal_share_text">%1$s — %2$s. Нашёл в Ayant! %3$s</string>
+    <string name="deal_valid_until">Действует до %1$s</string>
+    <string name="deal_coupon_title">Купон на предложение</string>
+    <string name="deal_coupon_hint">Сотрудник сканирует QR и применяет предложение перед оплатой.</string>
+    <string name="deal_coupon_guest">Войдите в аккаунт, чтобы получить купон.</string>
+    <string name="deal_get_coupon">Получить купон</string>
+    <string name="deal_show_coupon">Показать купон</string>
+    <!-- Profile -->
+    <string name="profile_guest_name">Гость</string>
+    <string name="profile_host_mode">Режим заведения</string>
+    <string name="profile_host_guest">Войдите, чтобы управлять бизнесом</string>
+    <string name="profile_host_sub">Управляйте своим бизнесом</string>
+    <string name="profile_my_reviews">Мои отзывы</string>
+    <string name="profile_no_reviews">Ты ещё не оставил ни одного отзыва.</string>
+    <string name="profile_invite_friend">Пригласить друга</string>
+    <string name="profile_referral_share">Лови скидки и акции города в Ayant. Заходи по моей ссылке — бонусы получим оба! %1$s</string>
+    <string name="profile_share_invite">Поделиться приглашением</string>
+    <string name="profile_referral_desc">Друг получит приветственные бонусы, а ты — за каждого, кто присоединится.</string>
+    <string name="app_version">Версия 0.3 (MVP)</string>
+    <string name="account_delete_confirm_title">Удалить аккаунт?</string>
+    <string name="account_delete_body">Это действие необратимо. Все отзывы и сохранённое будут удалены.</string>
+    <!-- Search -->
+    <string name="search_list">Список</string>
+    <string name="search_map">Карта</string>
+    <string name="filter_reset">Сбросить фильтры</string>
+    <string name="search_found">Найдено: %1$d</string>
+    <string name="filter_rating_any">Любой рейтинг</string>
+    <string name="filter_distance_any">Любое расстояние</string>
+    <string name="filter_category_all">Все категории</string>
+    <!-- Status -->
+    <string name="status_open">Открыто</string>
+    <string name="status_closed">Закрыто</string>
+    <!-- Coupons -->
+    <string name="coupon_empty_title">Нет купонов</string>
+    <string name="coupon_empty_body">Получи купон на акции заведений или обменяй бонусы во вкладке «Бонусы».</string>
+    <string name="coupon_available">ДОСТУПНЫЕ · %1$d</string>
+    <string name="coupon_used_section">ИСПОЛЬЗОВАННЫЕ · %1$d</string>
+    <string name="coupon_status_used">Использован</string>
+    <string name="coupon_status_active">Активен</string>
+    <string name="coupon_not_found">Купон не найден</string>
+    <string name="coupon_badge_used">ИСПОЛЬЗОВАН</string>
+    <string name="coupon_badge_active">АКТИВЕН · AYANT</string>
+    <string name="coupon_code_label">КОД КУПОНА</string>
+    <string name="coupon_used_msg">Купон использован</string>
+    <string name="coupon_show_qr_hint">Покажите QR сотруднику — он отсканирует его, и предложение применится.</string>
+    <string name="coupon_use">Использовать купон</string>
+    <string name="coupon_use_confirm_title">Использовать купон?</string>
+    <string name="coupon_use_confirm_body">Подтверждай только при сотруднике — купон одноразовый.</string>
+    <string name="coupon_use_confirm_yes">Да, применить</string>
+    <!-- Bonus -->
+    <string name="bonus_balance">Твой баланс</string>
+    <string name="bonus_until_reward">ещё %1$s до награды</string>
+    <string name="bonus_spend">Потратить бонусы</string>
+    <string name="bonus_games_header">Играй и копи бонусы</string>
+    <string name="game_snake">Змейка</string>
+    <string name="game_snake_sub">+1 / яблоко</string>
+    <string name="game_tetris">Тетрис</string>
+    <string name="game_tetris_sub">+5 / линия</string>
+    <string name="bonus_reward_toast">+%1$d бонусов 🎉</string>
+    <string name="bonus_cost">%1$d бонусов</string>
+    <string name="bonus_redeem_self">Обменять себе</string>
+    <string name="bonus_gift_friend">Подарить другу</string>
+    <string name="bonus_gift_share">🎁 Тебе подарок — купон «%1$s» в Ayant! Забери по ссылке: https://ayant.kg/gift/%2$s</string>
+    <!-- Loyalty -->
+    <string name="loyalty_empty_title">Пока нет карт лояльности</string>
+    <string name="loyalty_empty_body">Откройте страницу заведения с картой лояльности и покажите её QR сотруднику.</string>
+    <string name="loyalty_reward">Награда: %1$s</string>
+    <string name="loyalty_rewards_earned">Наград получено: %1$d</string>
+    <string name="loyalty_show_hint">Покажите сотруднику — он отсканирует для штампа</string>
+    <string name="loyalty_hide_qr">Скрыть QR</string>
+    <string name="loyalty_show_qr">Показать QR</string>
+    <string name="loyalty_signin_hint">Войдите в аккаунт, чтобы копить штампы.</string>
+    <string name="loyalty_how_title">Как это работает</string>
+    <string name="loyalty_how_body">Показывайте QR карты сотруднику при каждом визите — он сканирует его, и вам засчитывается штамп. Соберите %1$d штампов и получите «%2$s».</string>
+    <!-- Help -->
+    <string name="help_about_body">Скидки, акции и новинки заведений вашего города. Находите места рядом, сохраняйте любимые, получайте купоны и копите бонусы.</string>
+    <string name="help_about_region">Central Asia · Бишкек</string>
+    <string name="faq_q1">Как получить купон?</string>
+    <string name="faq_a1">Откройте акцию заведения и нажмите «Получить купон». Покажите QR сотруднику при оплате.</string>
+    <string name="faq_q2">Что такое бонусы?</string>
+    <string name="faq_a2">Бонусы начисляются за активность в приложении и мини-игры. Обменивайте их на купоны во вкладке «Бонусы».</string>
+    <string name="faq_q3">Как работает карта лояльности?</string>
+    <string name="faq_a3">Показывайте QR карты сотруднику при каждом визите. Соберите нужное число штампов и получите награду.</string>
+    <string name="faq_q4">Как добавить своё заведение?</string>
+    <string name="faq_a4">В профиле откройте «Режим заведения» и заполните данные бизнеса.</string>
+    <string name="support_contact">Свяжитесь с нами</string>
+    <string name="support_email">Написать на почту</string>
+    <!-- Home -->
+    <string name="home_title">Ayant · %1$s</string>
+    <string name="category_all">Все</string>
+    <string name="home_empty_city_title">Пока нет заведений в %1$s</string>
+    <string name="home_empty_city_body">Знаешь хорошее место? Помоги нам — добавь заведение.</string>
+    <!-- Saved -->
+    <string name="saved_guest_title">Только для аккаунтов</string>
+    <string name="saved_guest_body">Войдите, чтобы сохранять заведения и предложения. Гостям доступен только просмотр.</string>
+    <string name="saved_empty_venues_title">Сохраняй любимые места</string>
+    <string name="saved_empty_venues_body">Они появятся здесь — нажми закладку на любом заведении.</string>
+    <string name="saved_empty_deals_title">Сохраняй предложения</string>
+    <string name="saved_empty_deals_body">Нажми закладку на любом предложении, чтобы сохранить его сюда.</string>
+    <!-- Cards -->
+    <string name="card_ad_recommend">рекомендуем заведение</string>
+    <string name="card_deal_count">%1$d акц.</string>
+    <string name="card_until">до %1$s</string>
+    <string name="card_ad_label">Реклама</string>
+
+    <!-- ===== Host screens localization (RU) ===== -->
+    <!-- Host venue detail / common -->
+    <string name="host_active">Активно</string>
+    <string name="host_paused">На паузе</string>
+    <string name="host_rejected">Отклонено</string>
+    <string name="host_pending">На модерации</string>
+    <string name="host_approved">Одобрено</string>
+    <string name="host_rejected_body">Заведение отклонено. Отредактируйте данные и сохраните повторно.</string>
+    <string name="host_pending_body">Заведение на проверке. Появится в ленте после одобрения.</string>
+    <string name="host_today_special">⭐️ Сегодняшний специал</string>
+    <string name="host_special_placeholder">До 100 символов</string>
+    <string name="host_save_special">Сохранить специал</string>
+    <string name="host_enabled">Включена</string>
+    <string name="host_disabled">Выключена</string>
+    <string name="host_loyalty_progress">%1$d визитов → «%2$s»</string>
+    <string name="host_loyalty_disabled_hint">Включите программу лояльности в настройках заведения.</string>
+    <string name="host_items_section">Объекты для отзывов</string>
+    <string name="host_cd_add_item">Добавить объект</string>
+    <string name="host_no_items">Пока нет объектов.</string>
+    <string name="host_cd_add_deal">Добавить акцию</string>
+    <string name="host_no_deals">Пока нет предложений. Добавьте, чтобы привлекать гостей.</string>
+    <string name="host_resume">Возобновить</string>
+    <string name="host_pause">На паузу</string>
+    <string name="host_expired">Завершено</string>
+    <string name="host_draft">Черновик</string>
+    <string name="host_scan_guest_coupons">Сканировать купоны гостей</string>
+    <string name="host_edit_venue">Изменить данные заведения</string>
+    <string name="host_promote_venue">Продвигать это заведение</string>
+    <string name="host_delete_venue">Удалить заведение</string>
+    <string name="host_delete_venue_confirm">Удалить заведение?</string>
+    <string name="host_delete_venue_body">«%1$s» и все его предложения будут удалены без возможности восстановления.</string>
+    <string name="host_cd_scanner">Сканер</string>
+    <!-- Host item dialog -->
+    <string name="host_item_new_title">Новый объект</string>
+    <string name="host_item_name">Название (напр. Лагман)</string>
+    <string name="host_item_emoji">Эмодзи (если без фото)</string>
+    <string name="host_item_kind_label">Тип</string>
+    <string name="host_item_kind_food">Блюдо</string>
+    <string name="host_item_kind_service">Услуга</string>
+    <string name="host_item_kind_other">Объект</string>
+    <!-- Host scanner -->
+    <string name="host_scan_title">Сканирование купона</string>
+    <string name="host_scan_hint">Наведите камеру на QR купона / карты лояльности гостя.</string>
+    <string name="host_scan_manual">Ввести код вручную</string>
+    <string name="host_scan_code">Код купона (напр. AYANT-XXXXXX)</string>
+    <string name="host_scan_checking">Проверка…</string>
+    <string name="host_scan_redeem">Погасить</string>
+    <string name="host_scan_error">Ошибка: %1$s</string>
+    <string name="host_scan_failed">не удалось</string>
+    <string name="host_scan_stamp">✓ Штамп %1$d/%2$d</string>
+    <string name="host_scan_reward_suffix">" · Награда: %1$s!"</string>
+    <string name="host_scan_redeemed">✓ Погашено: %1$s</string>
+    <!-- Host reviews -->
+    <string name="host_reviews_empty">Пока нет отзывов. Поделитесь заведением, чтобы получить первые отзывы.</string>
+    <string name="host_your_reply">Ваш ответ</string>
+    <string name="host_reply">Ответить</string>
+    <string name="host_edit_reply">Изменить ответ</string>
+    <string name="host_reply_title">Ответ на отзыв</string>
+    <string name="host_reply_hint">Ваш ответ (виден всем)</string>
+    <!-- Host onboarding / venues list -->
+    <string name="host_onb_body">Расскажите о вашем бизнесе. Оплата и верификация не требуются.</string>
+    <string name="host_onb_business_name">Название бизнеса</string>
+    <string name="host_onb_phone">Контактный телефон</string>
+    <string name="host_onb_continue">Продолжить</string>
+    <string name="host_my_venues">Мои заведения</string>
+    <string name="host_no_venues_title">У вас пока нет заведений</string>
+    <string name="host_no_venues_body">Добавьте первое заведение, чтобы начать привлекать гостей.</string>
+    <string name="host_add_venue">Добавить заведение</string>
+    <string name="host_stat_venues">Заведений</string>
+    <string name="host_stat_active_deals">Активных акций</string>
+    <string name="host_stat_views">Просмотров</string>
+    <string name="host_active_deals_count">%1$d активных предложений</string>
+    <string name="host_add_deal_short">+ Акция</string>
+    <!-- Upload button -->
+    <string name="host_upload_photo">Загрузить фото с устройства</string>
+    <string name="host_upload_pdf">Загрузить PDF с устройства</string>
+    <string name="host_upload_failed">Не удалось загрузить</string>
+    <string name="host_uploading">Загрузка…</string>
+    <!-- Venue form -->
+    <string name="venue_form_new_title">Новое заведение</string>
+    <string name="venue_form_edit_title">Изменить заведение</string>
+    <string name="venue_form_section_main">Основное</string>
+    <string name="venue_form_name">Название</string>
+    <string name="venue_form_emoji">Эмодзи</string>
+    <string name="venue_form_district">Район</string>
+    <string name="venue_form_address">Адрес</string>
+    <string name="venue_form_phone">Телефон</string>
+    <string name="venue_form_phone_optional">Телефон (необязательно)</string>
+    <string name="venue_form_photo_url">Ссылка на фото (https)</string>
+    <string name="venue_form_pdf_url">Прайс-лист / каталог PDF (ссылка)</string>
+    <string name="venue_form_section_hours">Часы работы</string>
+    <string name="venue_form_hours_perday">По дням недели</string>
+    <string name="venue_form_hours_same">Одинаково каждый день</string>
+    <string name="venue_form_open_hour">Открытие (час)</string>
+    <string name="venue_form_close_hour">Закрытие (час)</string>
+    <string name="venue_form_day_mon">Пн</string>
+    <string name="venue_form_day_tue">Вт</string>
+    <string name="venue_form_day_wed">Ср</string>
+    <string name="venue_form_day_thu">Чт</string>
+    <string name="venue_form_day_fri">Пт</string>
+    <string name="venue_form_day_sat">Сб</string>
+    <string name="venue_form_day_sun">Вс</string>
+    <string name="venue_form_from">с</string>
+    <string name="venue_form_to">до</string>
+    <string name="venue_form_dayoff">Выходной</string>
+    <string name="venue_form_apply_monday">Применить понедельник ко всем</string>
+    <string name="venue_form_section_branches">Филиалы (доп. адреса)</string>
+    <string name="venue_form_add_branch">Добавить филиал</string>
+    <string name="venue_form_new_branch">Новый филиал</string>
+    <string name="venue_form_section_social">Соцсети</string>
+    <string name="venue_form_whatsapp">WhatsApp (номер)</string>
+    <string name="venue_form_instagram">Instagram (ник или ссылка)</string>
+    <string name="venue_form_telegram">Telegram (ник или ссылка)</string>
+    <string name="venue_form_section_location">Местоположение</string>
+    <string name="venue_form_pick_map">Выбрать точку на карте</string>
+    <string name="venue_form_lat">Широта</string>
+    <string name="venue_form_lng">Долгота</string>
+    <string name="venue_form_section_loyalty">Купоны и лояльность</string>
+    <string name="venue_form_accept_coupons">Принимать купоны</string>
+    <string name="venue_form_stamps_goal">Штампов до награды</string>
+    <string name="venue_form_reward">Награда</string>
+    <!-- Deal form -->
+    <string name="deal_form_new_title">Новое предложение</string>
+    <string name="deal_form_edit_title">Изменить предложение</string>
+    <string name="deal_form_title">Заголовок</string>
+    <string name="deal_form_type">Тип (нажмите)</string>
+    <string name="deal_form_details">Описание</string>
+    <string name="deal_form_new_price">Новая цена, сом</string>
+    <string name="deal_form_discount">Процент скидки</string>
+    <string name="deal_form_has_end">Есть срок действия</string>
+    <string name="deal_form_days">Действует дней</string>
+    <string name="deal_form_draft">Сохранить как черновик</string>
+    <!-- Promote -->
+    <string name="promote_hero_title">Больше гостей — быстрее</string>
+    <string name="promote_hero_body">Поднимите заведение в ленте или отправьте push об акции. Запуск за минуту.</string>
+    <string name="promote_add_venue_first">Сначала добавьте заведение</string>
+    <string name="promote_launch">Запустить продвижение</string>
+    <string name="promote_type_boost">Буст в ленте</string>
+    <string name="promote_type_boost_sub">Заведение выше в списке, с меткой «Реклама».</string>
+    <string name="promote_type_push">Push</string>
+    <string name="promote_type_push_sub">Сообщите гостям об акции уведомлением.</string>
+    <string name="promote_empty">Пока нет активных кампаний. Запустите первую — и заведение начнёт получать больше просмотров.</string>
+    <string name="promote_your_campaigns">Ваши кампании</string>
+    <string name="promote_cancel_campaign">Отменить кампанию</string>
+    <string name="promote_spend">💳 %1$d сом</string>
+    <string name="promote_new_campaign">Новая кампания</string>
+    <string name="promote_duration">Длительность</string>
+    <string name="promote_days_price">%1$d дней — %2$d сом</string>
+    <string name="promote_all_venue">Вся витрина заведения</string>
+    <string name="promote_what">Что продвигаем</string>
+    <string name="promote_headline">Заголовок (до 60)</string>
+    <string name="promote_text">Текст (до 120)</string>
+    <string name="promote_push_default_body">Новое предложение в %1$s</string>
+    <string name="promote_pay_launch">Оплатить и запустить</string>
+    <string name="promote_send_push">Отправить push</string>
+    <!-- Analytics -->
+    <string name="analytics_days">%1$d дней</string>
+    <string name="analytics_days_short">%1$dд</string>
+    <string name="analytics_empty">Данных пока нет. Статистика появится после первых просмотров заведения.</string>
+    <string name="analytics_profile_views">Просмотры профиля</string>
+    <string name="analytics_loading">загрузка…</string>
+    <string name="analytics_for_days">за %1$d дней</string>
+    <string name="analytics_redemptions">Погашено купонов</string>
+    <string name="analytics_deal_taps">Клики по акциям</string>
+    <string name="analytics_saves">Сохранения</string>
+    <string name="analytics_calls">Звонки</string>
+    <string name="analytics_maps">Маршруты</string>
+    <string name="analytics_by_venue">По заведениям</string>
+    <string name="analytics_redeemed_count">%1$d погашено</string>
+    <string name="analytics_views">Просмотры</string>
+    <!-- Host profile -->
+    <string name="hprofile_title">Профиль заведения</string>
+    <string name="hprofile_your_business">Ваш бизнес</string>
+    <string name="hprofile_unverified">Не подтверждено</string>
+    <string name="hprofile_business_info">Информация о бизнесе</string>
+    <string name="hprofile_details_contacts">Реквизиты и контакты</string>
+    <string name="hprofile_inn">ИНН %1$s</string>
+    <string name="hprofile_fill_details">Заполнить реквизиты и контакты</string>
+    <string name="hprofile_verification">Верификация</string>
+    <string name="hprofile_verified">Заведение проверено</string>
+    <string name="hprofile_verify_hint">Галочка повышает доверие гостей.</string>
+    <string name="hprofile_request_verify">Запросить «Проверено»</string>
+    <string name="hprofile_notifications">Уведомления</string>
+    <string name="hprofile_notif_desc">Новые отзывы и статусы кампаний</string>
+    <string name="hprofile_payment">Оплата</string>
+    <string name="hprofile_payment_method">Способ оплаты</string>
+    <string name="hprofile_payment_hint">Подключение платёжных методов появится позже.</string>
+    <string name="hprofile_exit_host">Вернуться в режим пользователя</string>
+    <string name="hprofile_email">Email</string>
+    <string name="hprofile_legal_form">Форма деятельности</string>
+    <string name="hprofile_not_specified">Не указано</string>
+    <string name="hprofile_legal_name">Название юрлица</string>
+    <string name="hprofile_entrepreneur_name">ФИО предпринимателя</string>
+    <string name="hprofile_inn_label">ИНН / ОГРНИП</string>
+    <string name="hprofile_legal_address">Юридический адрес</string>
+    <string name="hprofile_website">Сайт</string>
+    <string name="hprofile_about">О бизнесе</string>
+    <!-- Map picker -->
+    <string name="map_pick_hint">Нажмите на карту, чтобы поставить точку</string>
+
+    <!-- Games -->
+    <string name="game_close">Закрыть</string>
+    <string name="game_score">Счёт: %1$d</string>
+    <string name="game_play_again">Играть снова</string>
+    <string name="game_snake_title">🐍 Змейка</string>
+    <string name="game_snake_bonus">+1 бонус за яблоко · осталось сегодня: %1$d</string>
+    <string name="game_snake_over">Игра окончена — счёт %1$d</string>
+    <string name="game_snake_hint">Свайпай, чтобы управлять змейкой</string>
+    <string name="game_tetris_title">🧱 Тетрис</string>
+    <string name="game_tetris_bonus">+5 бонусов за линию · осталось сегодня: %1$d</string>
+    <string name="game_tetris_over">Игра окончена — линий: %1$d</string>
 </resources>

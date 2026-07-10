@@ -1,24 +1,33 @@
 # Ayant — Android
 
-Android mirror of the iOS **SAN / Ayant** app (Yelp-for-Central-Asia, Russian UI).
-Built with **Kotlin + Jetpack Compose + Material 3** (Android HIG). This first pass
-covers the **user side, core discovery loop**; it mirrors the iOS `SAN/` sources 1:1
-in structure and design tokens.
+Full Android mirror of the iOS **SAN / Ayant** app (Yelp-for-Central-Asia, Russian UI).
+Built with **Kotlin + Jetpack Compose + Material 3** (Android HIG). Mirrors the iOS
+`SAN/` sources in structure, features, and design tokens — both the **user side** and
+the **host (business) side**.
 
-## What's included (this pass)
+## What's included
 
+**User side**
 - **Auth** — email sign-in/register, Google (stub), guest. Mirrors `AuthView`.
 - **Onboarding** — 2 steps (location, notifications), Bishkek only. Mirrors `OnboardingView`.
 - **Home feed** — category tiles, "today in favorites" strip, ranked deal cards. Mirrors `HomeFeedView`.
-- **Search** — query + filters (open now, with deals, rating, distance, category), ranked venue list. Mirrors `SearchView` (list mode).
-- **Venue detail** — header, actions (call/route/save/share), today special, address/phone/hours, deals grid, photos, reviews + breakdown + write-review. Mirrors `VenueDetailView`.
-- **Deal detail** — hero, badge, price, urgency, coupon QR, venue link. Mirrors `DealDetailView`.
-- **Saved** — venues + deals tabs. Mirrors `SavedView`.
-- **Profile** — profile card, settings, my reviews, referral share, account. Mirrors `ProfileView`.
-- **Bonus** tab — placeholder (see roadmap).
+- **Search** — query + filters (open/deals/rating/distance/category), ranked venue list **and Google Maps view** with markers. Mirrors `SearchView`.
+- **Venue detail** — header, actions, today special, loyalty banner, address/phone/hours, deals grid, photos, reviews + breakdown + write-review. Mirrors `VenueDetailView`.
+- **Deal detail** — hero, badge, price, urgency, **get-coupon** (QR), venue link. Mirrors `DealDetailView`.
+- **Saved** — venues + deals tabs.
+- **Bonus** — wallet + activity-time economy, rewards catalog → coupons, **coupon wallet** (QR tickets), **loyalty cards** (per-venue QR + stamp grid), and **Snake + Tetris** mini-games (Compose Canvas) that award bonuses with daily caps. Mirrors `BonusHubView`/`BonusEngine`/`CouponStore`/`LoyaltyStore`/`Games`.
+- **Profile** — profile card, my coupons, settings, host-mode entry, my reviews, referral share, help (About/FAQ/Support), account.
 
-Data runs on the ported **MockData** (same Bishkek venues/deals/reviews as iOS).
-Saves, favorites, reviews and session persist via `SharedPreferences`.
+**Host side** (`ui/host/`, mirrors `SAN/Host/`)
+- Onboarding → 5 tabs: **Заведения** (list + stats + CRUD), **Продвижение** (boost/push campaigns), **Аналитика** (period metrics), **Отзывы** (reply inbox), **Профиль** (business info, verification).
+- Venue detail with today-special editor, review objects (items), deals grid with status menu, loyalty overview, coupon **scanner** (manual entry; camera scanner is the one remaining stub).
+- Host content is written into the shared feed via `AppViewModel.setHostContent` (host edits override repo by id), exactly like iOS `HostStore.bind`.
+
+**Deep links** — `ayant://venue/<id>`, `https://ayant.kg/deal/<id>` open the right screen (handled in `MainActivity`).
+
+Data runs on the ported **MockData** by default; Firebase (same `san-25d32` backend) is
+wired behind `AppConfig.useFirebase`. Saves, favorites, reviews, coupons, loyalty, host
+data and session persist via `SharedPreferences`.
 
 ## Project structure
 
@@ -59,24 +68,41 @@ Requirements: Android Studio Ladybug+, JDK 17, Android SDK 34 (minSdk 26).
 
 ## Going live on Firebase (shared backend `san-25d32`)
 
-The app currently runs on MockData. To share the iOS backend:
+The app runs on MockData by default. To share the iOS backend:
 
 1. Firebase console → project `san-25d32` → add **Android app**, package `kg.ayant.app`.
 2. Download `google-services.json` into `android/app/`. The Google Services plugin
    auto-applies when that file exists (see `app/build.gradle.kts`).
-3. In `core/AppConfig.kt`, set `useFirebase = true` and implement `FirebaseDataRepository`
-   (read `venues`, `deals`, `reviews` collections → the same models). The Firebase BOM +
-   Auth + Firestore deps are already declared.
-4. Publish/confirm Firestore rules already used by iOS (public read on venues/deals/reviews).
+3. In `core/AppConfig.kt`, set `useFirebase = true`. `FirebaseDataRepository` already reads
+   `venues`, `deals`, `reviews` into the same models (Firebase BOM + Auth + Firestore +
+   coroutines-play-services deps are declared).
+4. Confirm Firestore rules used by iOS (public read on venues/deals/reviews).
 
-## Roadmap (next passes)
+## Google Maps key
 
-- **Bonus side**: bonus economy, games (Snake/Tetris), loyalty cards, coupons wallet + Wallet/Google Wallet.
-- **Search map**: clustered Google Maps view (mirrors `VenuesMapView`) — currently list-only.
-- **Firebase**: `FirebaseDataRepository`, Firebase Auth (email/Google), FCM push, analytics.
-- **Host side**: full business mode (venues/deals management, reviews inbox, analytics, promote, scanner).
-- **Localization**: RU/EN/KY string resources (iOS uses a 374-key catalog).
-- Photo viewer, PDF menu, real image uploads, item-level reviews.
+The search map needs a Maps SDK for Android key. Replace `YOUR_MAPS_API_KEY` in
+`AndroidManifest.xml`. Until then the app builds and runs; only the map tiles are blank.
+
+## Parity with iOS
+
+Feature-complete against the iOS `SAN/` app. Also included now:
+- **Theme switching** (system/light/dark) in Profile.
+- **Camera QR scanner** (CameraX + ML Kit) for the host, with manual-code fallback.
+- **Firebase Auth** behind `AppConfig` (email + anonymous guest; Mock default).
+- **Analytics** service (Firestore `analytics/{venue}/days/{date}` increments; Mock default).
+- **Venue detail** full parity: social links (WhatsApp/TG/IG), branches, PDF menu (WebView),
+  tappable fullscreen photo viewer, item-specific review picker, verified-visit badges, guest prompts.
+- **Gift coupons** from the rewards menu (share a gift link).
+
+## Remaining deltas vs iOS
+
+- **Google Sign-In**: email + guest are wired via Firebase; Google uses Credential Manager on
+  Android (a later pass) — currently falls back to anonymous.
+- **FCM push** + **Google Wallet** passes (iOS uses APNs + PassKit) — backend/plumbing pass.
+- **Localization**: the app is Russian-first with inline strings (matching iOS's practical
+  state; iOS ships a 374-key catalog still needing native ky/en review). Theme switching is
+  fully wired; language selector shows Russian.
+- Real image uploads in host forms (currently image URLs).
 
 ## Notes
 

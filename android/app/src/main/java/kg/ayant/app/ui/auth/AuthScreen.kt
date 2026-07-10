@@ -37,6 +37,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
+import kg.ayant.app.R
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -68,7 +70,7 @@ fun AuthScreen(session: SessionViewModel) {
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text("Ayant", fontSize = 64.sp, fontWeight = FontWeight.Black, color = Color.White)
-            Text("скидки • акции • новинки", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Color.White.copy(alpha = 0.9f))
+            Text(stringResource(R.string.auth_tagline), fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Color.White.copy(alpha = 0.9f))
             Spacer(Modifier.height(22.dp))
 
             Column(
@@ -79,28 +81,28 @@ fun AuthScreen(session: SessionViewModel) {
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 TabRow(selectedTabIndex = tab, containerColor = Color.Transparent, contentColor = c.accent) {
-                    Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Вход") })
-                    Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Регистрация") })
+                    Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text(stringResource(R.string.auth_sign_in)) })
+                    Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text(stringResource(R.string.auth_register)) })
                 }
 
                 if (tab == 1) {
                     OutlinedTextField(
                         value = name, onValueChange = { name = it },
-                        label = { Text("Имя") }, singleLine = true,
+                        label = { Text(stringResource(R.string.auth_name)) }, singleLine = true,
                         leadingIcon = { Icon(Icons.Filled.Person, null) },
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
                 OutlinedTextField(
                     value = email, onValueChange = { email = it },
-                    label = { Text("Почта") }, singleLine = true,
+                    label = { Text(stringResource(R.string.auth_email)) }, singleLine = true,
                     leadingIcon = { Icon(Icons.Filled.Email, null) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
                     value = password, onValueChange = { password = it },
-                    label = { Text("Пароль") }, singleLine = true,
+                    label = { Text(stringResource(R.string.auth_password)) }, singleLine = true,
                     leadingIcon = { Icon(Icons.Filled.Lock, null) },
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
@@ -108,7 +110,7 @@ fun AuthScreen(session: SessionViewModel) {
                 )
 
                 AyantPrimaryButton(
-                    text = if (tab == 0) "Войти" else "Создать аккаунт",
+                    text = if (tab == 0) stringResource(R.string.auth_do_sign_in) else stringResource(R.string.auth_create_account),
                     enabled = !session.isWorking,
                     onClick = {
                         if (tab == 0) session.signInEmail(email, password)
@@ -118,15 +120,16 @@ fun AuthScreen(session: SessionViewModel) {
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.weight(1f).height(1.dp).background(c.hairline))
-                    Text("  или  ", fontSize = 12.sp, color = c.inkSoft)
+                    Text("  ${stringResource(R.string.auth_or)}  ", fontSize = 12.sp, color = c.inkSoft)
                     Box(Modifier.weight(1f).height(1.dp).background(c.hairline))
                 }
 
-                TextButton(onClick = { session.signInGoogle() }, modifier = Modifier.fillMaxWidth()) {
-                    Text("Продолжить с Google", fontWeight = FontWeight.SemiBold, color = c.ink)
+                val ctx = androidx.compose.ui.platform.LocalContext.current
+                TextButton(onClick = { session.signInGoogle(ctx) }, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.auth_google), fontWeight = FontWeight.SemiBold, color = c.ink)
                 }
                 TextButton(onClick = { session.continueAsGuest() }, modifier = Modifier.fillMaxWidth()) {
-                    Text("Зайти как гость", color = c.inkSoft)
+                    Text(stringResource(R.string.auth_guest), color = c.inkSoft)
                 }
                 if (session.isWorking) CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally))
             }
@@ -136,8 +139,8 @@ fun AuthScreen(session: SessionViewModel) {
     if (session.errorMessage != null) {
         AlertDialog(
             onDismissRequest = { session.errorMessage = null },
-            confirmButton = { TextButton(onClick = { session.errorMessage = null }) { Text("Ок") } },
-            title = { Text("Ошибка") },
+            confirmButton = { TextButton(onClick = { session.errorMessage = null }) { Text(stringResource(R.string.action_ok)) } },
+            title = { Text(stringResource(R.string.auth_error)) },
             text = { Text(session.errorMessage ?: "") },
         )
     }

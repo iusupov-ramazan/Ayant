@@ -36,9 +36,11 @@ final class AppStore: ObservableObject {
     @Published var isGuest = false   // гость не может сохранять/оставлять отзывы
     @Published var toastMessage: String?   // всплывающее уведомление (подарки и т. п.)
 
-    private let repository: DataRepository = AppConfig.makeDataRepository()
-    private let analytics: AnalyticsService = AppConfig.makeAnalyticsService()
-    private let push: PushService = AppConfig.makePushService()
+    private let repository: DataRepository
+    private let analytics: AnalyticsService
+    private let push: PushService
+    /// Локальное хранилище настроек (UserDefaults по умолчанию; в тестах — стаб).
+    private let prefs: LocalPreferencesStore
 
     /// Пользователь реально посетил заведение (погасил у него хотя бы один купон).
     func hasVisited(_ venueID: String) -> Bool {
@@ -55,11 +57,18 @@ final class AppStore: ObservableObject {
         (try? await analytics.fetchStats(venueID: venueID, days: days)) ?? [:]
     }
 
-    init() {
-        favoriteDealIDs = Set(UserDefaults.standard.stringArray(forKey: Self.dealsKey) ?? [])
-        redeemedDealIDs = Set(UserDefaults.standard.stringArray(forKey: Self.redeemedKey) ?? [])
-        savedVenueIDs = Set(UserDefaults.standard.stringArray(forKey: Self.venuesKey) ?? [])
-        selectedCitySlug = UserDefaults.standard.string(forKey: Self.cityKey) ?? City.bishkek.id
+    init(repository: DataRepository = AppConfig.makeDataRepository(),
+         analytics: AnalyticsService = AppConfig.makeAnalyticsService(),
+         push: PushService = AppConfig.makePushService(),
+         prefs: LocalPreferencesStore = UserDefaultsPreferencesStore()) {
+        self.repository = repository
+        self.analytics = analytics
+        self.push = push
+        self.prefs = prefs
+        favoriteDealIDs = prefs.stringSet(forKey: Self.dealsKey)
+        redeemedDealIDs = prefs.stringSet(forKey: Self.redeemedKey)
+        savedVenueIDs = prefs.stringSet(forKey: Self.venuesKey)
+        selectedCitySlug = prefs.string(forKey: Self.cityKey) ?? City.bishkek.id
         reviews = MockData.reviews
     }
 
@@ -119,7 +128,7 @@ final class AppStore: ObservableObject {
     // MARK: - Город (скоуп ленты, поиска)
 
     @Published var selectedCitySlug: String {
-        didSet { UserDefaults.standard.set(selectedCitySlug, forKey: Self.cityKey) }
+        didSet { prefs.setString(selectedCitySlug, forKey: Self.cityKey) }
     }
     private static let cityKey = "san.city"
 
@@ -224,7 +233,7 @@ final class AppStore: ObservableObject {
     // MARK: - Сохранённые предложения (Saved Deals)
 
     @Published var favoriteDealIDs: Set<String> {
-        didSet { UserDefaults.standard.set(Array(favoriteDealIDs), forKey: Self.dealsKey) }
+        didSet { prefs.setStringSet(favoriteDealIDs, forKey: Self.dealsKey) }
     }
     private static let dealsKey = "san.favorites"
 
@@ -246,7 +255,7 @@ final class AppStore: ObservableObject {
     // MARK: - Погашение купонов (ключевая метрика)
 
     @Published var redeemedDealIDs: Set<String> {
-        didSet { UserDefaults.standard.set(Array(redeemedDealIDs), forKey: Self.redeemedKey) }
+        didSet { prefs.setStringSet(redeemedDealIDs, forKey: Self.redeemedKey) }
     }
     private static let redeemedKey = "san.redeemed"
 
@@ -331,7 +340,7 @@ final class AppStore: ObservableObject {
     // MARK: - Сохранённые заведения (Saved Venues)
 
     @Published var savedVenueIDs: Set<String> {
-        didSet { UserDefaults.standard.set(Array(savedVenueIDs), forKey: Self.venuesKey) }
+        didSet { prefs.setStringSet(savedVenueIDs, forKey: Self.venuesKey) }
     }
     private static let venuesKey = "san.savedVenues"
 

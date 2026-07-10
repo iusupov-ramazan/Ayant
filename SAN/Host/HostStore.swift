@@ -196,7 +196,7 @@ final class HostStore: ObservableObject {
     @Published private(set) var campaigns: [AdCampaign] = []
 
     private weak var appStore: AppStore?
-    private let repo: HostRepository = AppConfig.makeHostRepository()
+    private let repo: HostRepository
     private(set) var ownerID = ""   // uid текущего пользователя-владельца
 
     private enum Key {
@@ -206,7 +206,8 @@ final class HostStore: ObservableObject {
         static let campaigns = "san.host.campaigns"
     }
 
-    init() {
+    init(repo: HostRepository = AppConfig.makeHostRepository()) {
+        self.repo = repo
         profile = decode(Key.profile)
         venueDTOs = decode(Key.venues) ?? []
         dealDTOs = decode(Key.deals) ?? []
@@ -391,6 +392,50 @@ final class HostStore: ObservableObject {
         remoteSaveVenue(dto)
     }
 
+    /// Собирает `HostVenueDTO` из значений формы и сохраняет (создание либо правка).
+    /// Сборка/тримминг DTO живут здесь, а не во вью — форма лишь передаёт значения.
+    @discardableResult
+    func saveVenueForm(existing: HostVenueDTO?,
+                       name: String, category: VenueCategory, district: String, address: String,
+                       phone: String, emoji: String, latitude: Double, longitude: Double,
+                       openHour: Int, closeHour: Int, imageURL: String, weekHours: [DayHours],
+                       pdfMenuURL: String, whatsapp: String, instagram: String, telegram: String,
+                       branches: [Branch], loyaltyEnabled: Bool, loyaltyGoal: Int,
+                       loyaltyReward: String, couponsEnabled: Bool) -> HostVenueDTO {
+        func trim(_ s: String) -> String { s.trimmingCharacters(in: .whitespaces) }
+        // Правка — поверх существующего DTO (сохраняем id/status/todaySpecial);
+        // создание — новый DTO со статусом «на модерации» по умолчанию.
+        var dto = existing ?? HostVenueDTO(
+            id: "hv_\(UUID().uuidString.prefix(8))", name: name, categoryRaw: category.rawValue,
+            district: district, address: address, phone: phone, emoji: emoji,
+            latitude: latitude, longitude: longitude, openHour: openHour, closeHour: closeHour,
+            todaySpecial: nil, isPaused: false, isVerified: false)
+        dto.name = name; dto.categoryRaw = category.rawValue; dto.district = district
+        dto.address = address; dto.phone = phone; dto.emoji = emoji
+        dto.latitude = latitude; dto.longitude = longitude
+        dto.openHour = openHour; dto.closeHour = closeHour
+        dto.imageURL = trim(imageURL)
+        dto.weekHours = weekHours
+        dto.pdfMenuURL = trim(pdfMenuURL)
+        dto.whatsapp = trim(whatsapp)
+        dto.instagram = trim(instagram)
+        dto.telegram = trim(telegram)
+        dto.branches = branches
+        dto.loyaltyEnabled = loyaltyEnabled
+        dto.loyaltyGoal = loyaltyGoal
+        dto.loyaltyReward = trim(loyaltyReward)
+        dto.couponsEnabled = couponsEnabled
+
+        if existing != nil {
+            updateVenue(dto)
+        } else {
+            venueDTOs.append(dto)
+            persistVenues()
+            remoteSaveVenue(dto)
+        }
+        return dto
+    }
+
     func togglePause(venueID: String) {
         if let i = venueDTOs.firstIndex(where: { $0.id == venueID }) {
             venueDTOs[i].isPaused.toggle()
@@ -440,6 +485,23 @@ final class HostStore: ObservableObject {
         else { dealDTOs.append(dto) }
         persistDeals()
         remoteSaveDeal(dto)
+    }
+
+    /// Собирает `HostDealDTO` из значений формы и сохраняет. Сборка DTO живёт в
+    /// сторе — форма только передаёт значения полей.
+    func saveDealForm(existing: HostDealDTO?, venueID: String, type: DealType, title: String,
+                      details: String, emoji: String, newPrice: Int?, discountPercent: Int?,
+                      endDate: Date?, isDraft: Bool, imageURLs: [String]) {
+        let dto = HostDealDTO(
+            id: existing?.id ?? newDealID(),
+            venueID: venueID, typeRaw: type.rawValue, title: title, details: details, emoji: emoji,
+            newPrice: newPrice, discountPercent: discountPercent,
+            startDate: existing?.startDate ?? .now,
+            endDate: endDate,
+            statusRaw: (isDraft ? DealStatus.draft : .active).rawValue,
+            imageURL: imageURLs.first ?? "",
+            imageURLs: imageURLs)
+        saveDeal(dto)
     }
 
     func newDealID() -> String { "hd_\(UUID().uuidString.prefix(8))" }

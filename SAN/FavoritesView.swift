@@ -47,6 +47,9 @@ struct SavedView: View {
                         VenueCompactRow(venue: venue,
                                         distanceKm: location.distanceKm(to: venue.latitude, venue.longitude))
                     }
+                    .listRowInsets(EdgeInsets(top: 14, leading: 28, bottom: 14, trailing: 22))
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(savedCardBG)
                     .swipeActions {
                         Button(role: .destructive) { store.unsaveVenue(venue) } label: {
                             Label("Убрать", systemImage: "bookmark.slash")
@@ -72,6 +75,9 @@ struct SavedView: View {
                     CompactDealRow(deal: deal)
                         .contentShape(Rectangle())
                         .onTapGesture { selectedDeal = deal }
+                        .listRowInsets(EdgeInsets(top: 14, leading: 28, bottom: 14, trailing: 22))
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(savedCardBG)
                         .swipeActions {
                             Button(role: .destructive) { store.unsaveDeal(deal) } label: {
                                 Label("Убрать", systemImage: "bookmark.slash")
@@ -82,6 +88,16 @@ struct SavedView: View {
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
         }
+    }
+
+    /// Скруглённая карточка-подложка для строк «Сохранённого»
+    /// (внутренние отступы задаёт listRowInsets, промежуток между строк — вертикальный паддинг).
+    private var savedCardBG: some View {
+        RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .fill(Color.sanSurface)
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(Color.sanHairline, lineWidth: 0.5))
+            .padding(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
     }
 }
 
