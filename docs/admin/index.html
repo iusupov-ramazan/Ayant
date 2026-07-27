@@ -1101,6 +1101,8 @@ async function loadDeals() {
 }
 
 // ── RENDER VENUES ─────────────────────────────────────────────────────────
+// Доступна из inline-обработчика oninput поля поиска (модульная область ≠ global).
+window.renderVenues = renderVenues;
 function renderVenues() {
   const tbody = document.getElementById('venuesBody');
   if (!venues.length) {
