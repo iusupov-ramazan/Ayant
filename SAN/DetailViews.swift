@@ -228,6 +228,7 @@ struct VenueDetailView: View {
     @State private var reportingReview: Review?
     @State private var showGuestPrompt = false
     @State private var showMapOptions = false
+    @State private var showAllBranches = false
 
     private var deals: [Deal] { store.deals(for: venue) }
     private var agg: (rating: Double, count: Int) { store.aggregate(for: venue) }
@@ -472,16 +473,34 @@ struct VenueDetailView: View {
                     Button("Отмена", role: .cancel) {}
                 }
             }
-            // Дополнительные адреса (филиалы)
-            ForEach(venue.branches) { b in
-                Button { openURL(Directions.dgis(lat: b.latitude, lng: b.longitude)) } label: {
+            // Дополнительные адреса (филиалы) — свёрнуты за кнопкой «Посмотреть все адреса».
+            if !venue.branches.isEmpty {
+                Button {
+                    withAnimation { showAllBranches.toggle() }
+                } label: {
                     HStack {
-                        Label(b.address, systemImage: "mappin.and.ellipse").font(.subheadline)
+                        Label(showAllBranches ? "Скрыть адреса"
+                                              : "Посмотреть все адреса (\(venue.branches.count + 1))",
+                              systemImage: "mappin.circle")
+                            .font(.subheadline.weight(.medium))
                         Spacer()
-                        Image(systemName: "map").foregroundStyle(Color.sanAccent)
+                        Image(systemName: showAllBranches ? "chevron.up" : "chevron.down")
+                            .foregroundStyle(Color.sanAccent)
                     }
                 }
                 .buttonStyle(.plain)
+                if showAllBranches {
+                    ForEach(venue.branches) { b in
+                        Button { openURL(Directions.dgis(lat: b.latitude, lng: b.longitude)) } label: {
+                            HStack {
+                                Label(b.address, systemImage: "mappin.and.ellipse").font(.subheadline)
+                                Spacer()
+                                Image(systemName: "map").foregroundStyle(Color.sanAccent)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
             }
             if !venue.phone.trimmingCharacters(in: .whitespaces).isEmpty,
                let url = URL(string: "tel:\(venue.phone.filter { !$0.isWhitespace })") {

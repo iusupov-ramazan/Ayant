@@ -113,6 +113,7 @@ fun VenueDetailScreen(
     }
     var showAllDeals by remember { mutableStateOf(false) }
     var hoursExpanded by remember { mutableStateOf(false) }
+    var showAllBranches by remember { mutableStateOf(false) }
     var showWriteReview by remember { mutableStateOf(false) }
     var writeReviewItemID by remember { mutableStateOf<String?>(null) }
     var photoViewerStart by remember { mutableStateOf<Int?>(null) }
@@ -241,9 +242,23 @@ fun VenueDetailScreen(
                         }
                     }
                 }
-                // Branches
-                venue.branches.forEach { b ->
-                    InfoRow(Icons.Filled.LocationOn, b.address) { context.openUrl(Dir.dgis(b.latitude, b.longitude)) }
+                // Branches — свёрнуты за кнопкой «Посмотреть все адреса».
+                if (venue.branches.isNotEmpty()) {
+                    Row(Modifier.fillMaxWidth().clickable { showAllBranches = !showAllBranches }, verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.LocationOn, null, tint = c.accent, modifier = Modifier.size(18.dp))
+                        Text(
+                            if (showAllBranches) " Скрыть адреса"
+                            else " Посмотреть все адреса (${venue.branches.size + 1})",
+                            fontSize = 14.sp, fontWeight = FontWeight.Medium, color = c.accent
+                        )
+                        Spacer(Modifier.weight(1f))
+                        Icon(if (showAllBranches) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, null, tint = c.accent, modifier = Modifier.size(18.dp))
+                    }
+                    if (showAllBranches) {
+                        venue.branches.forEach { b ->
+                            InfoRow(Icons.Filled.LocationOn, b.address) { context.openUrl(Dir.dgis(b.latitude, b.longitude)) }
+                        }
+                    }
                 }
                 // Social links
                 val socials = buildList {
