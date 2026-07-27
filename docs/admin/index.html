@@ -190,6 +190,9 @@
       <button class="btn btn-secondary" onclick="seedDemo()">⬆️ Демо-данные</button>
       <button class="btn btn-primary" onclick="openVenueModal()">+ Добавить</button>
     </div>
+    <input id="venueSearch" type="search" autocomplete="off"
+           placeholder="🔎 Поиск по названию, адресу или району…" oninput="renderVenues()"
+           style="width:100%;padding:10px 14px;margin-bottom:12px;border:1px solid var(--border,#e0e0e0);border-radius:10px;font-size:14px;box-sizing:border-box;" />
     <div class="table-wrap">
       <table>
         <thead>
@@ -333,6 +336,19 @@
       <div class="field">
         <label>Долгота (longitude)</label>
         <input id="vLongitude" type="number" step="any" placeholder="74.5698" />
+      </div>
+      <div class="field span2">
+        <label>Дополнительные адреса (филиалы)</label>
+        <div id="vBranchesList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px"></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+          <input id="vBranchAddress" placeholder="Адрес филиала" style="flex:1;min-width:180px" />
+          <input id="vBranchLat" type="number" step="any" placeholder="широта" style="width:100px" />
+          <input id="vBranchLng" type="number" step="any" placeholder="долгота" style="width:100px" />
+          <input id="vBranchPhone" placeholder="телефон (необяз.)" style="width:150px" />
+          <button type="button" class="btn btn-secondary btn-sm" onclick="geocodeBranch()">📍 Координаты</button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="addVenueBranch()">+ Адрес</button>
+        </div>
+        <small style="color:var(--muted)">В приложении они скрыты за кнопкой «Посмотреть все адреса».</small>
       </div>
       <div class="field span2">
         <label>Часы работы по дням недели</label>
@@ -596,6 +612,7 @@ const BUILTIN_CATEGORIES = [
   { slug:'bakery',     name:'Пекарня',  icon:'birthday.cake.fill',                      emoji:'🧁', order:5 },
 ];
 let currentItems = [];   // объекты для отзывов в открытом модале заведения
+let currentBranches = []; // доп. адреса (филиалы) в открытом модале заведения
 
 function renderVenueItems() {
   const box = document.getElementById('vItemsList');
@@ -632,6 +649,61 @@ window.addVenueItem = () => {
 window.removeVenueItem = (id) => {
   currentItems = currentItems.filter(it => it.id !== id);
   renderVenueItems();
+};
+
+// ── Доп. адреса (филиалы) ────────────────────────────────────────────────────
+function renderVenueBranches() {
+  const box = document.getElementById('vBranchesList');
+  if (!currentBranches.length) {
+    box.innerHTML = '<small style="color:var(--muted)">Филиалов нет</small>';
+    return;
+  }
+  box.innerHTML = currentBranches.map(b => `
+    <span class="badge" style="background:#eef;color:#334;display:inline-flex;gap:6px;align-items:center">
+      📍 ${b.address} <small style="color:var(--muted)">${(+b.latitude).toFixed(4)}, ${(+b.longitude).toFixed(4)}</small>
+      <span style="cursor:pointer;color:var(--danger);font-weight:700" onclick="removeVenueBranch('${b.id}')">×</span>
+    </span>`).join('');
+}
+
+window.addVenueBranch = () => {
+  const address = document.getElementById('vBranchAddress').value.trim();
+  if (!address) { toast('Впиши адрес филиала', 'error'); return; }
+  const num = (v, d) => { const n = Number(v); return v === '' || isNaN(n) ? d : n; };
+  currentBranches.push({
+    id: 'br_' + Math.random().toString(36).slice(2, 10),
+    address,
+    latitude:  num(document.getElementById('vBranchLat').value, 42.8746),
+    longitude: num(document.getElementById('vBranchLng').value, 74.5698),
+    phone: document.getElementById('vBranchPhone').value.trim(),
+  });
+  document.getElementById('vBranchAddress').value = '';
+  document.getElementById('vBranchLat').value = '';
+  document.getElementById('vBranchLng').value = '';
+  document.getElementById('vBranchPhone').value = '';
+  renderVenueBranches();
+};
+
+window.removeVenueBranch = (id) => {
+  currentBranches = currentBranches.filter(b => b.id !== id);
+  renderVenueBranches();
+};
+
+// Геокодинг адреса филиала → заполняет поля широты/долготы.
+window.geocodeBranch = async () => {
+  const addr = document.getElementById('vBranchAddress').value.trim();
+  if (!addr) { toast('Сначала впиши адрес филиала', 'error'); return; }
+  try {
+    const q = encodeURIComponent(addr + ', Бишкек, Кыргызстан');
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${q}`,
+      { headers: { 'Accept-Language': 'ru' } });
+    const data = await res.json();
+    if (!data.length) { toast('Адрес не найден — впиши координаты вручную', 'error'); return; }
+    document.getElementById('vBranchLat').value = parseFloat(data[0].lat).toFixed(6);
+    document.getElementById('vBranchLng').value = parseFloat(data[0].lon).toFixed(6);
+    toast('Координаты филиала найдены', 'success');
+  } catch (e) {
+    toast('Не удалось найти адрес', 'error');
+  }
 };
 
 // ── Загрузка фото в Cloudinary (unsigned) ───────────────────────────────────
@@ -1035,7 +1107,15 @@ function renderVenues() {
     tbody.innerHTML = '<tr><td colspan="6" class="empty">Заведений нет</td></tr>';
     return;
   }
-  tbody.innerHTML = venues.map(v => {
+  const q = (document.getElementById('venueSearch')?.value || '').trim().toLowerCase();
+  const list = q
+    ? venues.filter(v => [v.name, v.address, v.district].some(f => (f || '').toLowerCase().includes(q)))
+    : venues;
+  if (!list.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">Ничего не найдено</td></tr>';
+    return;
+  }
+  tbody.innerHTML = list.map(v => {
     const status = v.status || 'approved';
     const statusLabel = { pending:'На модерации', approved:'Одобрено', rejected:'Отклонено' }[status] || status;
     const modBtns =
@@ -1130,6 +1210,10 @@ window.openVenueModal = (id) => {
   document.getElementById('vActive').value       = String((v?.isPaused ? false : (v?.active ?? true)));
   currentItems = Array.isArray(v?.items) ? v.items.map(it => ({ ...it })) : [];
   renderVenueItems();
+  currentBranches = Array.isArray(v?.branches)
+    ? v.branches.map(b => ({ id: b.id || 'br_' + Math.random().toString(36).slice(2, 10), ...b }))
+    : [];
+  renderVenueBranches();
   document.getElementById('venueModal').classList.remove('hidden');
   setTimeout(initVenueMap, 150);   // карта рисуется после показа модалки
 };
@@ -1236,6 +1320,7 @@ window.saveVenue = async () => {
     isPaused:     document.getElementById('vActive').value !== 'true',
     status:       document.getElementById('vModeration').value,
     items:        currentItems,
+    branches:     currentBranches,
     imageURL:     document.getElementById('vImageURL').value.trim(),
     todaySpecial: document.getElementById('vTodaySpecial').value.trim(),
     latitude:     num(document.getElementById('vLatitude').value),
