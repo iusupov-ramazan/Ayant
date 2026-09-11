@@ -1,5 +1,6 @@
 package kg.ayant.app.ui.detail
 
+import androidx.compose.runtime.collectAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -70,19 +71,29 @@ fun DealDetailScreen(
     dealID: String,
     app: AppViewModel,
     session: SessionViewModel,
+    couponVm: kg.ayant.app.ui.vm.CouponViewModel,
     onBack: () -> Unit,
     onVenue: (String) -> Unit,
     onCoupon: (String) -> Unit = {},
 ) {
     val c = AyantTheme.colors
     val context = LocalContext.current
-    val couponVm: kg.ayant.app.ui.vm.CouponViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     val deal = app.deals.firstOrNull { it.id == dealID } ?: run {
         Box(Modifier.fillMaxSize().background(c.canvas), contentAlignment = Alignment.Center) { Text(stringResource(R.string.deal_not_found)) }
         return
     }
     val venue = app.venue(forDeal = deal)
     var showMapOptions by remember { mutableStateOf(false) }
+    var showGuestPrompt by remember { mutableStateOf(false) }
+
+    if (showGuestPrompt) {
+        kg.ayant.app.ui.auth.GuestAlert(session, kg.ayant.app.ui.auth.GuestGate.SAVE_DEAL) {
+            showGuestPrompt = false
+        }
+    }
+
+    // Ranking tap event (deal opened) — mirrors iOS DealDetailView.onAppear.
+    androidx.compose.runtime.LaunchedEffect(deal.id) { app.logRankingTap(deal) }
 
     Scaffold(
         containerColor = c.canvas,
@@ -91,7 +102,11 @@ fun DealDetailScreen(
                 title = { Text(venue?.name ?: stringResource(R.string.deal_title_fallback), fontWeight = FontWeight.Bold, maxLines = 1) },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.action_back)) } },
                 actions = {
-                    IconButton(onClick = { app.toggleFavorite(deal) }) {
+                    IconButton(onClick = {
+                        // Гостю сохранение не работает — раньше кнопка просто
+                        // ничего не делала, и это читалось как баг.
+                        if (session.isGuest) showGuestPrompt = true else app.toggleFavorite(deal)
+                    }) {
                         Icon(if (app.isFavorite(deal)) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder, stringResource(R.string.act_save))
                     }
                     IconButton(onClick = { context.shareText(context.getString(R.string.deal_share_text, deal.title, venue?.name ?: "", Links.deal(deal.id)), deal.title) }) {
@@ -149,7 +164,7 @@ fun DealDetailScreen(
                     if (session.isGuest) {
                         Text(stringResource(R.string.deal_coupon_guest), fontSize = 12.sp, color = c.inkSoft)
                     } else {
-                        val existing = couponVm.coupons.firstOrNull { it.dealID == deal.id }
+                        val existing = couponVm.coupons.collectAsState().value.firstOrNull { it.dealID == deal.id }
                         Text(
                             if (existing == null) stringResource(R.string.deal_get_coupon) else stringResource(R.string.deal_show_coupon),
                             fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White,
@@ -188,12 +203,12 @@ fun DealDetailScreen(
                         ) {
                             Icon(Icons.Filled.LocationOn, null, tint = c.inkSoft, modifier = Modifier.size(18.dp))
                             Text(" ${venue.address}", fontSize = 14.sp, color = c.ink, modifier = Modifier.weight(1f))
-                            Icon(Icons.Filled.Map, null, tint = c.accent, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Filled.Map, null, tint = c.accentText, modifier = Modifier.size(18.dp))
                         }
                     }
                     if (venue.phone.isNotBlank()) {
                         Row(Modifier.fillMaxWidth().clickable { context.dial(venue.phone) }, verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.Call, null, tint = c.accent, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Filled.Call, null, tint = c.accentText, modifier = Modifier.size(18.dp))
                             Text(" ${venue.phone}", fontSize = 14.sp, color = c.ink)
                         }
                     }

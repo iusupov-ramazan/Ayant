@@ -41,8 +41,8 @@ import androidx.compose.ui.unit.sp
 import kg.ayant.app.R
 import kg.ayant.app.core.distanceText
 import kg.ayant.app.core.sanShort
-import kg.ayant.app.data.model.Deal
-import kg.ayant.app.data.model.Venue
+import kg.ayant.app.domain.model.Deal
+import kg.ayant.app.domain.model.Venue
 import kg.ayant.app.ui.theme.AyantTheme
 import kg.ayant.app.ui.theme.gradientColors
 
@@ -133,8 +133,8 @@ fun VenueCard(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.clip(RoundedCornerShape(50)).background(c.accent.copy(alpha = 0.12f)).padding(horizontal = 8.dp, vertical = 3.dp),
                     ) {
-                        Icon(Icons.Filled.LocalOffer, null, tint = c.accent, modifier = Modifier.size(11.dp))
-                        Text(" " + stringResource(R.string.card_deal_count, dealCount), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = c.accent)
+                        Icon(Icons.Filled.LocalOffer, null, tint = c.accentText, modifier = Modifier.size(11.dp))
+                        Text(" " + stringResource(R.string.card_deal_count, dealCount), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = c.accentText)
                     }
                 }
             }
@@ -143,85 +143,6 @@ fun VenueCard(
 }
 
 // MARK: - Deal card (Instagram-style feed). Mirrors DealCard.
-
-@Composable
-fun DealCard(
-    deal: Deal,
-    venue: Venue?,
-    rating: Double,
-    isFavorite: Boolean,
-    onTap: () -> Unit,
-    onVenueTap: () -> Unit,
-    onFavoriteClick: () -> Unit,
-    onShare: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val c = AyantTheme.colors
-    val shape = RoundedCornerShape(22.dp)
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .background(c.surface)
-            .border(0.5.dp, c.hairline, shape),
-    ) {
-        // Header → venue
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth().clickable(onClick = onVenueTap).padding(horizontal = 14.dp, vertical = 12.dp),
-        ) {
-            if (venue != null) VenueAvatar(venue.gradientColors, venue.imageURL, 46)
-            Column(Modifier.padding(start = 12.dp).weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(venue?.name ?: "", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = c.ink)
-                    if (venue?.isVerified == true) {
-                        Icon(Icons.Filled.Verified, null, tint = Color(0xFF2F80ED), modifier = Modifier.padding(start = 4.dp).size(12.dp))
-                    }
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = c.inkSoft, modifier = Modifier.size(14.dp))
-                }
-                Text("${venue?.category?.rawValue ?: ""} • ${venue?.district ?: ""}", fontSize = 12.sp, color = c.inkSoft)
-            }
-            DealTypeBadge(deal)
-        }
-        // Visual + caption → deal
-        Column(Modifier.clickable(onClick = onTap)) {
-            Box {
-                ImageCarousel(deal.allImages, venue?.gradientColors ?: listOf(c.accent, c.accentDeep), deal.emoji, Modifier.fillMaxWidth(), emojiSize = 90)
-                deal.discountPercent?.let { pct ->
-                    Text(
-                        "−$pct%",
-                        fontSize = 22.sp, fontWeight = FontWeight.Black, color = Color.White,
-                        modifier = Modifier.padding(12.dp).clip(RoundedCornerShape(50)).background(Color.Black.copy(alpha = 0.35f)).padding(horizontal = 14.dp, vertical = 8.dp),
-                    )
-                }
-            }
-            Column(Modifier.padding(horizontal = 14.dp).padding(top = 16.dp, bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                deal.urgencyText?.let {
-                    Text(
-                        "🔥 $it",
-                        fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFD32F2F),
-                        modifier = Modifier.clip(RoundedCornerShape(50)).background(Color(0xFFD32F2F).copy(alpha = 0.12f)).padding(horizontal = 8.dp, vertical = 3.dp),
-                    )
-                }
-                Text(deal.title, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = c.ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text(deal.details, fontSize = 14.sp, color = c.inkSoft, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                PriceLabel(deal)
-            }
-        }
-        // Actions
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(14.dp)) {
-            Icon(Icons.Filled.Schedule, null, tint = c.inkSoft, modifier = Modifier.size(14.dp))
-            Text(" " + stringResource(R.string.card_until, deal.validUntil.sanShort()), fontSize = 12.sp, color = c.inkSoft)
-            Spacer(Modifier.weight(1f))
-            Icon(
-                if (isFavorite) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
-                null, tint = if (isFavorite) c.accent else c.ink,
-                modifier = Modifier.size(22.dp).clickable(onClick = onFavoriteClick),
-            )
-            Icon(Icons.Filled.Share, null, tint = c.ink, modifier = Modifier.padding(start = 18.dp).size(20.dp).clickable(onClick = onShare))
-        }
-    }
-}
 
 @Composable
 private fun AdBanner(trailing: String) {

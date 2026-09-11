@@ -33,3 +33,15 @@ build/
 DerivedData/
 
 functions/certs/
+
+.DS_Store
+*.xcuserstate
+xcuserdata/
+
+# Ranking ML pipeline — generated training data (contains userIDs) and outputs
+ml/rows.jsonl
+ml/ranking_weights.json
+__pycache__/
+
+# SwiftPM build products of the local packages
+.build/

@@ -1,0 +1,63 @@
+{
+  "//": "Составные индексы и исключения из индексирования. Держим МИНИМУМ: каждый",
+  "// ": "индексируемый путь оплачивается на КАЖДОЙ записи документа. Индекс добавляем",
+  "//  ": "только под реально существующий запрос — см. docs/design/system-design.md §5.2.",
+
+  "indexes": [
+    {
+      "//": "reviews: карточка заведения читает отзывы постранично вместо выгрузки всей коллекции.",
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "venueID", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "//": "deals: лента запрашивает город + неистёкшие акции. Равенство по city + range по validUntil.",
+      "collectionGroup": "deals",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "city", "order": "ASCENDING" },
+        { "fieldPath": "validUntil", "order": "ASCENDING" }
+      ]
+    }
+  ],
+
+  "fieldOverrides": [
+    {
+      "//": "rankingEvents — append-only телеметрия: клиент отсюда НЕ читает, обучение весов",
+      "// ": "идёт офлайн. Значит автоиндексы — чистая плата за запись без единого читателя.",
+      "//  ": "Особенно дорог `items`: массив фич слейта даёт по записи индекса НА КАЖДЫЙ элемент.",
+      "//   ": "ИСКЛЮЧЕНИЕ: `clientTs` остаётся проиндексированным — по нему идёт выгрузка",
+      "//    ": "обучающей выборки (ml/export_ranking_events.js: where clientTs >= cutoff).",
+      "//     ": "Снять исключение можно только вместе с переводом выгрузки на BigQuery (P3).",
+      "collectionGroup": "rankingEvents",
+      "fieldPath": "items",
+      "indexes": []
+    },
+    { "collectionGroup": "rankingEvents", "fieldPath": "type",      "indexes": [] },
+    { "collectionGroup": "rankingEvents", "fieldPath": "userID",    "indexes": [] },
+    { "collectionGroup": "rankingEvents", "fieldPath": "sessionID", "indexes": [] },
+    { "collectionGroup": "rankingEvents", "fieldPath": "renderID",  "indexes": [] },
+    { "collectionGroup": "rankingEvents", "fieldPath": "platform",  "indexes": [] },
+    { "collectionGroup": "rankingEvents", "fieldPath": "citySlug",  "indexes": [] },
+    { "collectionGroup": "rankingEvents", "fieldPath": "category",  "indexes": [] },
+    { "collectionGroup": "rankingEvents", "fieldPath": "hour",      "indexes": [] },
+    { "collectionGroup": "rankingEvents", "fieldPath": "weekday",   "indexes": [] },
+    { "collectionGroup": "rankingEvents", "fieldPath": "createdAt", "indexes": [] },
+    { "collectionGroup": "rankingEvents", "fieldPath": "dealID",    "indexes": [] },
+    { "collectionGroup": "rankingEvents", "fieldPath": "venueID",   "indexes": [] },
+    { "collectionGroup": "rankingEvents", "fieldPath": "position",  "indexes": [] },
+
+    {
+      "//": "analyticsEvents — документ живёт секунды: клиент пишет, countAnalyticsEvent",
+      "// ": "инкрементит счётчик и удаляет. Никто по ним не запрашивает — индексы не нужны.",
+      "collectionGroup": "analyticsEvents",
+      "fieldPath": "venueID",
+      "indexes": []
+    },
+    { "collectionGroup": "analyticsEvents", "fieldPath": "metric",    "indexes": [] },
+    { "collectionGroup": "analyticsEvents", "fieldPath": "createdAt", "indexes": [] }
+  ]
+}

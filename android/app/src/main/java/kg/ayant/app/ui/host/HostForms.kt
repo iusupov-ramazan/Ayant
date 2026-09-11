@@ -39,6 +39,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,25 +56,34 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kg.ayant.app.R
 import androidx.compose.foundation.text.KeyboardOptions
-import kg.ayant.app.data.model.HostDealDTO
-import kg.ayant.app.data.model.HostVenueDTO
-import kg.ayant.app.data.model.VenueCategory
-import kg.ayant.app.data.model.DealType
+import kg.ayant.app.domain.model.HostDealDTO
+import kg.ayant.app.domain.HostForms
+import kg.ayant.app.domain.model.City
+import kg.ayant.app.domain.model.HostVenueDTO
+import kg.ayant.app.domain.model.VenueCategory
+import kg.ayant.app.domain.model.DealType
 import kg.ayant.app.ui.components.CoverImage
 import kg.ayant.app.ui.components.VenuePhoto
 import kg.ayant.app.ui.theme.AyantPrimaryButton
 import kg.ayant.app.ui.theme.AyantTheme
 import kg.ayant.app.ui.theme.ayantCard
+import kg.ayant.app.domain.HostIntent
 import kg.ayant.app.ui.vm.HostViewModel
 import java.util.Date
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import kg.ayant.app.ui.theme.AyantMetrics
+import kg.ayant.app.ui.theme.ayantGroupCard
 
 // MARK: - Venue detail (host)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HostVenueDetailScreen(venueID: String, host: HostViewModel, onBack: () -> Unit, onPromote: () -> Unit = {}) {
+    val hostState by host.state.collectAsState()
     val c = AyantTheme.colors
-    val v = host.venue(venueID) ?: run {
+    val v = hostState.venue(venueID) ?: run {
         Box(Modifier.fillMaxSize().background(c.canvas), contentAlignment = Alignment.Center) { Text(stringResource(R.string.venue_not_found)) }
         return
     }
@@ -96,7 +106,9 @@ fun HostVenueDetailScreen(venueID: String, host: HostViewModel, onBack: () -> Un
             )
         },
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        // По бокам 14, как на iOS: внутренние блоки держат свои поля, и с 16+
+        // по краям оставалось слишком много воздуха.
+        Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 16.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
             // Header
             Column {
                 VenuePhoto(v.imageURL.ifEmpty { null }, listOf(c.accent, c.accentDeep), Modifier.fillMaxWidth().height(130.dp).clip(RoundedCornerShape(16.dp)))
@@ -106,7 +118,7 @@ fun HostVenueDetailScreen(venueID: String, host: HostViewModel, onBack: () -> Un
                         Text("${v.category.rawValue} · ${v.district}", fontSize = 12.sp, color = c.inkSoft)
                     }
                     Text(if (v.isPaused) stringResource(R.string.host_paused) else stringResource(R.string.host_active), fontSize = 12.sp, color = c.inkSoft)
-                    Switch(checked = !v.isPaused, onCheckedChange = { host.togglePause(v.id) })
+                    Switch(checked = !v.isPaused, onCheckedChange = { host.send(HostIntent.TogglePause(v.id)) })
                 }
             }
 
@@ -125,9 +137,9 @@ fun HostVenueDetailScreen(venueID: String, host: HostViewModel, onBack: () -> Un
 
             // Today special
             Column(Modifier.fillMaxWidth().ayantCard(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(stringResource(R.string.host_today_special), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = c.accent)
+                Text(stringResource(R.string.host_today_special), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = c.accentText)
                 OutlinedTextField(special, { if (it.length <= 100) special = it }, placeholder = { Text(stringResource(R.string.host_special_placeholder)) }, modifier = Modifier.fillMaxWidth())
-                PillBtn(stringResource(R.string.host_save_special), accent = true) { host.setTodaySpecial(v.id, special) }
+                PillBtn(stringResource(R.string.host_save_special), accent = true) { host.send(HostIntent.SetTodaySpecial(v.id, special)) }
             }
 
             // Loyalty overview
@@ -155,7 +167,7 @@ fun HostVenueDetailScreen(venueID: String, host: HostViewModel, onBack: () -> Un
                             Text(item.name, fontSize = 14.sp, color = c.ink)
                             Text(item.kindTitle, fontSize = 11.sp, color = c.inkSoft)
                         }
-                        IconButton(onClick = { host.deleteItem(v.id, item.id) }) { Icon(Icons.Filled.Delete, stringResource(R.string.action_delete), tint = Color(0xFFD32F2F)) }
+                        IconButton(onClick = { host.send(HostIntent.DeleteItem(v.id, item.id)) }) { Icon(Icons.Filled.Delete, stringResource(R.string.action_delete), tint = Color(0xFFD32F2F)) }
                     }
                 }
             }
@@ -167,7 +179,7 @@ fun HostVenueDetailScreen(venueID: String, host: HostViewModel, onBack: () -> Un
                     Spacer(Modifier.weight(1f))
                     IconButton(onClick = { addingDeal = true; showDealForm = null }) { Icon(Icons.Filled.Add, stringResource(R.string.host_cd_add_deal), tint = c.accent) }
                 }
-                val deals = host.deals(forVenue = v.id)
+                val deals = hostState.deals(forVenue = v.id)
                 if (deals.isEmpty()) Text(stringResource(R.string.host_no_deals), fontSize = 14.sp, color = c.inkSoft)
                 else LazyVerticalGrid(
                     columns = GridCells.Fixed(3),
@@ -184,10 +196,10 @@ fun HostVenueDetailScreen(venueID: String, host: HostViewModel, onBack: () -> Un
                             }
                             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                                 DropdownMenuItem(text = { Text(stringResource(R.string.action_edit)) }, onClick = { menu = false; addingDeal = false; showDealForm = d })
-                                DropdownMenuItem(text = { Text(if (d.status == kg.ayant.app.data.model.DealStatus.PAUSED) stringResource(R.string.host_resume) else stringResource(R.string.host_pause)) }, onClick = {
-                                    menu = false; host.setDealStatus(d.id, if (d.status == kg.ayant.app.data.model.DealStatus.PAUSED) "active" else "paused")
+                                DropdownMenuItem(text = { Text(if (d.status == kg.ayant.app.domain.model.DealStatus.PAUSED) stringResource(R.string.host_resume) else stringResource(R.string.host_pause)) }, onClick = {
+                                    menu = false; host.setDealStatus(d.id, if (d.status == kg.ayant.app.domain.model.DealStatus.PAUSED) "active" else "paused")
                                 })
-                                DropdownMenuItem(text = { Text(stringResource(R.string.action_delete)) }, onClick = { menu = false; host.deleteDeal(d.id) })
+                                DropdownMenuItem(text = { Text(stringResource(R.string.action_delete)) }, onClick = { menu = false; host.send(HostIntent.DeleteDeal(d.id)) })
                             }
                         }
                     }
@@ -209,24 +221,24 @@ fun HostVenueDetailScreen(venueID: String, host: HostViewModel, onBack: () -> Un
     if (showVenueForm) HostVenueForm(host, v) { showVenueForm = false }
     if (showDealForm != null || addingDeal) HostDealForm(host, v.id, showDealForm) { showDealForm = null; addingDeal = false }
     if (showItem) HostItemDialog(host, v.id) { showItem = false }
-    if (showScanner) HostScannerDialog(host, v.id) { showScanner = false }
+    if (showScanner) HostScannerOverlay(host, v.id) { showScanner = false }
     if (confirmDelete) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
             title = { Text(stringResource(R.string.host_delete_venue_confirm)) },
             text = { Text(stringResource(R.string.host_delete_venue_body, v.name)) },
-            confirmButton = { TextButton(onClick = { confirmDelete = false; host.deleteVenue(v.id); onBack() }) { Text(stringResource(R.string.action_delete), color = Color(0xFFD32F2F)) } },
+            confirmButton = { TextButton(onClick = { confirmDelete = false; host.send(HostIntent.DeleteVenue(v.id)); onBack() }) { Text(stringResource(R.string.action_delete), color = Color(0xFFD32F2F)) } },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text(stringResource(R.string.action_cancel)) } },
         )
     }
 }
 
 @Composable
-private fun kg.ayant.app.data.model.DealStatus.title() = when (this) {
-    kg.ayant.app.data.model.DealStatus.ACTIVE -> stringResource(R.string.host_active)
-    kg.ayant.app.data.model.DealStatus.PAUSED -> stringResource(R.string.host_paused)
-    kg.ayant.app.data.model.DealStatus.EXPIRED -> stringResource(R.string.host_expired)
-    kg.ayant.app.data.model.DealStatus.DRAFT -> stringResource(R.string.host_draft)
+private fun kg.ayant.app.domain.model.DealStatus.title() = when (this) {
+    kg.ayant.app.domain.model.DealStatus.ACTIVE -> stringResource(R.string.host_active)
+    kg.ayant.app.domain.model.DealStatus.PAUSED -> stringResource(R.string.host_paused)
+    kg.ayant.app.domain.model.DealStatus.EXPIRED -> stringResource(R.string.host_expired)
+    kg.ayant.app.domain.model.DealStatus.DRAFT -> stringResource(R.string.host_draft)
 }
 
 // MARK: - Venue form (create / edit)
@@ -257,7 +269,7 @@ fun HostVenueForm(host: HostViewModel, existing: HostVenueDTO?, onDismiss: () ->
     var showBranchForm by remember { mutableStateOf(false) }
     var hoursExpanded by remember { mutableStateOf(false) }
     var week by remember {
-        mutableStateOf(existing?.weekHours?.takeIf { it.size == 7 } ?: List(7) { kg.ayant.app.data.model.DayHours() })
+        mutableStateOf(existing?.weekHours?.takeIf { it.size == 7 } ?: List(7) { kg.ayant.app.domain.model.DayHours() })
     }
     var branches by remember { mutableStateOf(existing?.branches ?: emptyList()) }
 
@@ -277,22 +289,26 @@ fun HostVenueForm(host: HostViewModel, existing: HostVenueDTO?, onDismiss: () ->
         onDismiss = onDismiss,
         canSave = name.isNotBlank(),
         onSave = {
-            val dto = (existing ?: HostVenueDTO(
-                id = host.newVenueID(), name = "", categoryRaw = category.rawValue, district = "", address = "",
-                phone = "", emoji = emoji, latitude = 42.8746, longitude = 74.5698, openHour = 9, closeHour = 22,
-            )).copy(
-                name = name.trim(), categoryRaw = category.rawValue, district = district.trim(), address = address.trim(),
-                phone = phone.trim(), emoji = emoji, imageURL = imageURL.trim(),
-                latitude = lat.replace(',', '.').toDoubleOrNull() ?: 42.8746,
-                longitude = lng.replace(',', '.').toDoubleOrNull() ?: 74.5698,
-                openHour = openHour.toIntOrNull()?.coerceIn(0, 24) ?: 9,
-                closeHour = closeHour.toIntOrNull()?.coerceIn(0, 24) ?: 22,
-                whatsapp = whatsapp.trim(), instagram = instagram.trim(), telegram = telegram.trim(),
-                pdfMenuURL = pdfMenuURL.trim(),
-                couponsEnabled = couponsEnabled, loyaltyEnabled = loyaltyEnabled,
-                loyaltyGoal = loyaltyGoal.toIntOrNull() ?: 6, loyaltyReward = loyaltyReward.trim(),
-                weekHours = if (hoursExpanded) week else emptyList(),
-                branches = branches,
+            // Сборку DTO делает чистый HostForms из домена — там же правила
+            // «что при правке сохраняется» (id/status/todaySpecial) и тримы.
+            val dto = HostForms.venue(
+                existing = existing,
+                fields = HostForms.VenueFields(
+                    name = name, category = category, district = district, address = address,
+                    phone = phone, emoji = emoji,
+                    latitude = lat.replace(',', '.').toDoubleOrNull() ?: City.BISHKEK.latitude,
+                    longitude = lng.replace(',', '.').toDoubleOrNull() ?: City.BISHKEK.longitude,
+                    openHour = openHour.toIntOrNull() ?: 9,
+                    closeHour = closeHour.toIntOrNull() ?: 22,
+                    imageURL = imageURL,
+                    weekHours = if (hoursExpanded) week else emptyList(),
+                    pdfMenuURL = pdfMenuURL, whatsapp = whatsapp, instagram = instagram,
+                    telegram = telegram, branches = branches,
+                    loyaltyEnabled = loyaltyEnabled,
+                    loyaltyGoal = loyaltyGoal.toIntOrNull() ?: 6,
+                    loyaltyReward = loyaltyReward, couponsEnabled = couponsEnabled,
+                ),
+                newID = { host.newVenueID() },
             )
             if (existing == null) host.addVenue(dto) else host.updateVenue(dto)
             onDismiss()
@@ -375,7 +391,7 @@ private fun SectionLabel(text: String) {
 }
 
 @Composable
-private fun BranchFormDialog(onDismiss: () -> Unit, onSave: (kg.ayant.app.data.model.Branch) -> Unit) {
+private fun BranchFormDialog(onDismiss: () -> Unit, onSave: (kg.ayant.app.domain.model.Branch) -> Unit) {
     var address by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
     var lat by remember { mutableStateOf("42.8746") }
@@ -402,7 +418,7 @@ private fun BranchFormDialog(onDismiss: () -> Unit, onSave: (kg.ayant.app.data.m
         },
         confirmButton = {
             TextButton(enabled = address.isNotBlank(), onClick = {
-                onSave(kg.ayant.app.data.model.Branch(
+                onSave(kg.ayant.app.domain.model.Branch(
                     "br_${java.util.UUID.randomUUID().toString().take(6)}", address.trim(),
                     lat.replace(',', '.').toDoubleOrNull() ?: 42.8746, lng.replace(',', '.').toDoubleOrNull() ?: 74.5698, phone.trim(),
                 ))
@@ -424,7 +440,10 @@ fun HostDealForm(host: HostViewModel, venueID: String, existing: HostDealDTO?, o
     var newPrice by remember { mutableStateOf(existing?.newPrice?.toString() ?: "") }
     var discount by remember { mutableStateOf(existing?.discountPercent?.toString() ?: "") }
     var imageURL by remember { mutableStateOf(existing?.imageURL ?: "") }
-    var draft by remember { mutableStateOf(existing?.status == kg.ayant.app.data.model.DealStatus.DRAFT) }
+    // Условия — по строке на пункт: список из трёх коротких фраз проще набрать
+    // в одном поле, чем в трёх отдельных.
+    var termsText by remember { mutableStateOf(existing?.terms.orEmpty().joinToString("\n")) }
+    var draft by remember { mutableStateOf(existing?.status == kg.ayant.app.domain.model.DealStatus.DRAFT) }
     var typeMenu by remember { mutableStateOf(false) }
     // End date expressed as days-from-now (avoids a heavy date-picker); iOS uses a DatePicker.
     val existingDays = existing?.endDate?.let { ((it.time - Date().time) / 86_400_000L).toInt().coerceAtLeast(0) }
@@ -437,12 +456,17 @@ fun HostDealForm(host: HostViewModel, venueID: String, existing: HostDealDTO?, o
         canSave = title.isNotBlank(),
         onSave = {
             val end = if (hasEnd) Date(Date().time + (days.toLongOrNull() ?: 14L) * 86_400_000L) else null
-            host.saveDeal(HostDealDTO(
-                id = existing?.id ?: host.newDealID(), venueID = venueID, typeRaw = type.title,
-                title = title.trim(), details = details.trim(), emoji = emoji,
-                newPrice = newPrice.toIntOrNull(), discountPercent = discount.toIntOrNull(),
-                startDate = existing?.startDate ?: Date(), endDate = end,
-                statusRaw = if (draft) "draft" else "active", imageURL = imageURL.trim(),
+            host.saveDeal(HostForms.deal(
+                existing = existing,
+                fields = HostForms.DealFields(
+                    venueID = venueID, type = type, title = title, details = details,
+                    emoji = emoji, newPrice = newPrice.toIntOrNull(),
+                    discountPercent = discount.toIntOrNull(), endDate = end,
+                    isDraft = draft, imageURLs = listOf(imageURL),
+                    terms = termsText.split("\n"),
+                ),
+                now = Date(),
+                newID = { host.newDealID() },
             ))
             onDismiss()
         },
@@ -456,6 +480,7 @@ fun HostDealForm(host: HostViewModel, venueID: String, existing: HostDealDTO?, o
         }
         Field(emoji, { emoji = it }, stringResource(R.string.venue_form_emoji))
         Field(details, { details = it }, stringResource(R.string.deal_form_details))
+        Field(termsText, { termsText = it }, stringResource(R.string.deal_form_terms))
         Field(newPrice, { newPrice = it }, stringResource(R.string.deal_form_new_price), KeyboardType.Number)
         Field(discount, { discount = it }, stringResource(R.string.deal_form_discount), KeyboardType.Number)
         Field(imageURL, { imageURL = it }, stringResource(R.string.venue_form_photo_url))
@@ -504,32 +529,83 @@ fun HostItemDialog(host: HostViewModel, venueID: String, onDismiss: () -> Unit) 
 
 @Composable
 fun HostScannerDialog(host: HostViewModel, fixedVenueID: String?, onDismiss: () -> Unit) {
+    val hostState by host.state.collectAsState()
     val c = AyantTheme.colors
     val context = LocalContext.current
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val couponService = remember { kg.ayant.app.core.AppConfig.makeCouponService() }
     val authService = remember { kg.ayant.app.core.AppConfig.makeAuthService() }
     var code by remember { mutableStateOf("") }
-    var venueID by remember { mutableStateOf(fixedVenueID ?: host.venues.firstOrNull()?.id ?: "") }
+    var venueID by remember { mutableStateOf(fixedVenueID ?: hostState.venues.firstOrNull()?.id ?: "") }
     var venueMenu by remember { mutableStateOf(false) }
     var manual by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var result by remember { mutableStateOf<String?>(null) }
     var success by remember { mutableStateOf(true) }
+    var pendingPtsCode by remember { mutableStateOf<String?>(null) }   // ждём сумму/диапазон для баллов
+    var pendingMode by remember { mutableStateOf("flat") }
 
-    fun redeem(scanned: String) {
-        if (scanned.isBlank() || venueID.isBlank() || busy) return
+    fun pointsError(code: String?): String = when (code) {
+        "points_off" -> "Баллы САН у заведения выключены."
+        "cooldown" -> "Баллы этому гостю уже начислены недавно."
+        "missing_amount" -> "Введите сумму чека."
+        "bad_band" -> "Выберите диапазон суммы."
+        "no_points" -> "Начислять нечего (0 баллов)."
+        "insufficient" -> "У гостя недостаточно баллов."
+        "reward_not_found" -> "Награда не найдена или отключена."
+        "redeem_not_allowed" -> "Списание баллов недоступно для этого заведения."
+        "below_min" -> "Слишком мало баллов для этой награды."
+        else -> context.getString(R.string.host_scan_error, code ?: context.getString(R.string.host_scan_failed))
+    }
+
+    fun submitScan(scanned: String, billAmount: Int?, bandIndex: Int?) {
         busy = true; result = null
+        val idempotencyKey = java.util.UUID.randomUUID().toString()   // один ключ на распознанный QR
         scope.launch {
             val token = authService.idToken() ?: ""
-            val o = couponService.scanCoupon(scanned.trim(), venueID, token)
+            val o = couponService.scanCoupon(scanned.trim(), venueID, token, billAmount, bandIndex,
+                idempotencyKey)
             success = o.ok
             result = when {
-                !o.ok -> context.getString(R.string.host_scan_error, o.errorCode ?: context.getString(R.string.host_scan_failed))
+                !o.ok -> pointsError(o.errorCode)
+                o.points -> "Начислено ${o.awarded}. Баланс гостя: ${o.balance} баллов."
                 o.loyalty -> context.getString(R.string.host_scan_stamp, o.stamps, o.goal) + if (o.rewardIssued) context.getString(R.string.host_scan_reward_suffix, o.rewardTitle) else ""
                 else -> context.getString(R.string.host_scan_redeemed, o.title)
             }
             busy = false
+        }
+    }
+
+    fun submitRedeem(scanned: String) {
+        val parts = scanned.trim().split(":")
+        if (parts.size < 3) { success = false; result = "Неверный код награды."; return }
+        val u = parts[1]; val rid = parts[2]; val pts = parts.getOrNull(3)?.toIntOrNull() ?: 0
+        busy = true; result = null
+        scope.launch {
+            val token = authService.idToken() ?: ""
+            val o = couponService.redeemVenuePoints(venueID, u, rid, pts, token)
+            success = o.ok
+            result = when {
+                !o.ok -> pointsError(o.errorCode)
+                o.somOff != null -> "Списано ${o.redeemed} баллов (−${o.somOff} сом). Остаток: ${o.balance}."
+                else -> "Списано ${o.redeemed} баллов. Остаток: ${o.balance}. Выдайте награду гостю."
+            }
+            busy = false
+        }
+    }
+
+    fun redeem(scanned: String) {
+        if (scanned.isBlank() || venueID.isBlank() || busy) return
+        val s = scanned.trim()
+        when {
+            s.startsWith("AYANT-PTS:") -> {
+                val venue = hostState.venue(venueID)
+                if (venue?.pointsMode == "cashback" || venue?.pointsMode == "bands") {
+                    pendingMode = venue.pointsMode; pendingPtsCode = s
+                } else submitScan(s, null, null)
+            }
+            s.startsWith("AYANT-RDM:") -> submitRedeem(s)
+            else -> submitScan(s, null, null)
         }
     }
 
@@ -538,18 +614,18 @@ fun HostScannerDialog(host: HostViewModel, fixedVenueID: String?, onDismiss: () 
         title = { Text(stringResource(R.string.host_scan_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (fixedVenueID == null && host.venues.size > 1) {
+                if (fixedVenueID == null && hostState.venues.size > 1) {
                     Box {
-                        OutlinedField(stringResource(R.string.venue_section), host.venue(venueID)?.name ?: stringResource(R.string.action_choose)) { venueMenu = true }
+                        OutlinedField(stringResource(R.string.venue_section), hostState.venue(venueID)?.name ?: stringResource(R.string.action_choose)) { venueMenu = true }
                         DropdownMenu(expanded = venueMenu, onDismissRequest = { venueMenu = false }) {
-                            host.venues.forEach { v -> DropdownMenuItem(text = { Text(v.name) }, onClick = { venueID = v.id; venueMenu = false }) }
+                            hostState.venues.forEach { v -> DropdownMenuItem(text = { Text(v.name) }, onClick = { venueID = v.id; venueMenu = false }) }
                         }
                     }
                 }
                 if (!manual && result == null) {
                     QrScannerView(onResult = { code = it; redeem(it) }, onNoPermission = { manual = true })
                     Text(stringResource(R.string.host_scan_hint), fontSize = 13.sp, color = c.inkSoft)
-                    Text(stringResource(R.string.host_scan_manual), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = c.accent, modifier = Modifier.clickable { manual = true })
+                    Text(stringResource(R.string.host_scan_manual), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = c.accentText, modifier = Modifier.clickable { manual = true })
                 } else if (result == null) {
                     Field(code, { code = it }, stringResource(R.string.host_scan_code))
                 }
@@ -566,6 +642,42 @@ fun HostScannerDialog(host: HostViewModel, fixedVenueID: String?, onDismiss: () 
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) } },
     )
+
+    // Лист начисления баллов САН: сумма чека (cashback) или диапазон (bands).
+    if (pendingPtsCode != null) {
+        val venue = hostState.venue(venueID)
+        var billText by remember(pendingPtsCode) { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { pendingPtsCode = null },
+            title = { Text("Баллы САН") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Сумма чека гостя", fontWeight = FontWeight.SemiBold)
+                    if (pendingMode == "cashback") {
+                        Field(billText, { billText = it }, "Сумма, сом")
+                    } else {
+                        val bands = venue?.pointsBands ?: emptyList()
+                        bands.forEachIndexed { idx, band ->
+                            val label = if (idx == bands.size - 1) "${band.maxAmount}+ сом" else "до ${band.maxAmount} сом"
+                            TextButton(onClick = { val cc = pendingPtsCode!!; pendingPtsCode = null; submitScan(cc, null, idx) }) {
+                                Text("$label  →  +${band.points}")
+                            }
+                        }
+                        if (bands.isEmpty()) Text("Диапазоны не настроены.", fontSize = 13.sp, color = c.inkSoft)
+                    }
+                }
+            },
+            confirmButton = {
+                if (pendingMode == "cashback") {
+                    val amt = billText.toIntOrNull() ?: 0
+                    TextButton(enabled = amt > 0, onClick = { val cc = pendingPtsCode!!; pendingPtsCode = null; submitScan(cc, amt, null) }) {
+                        Text("Начислить")
+                    }
+                }
+            },
+            dismissButton = { TextButton(onClick = { pendingPtsCode = null }) { Text(stringResource(R.string.action_close)) } },
+        )
+    }
 }
 
 @Composable
@@ -578,6 +690,12 @@ private fun OutlinedField(label: String, value: String, onClick: () -> Unit) {
 
 // MARK: - Shared form helpers
 
+/**
+ * Форма хоста после редизайна: не Material-диалог, а экран во весь размер с
+ * шапкой «Отмена · Название», прокруткой и липким футером — как на iOS
+ * (`SanFormHeader` + `SanStickyFooter`). Все пять форм переехали разом, потому
+ * что переписаны эти три общих помощника, а не тела форм.
+ */
 @Composable
 private fun FormDialog(
     title: String,
@@ -586,31 +704,56 @@ private fun FormDialog(
     onSave: () -> Unit,
     content: @Composable () -> Unit,
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) { content() } },
-        confirmButton = { TextButton(enabled = canSave, onClick = onSave) { Text(stringResource(R.string.action_save)) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
-    )
+    val c = AyantTheme.colors
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .background(c.canvas)
+                .statusBarsPadding(),
+        ) {
+            AyantFormHeader(title, onCancel = onDismiss)
+            Column(
+                Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = AyantMetrics.screenPadding)
+                    .padding(bottom = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) { content() }
+            AyantStickyFooter {
+                AyantPrimaryButton(
+                    text = stringResource(R.string.action_save),
+                    enabled = canSave,
+                    onClick = onSave,
+                )
+            }
+        }
+    }
 }
 
+/** Ряд формы: капслоковая метка сверху, значение снизу. Mirrors `SanFieldRow`. */
 @Composable
 private fun Field(
     value: String, onChange: (String) -> Unit, label: String,
     keyboard: KeyboardType = KeyboardType.Text, modifier: Modifier = Modifier, enabled: Boolean = true,
 ) {
-    OutlinedTextField(
-        value = value, onValueChange = onChange, label = { Text(label) }, singleLine = true, enabled = enabled,
-        keyboardOptions = KeyboardOptions(keyboardType = keyboard),
-        modifier = modifier.fillMaxWidth(),
-    )
+    Box(modifier.fillMaxWidth().ayantGroupCard(radius = 18)) {
+        AyantFieldRow(label) {
+            AyantFieldInput(
+                placeholder = label,
+                value = value,
+                onValueChange = onChange,
+                keyboardType = keyboard,
+                enabled = enabled,
+            )
+        }
+    }
 }
 
 @Composable
 private fun ToggleRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, fontSize = 15.sp, color = AyantTheme.colors.ink, modifier = Modifier.weight(1f))
-        Switch(checked = checked, onCheckedChange = onChange)
+    Box(Modifier.fillMaxWidth().ayantGroupCard(radius = 18).padding(horizontal = 16.dp, vertical = 13.dp)) {
+        AyantGradientToggle(title = label, checked = checked, onCheckedChange = onChange)
     }
 }

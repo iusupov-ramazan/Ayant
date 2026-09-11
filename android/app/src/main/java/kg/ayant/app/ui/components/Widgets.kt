@@ -30,41 +30,6 @@ import kg.ayant.app.ui.theme.AyantTheme
 
 // MARK: - Category tile (rounded square). Mirrors CategoryStoryCircle.
 
-@Composable
-fun CategoryTile(
-    label: String,
-    icon: ImageVector,
-    isOn: Boolean,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit,
-) {
-    val c = AyantTheme.colors
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = modifier.clickable(onClick = onClick),
-    ) {
-        Box(
-            modifier = Modifier
-                .size(60.dp)
-                .clip(RoundedCornerShape(18.dp))
-                .then(
-                    if (isOn) Modifier.background(c.accentGradient)
-                    else Modifier.background(c.surfaceMuted)
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(icon, null, tint = if (isOn) Color.White else c.inkSoft, modifier = Modifier.size(24.dp))
-        }
-        Text(
-            label,
-            fontSize = 11.sp,
-            fontWeight = if (isOn) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (isOn) c.ink else c.inkSoft,
-            modifier = Modifier.padding(top = 7.dp),
-        )
-    }
-}
-
 // MARK: - Rating breakdown (5★…1★). Mirrors RatingBreakdownView.
 
 @Composable

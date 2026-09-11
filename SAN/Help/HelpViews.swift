@@ -1,5 +1,11 @@
 import SwiftUI
 
+/// Публичные ссылки приложения — одно место, чтобы адрес не расходился между
+/// экранами (тот же URL стоит в подписи под кнопками входа в `AuthView`).
+enum AyantLinks {
+    static let privacyPolicy = URL(string: "https://ayant.kg/privacy.html")!
+}
+
 // MARK: - О приложении
 
 struct AboutView: View {
@@ -29,6 +35,10 @@ struct AboutView: View {
 
                 Text("Здесь нет спама, рекламы и лишних кнопок. Только САН, заведения и твоя выгода. Всё самое нужное — в одном приложении. Пользуйся!")
                     .font(.subheadline).foregroundStyle(.secondary)
+
+                Link("Политика конфиденциальности", destination: AyantLinks.privacyPolicy)
+                    .font(.subheadline.weight(.medium))
+                    .padding(.top, 4)
             }
             .padding(16)
         }
@@ -115,7 +125,7 @@ struct SupportView: View {
                     }
                 } label: {
                     HStack(spacing: 12) {
-                        telegramIcon
+                        assetIcon("telegram")
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Telegram-бот").foregroundStyle(.primary)
                             Text("ИИ-помощник — отвечает 24/7")
@@ -132,25 +142,21 @@ struct SupportView: View {
                 }
                 Link(destination: email) { Label("Email", systemImage: "envelope.fill") }
             }
+            Section("Документы") {
+                Link(destination: AyantLinks.privacyPolicy) {
+                    Label("Политика конфиденциальности", systemImage: "hand.raised.fill")
+                }
+            }
         }
         .navigationTitle("Поддержка")
         .navigationBarTitleDisplayMode(.inline)
     }
 
-    /// Логотип из ассетов со скруглёнными углами.
+    /// Круглый логотип соцсети из ассетов.
+    /// `scaledToFit` — картинка вписывается целиком, без растяжения по осям.
     private func assetIcon(_ name: String) -> some View {
-        Image(name).resizable().scaledToFill()
+        Image(name).resizable().scaledToFit()
             .frame(width: 26, height: 26)
-            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-    }
-
-    /// Иконка Telegram (нет отдельного ассета) — фирменный синий скруглённый квадрат.
-    private var telegramIcon: some View {
-        Image(systemName: "paperplane.fill")
-            .font(.system(size: 13, weight: .bold))
-            .foregroundStyle(.white)
-            .frame(width: 26, height: 26)
-            .background(Color(hex: 0x29A9EB),
-                        in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .clipShape(Circle())
     }
 }

@@ -1,8 +1,8 @@
 package kg.ayant.app.ui.theme
 
 import androidx.compose.ui.graphics.Color
-import kg.ayant.app.data.model.DealType
-import kg.ayant.app.data.model.Venue
+import kg.ayant.app.domain.model.DealType
+import kg.ayant.app.domain.model.Venue
 
 /**
  * UI-layer color mappers. The data layer stores colors as plain ARGB [Long]s so it

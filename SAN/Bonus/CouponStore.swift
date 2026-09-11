@@ -1,122 +1,7 @@
 import SwiftUI
 import UIKit
-
-// MARK: - Модели
-
-/// Награда из каталога (что можно купить за бонусы).
-struct Reward: Identifiable, Hashable {
-    let id: String
-    let title: String
-    let cost: Int
-    let emoji: String
-}
-
-/// Купон, полученный пользователем за бонусы (показывается сотруднику).
-struct Coupon: Identifiable, Codable, Hashable {
-    var id: String
-    var title: String
-    var code: String
-    var createdAt: Date
-    var used: Bool = false
-    // --- Привязка к заведению (для бэкенд-трекинга и сканера) ---
-    var venueID: String = ""        // "" = общий бонус-купон (не сканируется у заведения)
-    var venueName: String = ""
-    var kind: String = "bonus"      // bonus | loyalty | deal | gift
-    var dealID: String = ""
-
-    /// Сканируется ли купон у заведения (даёт штамп): только привязанные к venue.
-    var isVenueBound: Bool { !venueID.isEmpty }
-}
-
-// MARK: - Хранилище купонов
-
-@MainActor
-final class CouponStore: ObservableObject {
-    /// Каталог наград. Позже можно вынести в Firestore.
-    static let catalog: [Reward] = [
-        Reward(id: "disc10", title: "−10% к любой акции", cost: 100, emoji: "🏷️"),
-        Reward(id: "coffee", title: "Бесплатный кофе у партнёра", cost: 300, emoji: "☕️"),
-        Reward(id: "dessert", title: "Десерт в подарок", cost: 400, emoji: "🍰"),
-        Reward(id: "vip", title: "VIP-доступ к новинкам", cost: 500, emoji: "⭐️"),
-    ]
-
-    @Published private(set) var coupons: [Coupon] = []
-    private let key = "san.coupons"
-    private let backend: CouponService
-    private(set) var userID = ""
-
-    init(backend: CouponService = AppConfig.makeCouponService()) {
-        self.backend = backend
-        load()
-    }
-
-    var activeCount: Int { coupons.filter { !$0.used }.count }
-
-    /// Синк с Firestore: подтягивает used-статус и новые купоны-награды лояльности.
-    /// Бэкенд — источник правды для купонов, привязанных к заведению.
-    func sync(userID: String) async {
-        self.userID = userID
-        guard !userID.isEmpty, let fetched = try? await backend.fetchCoupons(userID: userID) else { return }
-        var map: [String: Coupon] = [:]
-        for c in coupons { map[c.code] = c }        // локальные (в т.ч. общие бонус-купоны)
-        for c in fetched { map[c.code] = c }         // бэкенд перекрывает по коду
-        coupons = map.values.sorted { $0.createdAt > $1.createdAt }
-        save()
-    }
-
-    /// Списывает бонусы и выдаёт купон. Возвращает купон или nil (не хватило бонусов).
-    func redeem(_ reward: Reward, bonus: BonusEngine) -> Coupon? {
-        guard bonus.spend(reward.cost) else { return nil }
-        let c = Coupon(id: "cp_\(UUID().uuidString.prefix(8))",
-                       title: reward.title,
-                       code: "AYANT-\(UUID().uuidString.prefix(6).uppercased())",
-                       createdAt: .now)
-        coupons.insert(c, at: 0)
-        save()
-        AnalyticsLog.log(.couponClaim, ["reward_id": reward.id, "cost": reward.cost])
-        return c
-    }
-
-    /// Создаёт купон за акцию заведения (сканируется сотрудником → штамп лояльности).
-    /// Пишется в бэкенд, чтобы заведение могло его отсканировать. Возвращает купон.
-    @discardableResult
-    func createDealCoupon(dealID: String, title: String, venueID: String, venueName: String) -> Coupon {
-        // Уже есть непогашенный купон на эту акцию — переиспользуем.
-        if let existing = coupons.first(where: { $0.dealID == dealID && !$0.used }) { return existing }
-        let c = Coupon(id: "cp_\(UUID().uuidString.prefix(8))",
-                       title: title,
-                       code: "AYANT-\(UUID().uuidString.prefix(6).uppercased())",
-                       createdAt: .now, used: false,
-                       venueID: venueID, venueName: venueName, kind: "deal", dealID: dealID)
-        coupons.insert(c, at: 0)
-        save()
-        let uid = userID
-        Task { try? await backend.saveCoupon(c, userID: uid) }
-        return c
-    }
-
-    /// Кладёт полученный в подарок купон в кошелёк.
-    func addGifted(title: String, code: String) {
-        guard !coupons.contains(where: { $0.code == code }) else { return }
-        coupons.insert(Coupon(id: "cp_\(UUID().uuidString.prefix(8))",
-                              title: title, code: code, createdAt: .now), at: 0)
-        save()
-    }
-
-    func markUsed(_ coupon: Coupon) {
-        guard let i = coupons.firstIndex(where: { $0.id == coupon.id }) else { return }
-        coupons[i].used = true
-        save()
-    }
-
-    private func save() {
-        if let d = try? JSONEncoder().encode(coupons) { UserDefaults.standard.set(d, forKey: key) }
-    }
-    private func load() {
-        if let d = UserDefaults.standard.data(forKey: key),
-           let c = try? JSONDecoder().decode([Coupon].self, from: d) { coupons = c }
-    }
-}
+import AyantDomain
+import AyantFeatures
 
 // MARK: - Линия перфорации (пунктир) для билета-купона
 
@@ -327,6 +212,8 @@ struct CouponDetailView: View {
         }
         .background(Color(.systemGroupedBackground))
         .navigationTitle("Купон")
+        // QR не должен перекрываться FAB — на листе-детали таб-бар прячем.
+        .toolbar(.hidden, for: .tabBar)
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             prevBrightness = UIScreen.main.brightness
@@ -367,7 +254,7 @@ struct CouponDetailView: View {
 
     private func infoRow(_ icon: String, _ text: String) -> some View {
         HStack(alignment: .top, spacing: 10) {
-            Image(systemName: icon).foregroundStyle(Color.sanAccent)
+            Image(systemName: icon).foregroundStyle(Color.sanAccentText)
             Text(text).font(.footnote).foregroundStyle(.secondary)
             Spacer(minLength: 0)
         }
@@ -408,15 +295,22 @@ struct CouponDetailView: View {
 
             perforation
 
-            // Тело: QR + код
+            // Тело: QR + код. QR только у купона заведения — он записан в
+            // Firestore и его сканирует сотрудник. У бонус-купона документа
+            // на сервере нет, показывать сканируемый код нельзя: остаётся
+            // код текстом и кнопка «Использовать купон» ниже.
             VStack(spacing: 16) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .fill(.white)
-                        .frame(width: 224, height: 224)
-                        .shadow(color: .black.opacity(0.06), radius: 6, y: 2)
-                    QRCodeView(text: coupon.code, size: 188).opacity(isUsed ? 0.35 : 1)
-                    if isUsed { usedStamp }
+                if coupon.isVenueBound {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .fill(.white)
+                            .frame(width: 224, height: 224)
+                            .shadow(color: .black.opacity(0.06), radius: 6, y: 2)
+                        QRCodeView(text: coupon.code, size: 188).opacity(isUsed ? 0.35 : 1)
+                        if isUsed { usedStamp }
+                    }
+                } else if isUsed {
+                    usedStamp.padding(.vertical, 12)
                 }
                 VStack(spacing: 6) {
                     Text("КОД КУПОНА").font(.caption2.weight(.semibold))

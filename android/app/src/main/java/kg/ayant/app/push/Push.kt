@@ -1,41 +1,29 @@
 package kg.ayant.app.push
 
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.messaging.FirebaseMessaging
 import kg.ayant.app.core.AppConfig
 
 /**
- * Push topics + token registration. Mirrors PushService.swift.
- * All calls are no-ops when Firebase isn't configured.
+ * Тонкий фасад над [kg.ayant.app.data.PushService] — его зовут экраны и
+ * настройки, менять их незачем. Сам Firebase живёт в слое данных.
+ *
+ * Раньше здесь напрямую вызывались `FirebaseMessaging` и `FirebaseFirestore`,
+ * из-за чего UI-слой зависел от SDK и не подменялся в оффлайн-режиме.
  */
 object Push {
     const val CHANNEL_ID = "ayant_deals"
 
-    /** Subscribe to city-wide broadcast topics (ad campaigns). */
-    fun subscribeDefaults(citySlug: String) {
-        if (!AppConfig.useFirebase) return
-        FirebaseMessaging.getInstance().subscribeToTopic("all_users")
-        FirebaseMessaging.getInstance().subscribeToTopic("city_$citySlug")
-    }
+    private val service get() = AppConfig.makePushService()
 
-    fun subscribeVenue(venueID: String) {
-        if (!AppConfig.useFirebase) return
-        FirebaseMessaging.getInstance().subscribeToTopic("venue_$venueID")
-    }
+    /** Подписка на городские темы (рекламные кампании). */
+    fun subscribeDefaults(citySlug: String) = service.subscribeDefaults(citySlug)
 
-    fun unsubscribeVenue(venueID: String) {
-        if (!AppConfig.useFirebase) return
-        FirebaseMessaging.getInstance().unsubscribeFromTopic("venue_$venueID")
-    }
+    fun subscribeVenue(venueID: String) = service.subscribeVenue(venueID)
 
-    /** Write this device's FCM token to userTokens/{token} for targeted delivery. */
-    fun registerToken(uid: String?, citySlug: String) {
-        if (!AppConfig.useFirebase) return
-        FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->
-            if (token.isNullOrEmpty()) return@addOnSuccessListener
-            val data = mutableMapOf<String, Any>("city" to citySlug, "updatedAt" to System.currentTimeMillis())
-            if (uid != null) data["uid"] = uid
-            FirebaseFirestore.getInstance().collection("userTokens").document(token).set(data)
-        }
-    }
+    fun unsubscribeVenue(venueID: String) = service.unsubscribeVenue(venueID)
+
+    /** Записывает FCM-токен устройства в userTokens/{token} для адресной рассылки. */
+    fun registerToken(uid: String?, citySlug: String) = service.registerToken(uid, citySlug)
+
+    /** Выход: снять темы и удалить токен устройства (см. `PushService`). */
+    suspend fun unregisterDevice(citySlug: String) = service.unregisterDevice(citySlug)
 }

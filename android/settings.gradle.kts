@@ -21,3 +21,6 @@ dependencyResolutionManagement {
 
 rootProject.name = "Ayant"
 include(":app")
+include(":domain")
+include(":data")
+include(":feature")

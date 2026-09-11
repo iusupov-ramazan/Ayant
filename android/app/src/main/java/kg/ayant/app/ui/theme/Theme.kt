@@ -12,9 +12,13 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Shapes
 import androidx.compose.ui.unit.dp
+import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.sin
 
 /**
  * Ayant design tokens not covered by Material 3's ColorScheme
@@ -32,27 +36,74 @@ data class AyantColors(
     val accentDeep: Color,
     val open: Color,
     val isDark: Boolean,
+    // Плоская шапка хоста — единственная часть «кремового мира» с тёмной парой.
+    val hostHeader: Color,
+    val hostCaption: Color,
+    val hostEyebrow: Color,
+    // Redesign 2.4 — warm-surface tokens. Single value for now: dark mode for the
+    // rest of the sand/cream world is not designed yet (mirrors DesignSystem.swift).
+    val sand: Color = Sand,
+    val sandDeep: Color = SandDeep,
+    val sandInk: Color = SandInk,
+    val sandInkStrong: Color = SandInkStrong,
+    val accentText: Color = AccentText,
+    val accentTextStrong: Color = AccentTextStrong,
+    val eyebrow: Color = Eyebrow,
+    val tabIdle: Color = TabIdle,
+    val cream: Color = Cream,
+    val creamLine: Color = CreamLine,
 ) {
     /** Brand gradient (headers, primary buttons, balance card, hero cards).
-     *  iOS brand gradient: orange #FF4D29 → gold #FFB300 (top-leading → bottom-trailing). */
+     *  #FF5A1F → #FF9500, top-leading → bottom-trailing (CSS 135°). Same two stops
+     *  as `Venue.defaultGradient` / `Palette.accent`+`Palette.orange` on iOS. */
     val accentGradient: Brush
         get() = Brush.linearGradient(
-            colors = listOf(Color(0xFFFF4D29), Color(0xFFFFB300)),
+            colors = listOf(accent, AccentGold),
             start = Offset(0f, 0f),
             end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY),
         )
+}
+
+/**
+ * Sand gradient for the host header and riso panels — CSS `155deg`.
+ *
+ * Angles other than 135° need the real box size, so these are functions rather
+ * than [Brush] properties: call them from a `drawBehind`/`drawWithCache` scope
+ * where `size` is known (or use [Modifier.ayantSandPanel]).
+ * Direction for a CSS angle θ (y down) is `(sin θ, −cos θ)`.
+ */
+fun sandBrush(size: Size): Brush = angledGradient(listOf(Sand, SandDeep), 155.0, size)
+
+/** Loyalty stamp-card gradient — CSS `140deg`, violet. */
+fun stampBrush(size: Size): Brush = angledGradient(listOf(StampStart, StampEnd), 140.0, size)
+
+/** Linear gradient at a CSS angle across a box of [size]. */
+fun angledGradient(colors: List<Color>, degrees: Double, size: Size): Brush {
+    val rad = Math.toRadians(degrees)
+    val dx = sin(rad).toFloat()
+    val dy = (-cos(rad)).toFloat()
+    val cx = size.width / 2f
+    val cy = size.height / 2f
+    val half = (abs(dx) * size.width + abs(dy) * size.height) / 2f
+    return Brush.linearGradient(
+        colors = colors,
+        start = Offset(cx - dx * half, cy - dy * half),
+        end = Offset(cx + dx * half, cy + dy * half),
+    )
 }
 
 private val LightAyant = AyantColors(
     canvas = CanvasLight, surface = SurfaceLight, surfaceMuted = SurfaceMutedLight,
     ink = InkLight, inkSoft = InkSoftLight, hairline = HairlineLight,
     accent = Accent, accentDeep = AccentDeep, open = Open, isDark = false,
+    hostHeader = HostHeaderLight, hostCaption = HostCaptionLight, hostEyebrow = HostEyebrowLight,
 )
 
 private val DarkAyant = AyantColors(
     canvas = CanvasDark, surface = SurfaceDark, surfaceMuted = SurfaceMutedDark,
     ink = InkDark, inkSoft = InkSoftDark, hairline = HairlineDark,
     accent = Accent, accentDeep = AccentDeep, open = Open, isDark = true,
+    hostHeader = HostHeaderDark, hostCaption = HostCaptionDark, hostEyebrow = HostEyebrowDark,
 )
 
 val LocalAyantColors = staticCompositionLocalOf { LightAyant }

@@ -1,5 +1,7 @@
 import SwiftUI
 import WebKit
+import AyantDomain
+import AyantFeatures
 
 // MARK: - Написать / редактировать отзыв (по спецификации)
 
@@ -226,7 +228,7 @@ struct ReviewRow: View {
                     .font(.caption.weight(.semibold))
                     .padding(.horizontal, 8).padding(.vertical, 3)
                     .background(Color.sanAccent.opacity(0.12), in: Capsule())
-                    .foregroundStyle(Color.sanAccent)
+                    .foregroundStyle(Color.sanAccentText)
             }
             if !review.text.isEmpty {
                 Text(review.text).font(.subheadline)

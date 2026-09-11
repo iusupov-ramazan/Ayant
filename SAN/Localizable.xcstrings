@@ -2,19 +2,78 @@
   "sourceLanguage" : "ru",
   "strings" : {
     "" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : ""
+          }
+        }
+      }
+    },
+    " · %@" : {
 
     },
     " %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : " %@"
+          }
+        }
+      }
+    },
+    " %lld" : {
+
+    },
+    "…ещё" : {
 
     },
     "·" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "·"
+          }
+        }
+      }
     },
     "· %@" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "· %@"
+          }
+        }
+      }
+    },
+    "· %lld %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "· %lld %@"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "· %1$lld %2$@"
+          }
+        }
+      }
     },
     "«%@» за %lld бонусов. Купон нельзя вернуть после обмена." : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@” for %lld bonuses. The coupon cannot be returned after the exchange."
+          }
+        },
         "ru" : {
           "stringUnit" : {
             "state" : "new",
@@ -24,16 +83,53 @@
       }
     },
     "«%@» и все его предложения будут удалены без возможности восстановления." : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@” and all its deals will be deleted permanently."
+          }
+        }
+      }
     },
     "(%lld)" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "(%lld)"
+          }
+        }
+      }
     },
     "**На что их потратить?** Накопленные бонусы обмениваются на купоны, которые дают эксклюзивные скидки в заведениях-партнёрах." : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "**What can you spend them on?** Collected bonuses are exchanged for coupons that give exclusive discounts at partner venues."
+          }
+        }
+      }
+    },
+    "% от чека баллами" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "% of the bill in points"
+          }
+        }
+      }
     },
     "%@ — %@. Нашёл в Ayant!" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ — %@. Found it on Ayant!"
+          }
+        },
         "ru" : {
           "stringUnit" : {
             "state" : "new",
@@ -44,6 +140,12 @@
     },
     "%@ · %@" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · %@"
+          }
+        },
         "ru" : {
           "stringUnit" : {
             "state" : "new",
@@ -54,6 +156,12 @@
     },
     "%@ · %lld" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · %lld"
+          }
+        },
         "ru" : {
           "stringUnit" : {
             "state" : "new",
@@ -64,6 +172,12 @@
     },
     "%@ %@" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ %@"
+          }
+        },
         "ru" : {
           "stringUnit" : {
             "state" : "new",
@@ -74,6 +188,12 @@
     },
     "%@ • %@" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ • %@"
+          }
+        },
         "ru" : {
           "stringUnit" : {
             "state" : "new",
@@ -84,6 +204,12 @@
     },
     "%@ • до %@" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ • until %@"
+          }
+        },
         "ru" : {
           "stringUnit" : {
             "state" : "new",
@@ -92,8 +218,34 @@
         }
       }
     },
+    "%@, %@, %@" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@, %2$@, %3$@"
+          }
+        }
+      }
+    },
+    "%@, %@, %lld акций" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@, %2$@, %3$lld акций"
+          }
+        }
+      }
+    },
     "%@, %@. Нашёл в Ayant!" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@, %@. Found it on Ayant!"
+          }
+        },
         "ru" : {
           "stringUnit" : {
             "state" : "new",
@@ -102,17 +254,144 @@
         }
       }
     },
+    "%@%%" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@%%"
+          }
+        }
+      }
+    },
     "%lld" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld"
+          }
+        }
+      }
+    },
+    "%lld / %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld / %lld"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld / %2$lld"
+          }
+        }
+      }
+    },
+    "%lld %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld %@"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld %2$@"
+          }
+        }
+      }
+    },
+    "%lld адреса" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld addresses"
+          }
+        }
+      }
     },
     "%lld активных предложений" : {
-
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld active deals"
+          }
+        }
+      }
     },
     "%lld акц." : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld deals"
+          }
+        }
+      }
+    },
+    "%lld баллов" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld points"
+          }
+        }
+      }
+    },
+    "%lld баллов · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld points · %@"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld баллов · %2$@"
+          }
+        }
+      }
+    },
+    "%lld без ответа" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld unanswered"
+          }
+        }
+      }
+    },
+    "%lld бонусов" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld bonuses"
+          }
+        }
+      }
     },
     "%lld визитов → «%@»" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld visits → “%@”"
+          }
+        },
         "ru" : {
           "stringUnit" : {
             "state" : "new",
@@ -123,6 +402,12 @@
     },
     "%lld визитов → %@" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld visits → %@"
+          }
+        },
         "ru" : {
           "stringUnit" : {
             "state" : "new",
@@ -132,16 +417,63 @@
       }
     },
     "%lld дней" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld days"
+          }
+        }
+      }
+    },
+    "%lld наград" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld rewards"
+          }
+        }
+      }
     },
     "%lld отзывов" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld reviews"
+          }
+        }
+      }
     },
     "%lld погашено" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld redeemed"
+          }
+        }
+      }
+    },
+    "%lld сом" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld som"
+          }
+        }
+      }
     },
     "%lld/%lld" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld/%lld"
+          }
+        },
         "ru" : {
           "stringUnit" : {
             "state" : "new",
@@ -150,140 +482,966 @@
         }
       }
     },
+    "%lld+ сом" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld+ som"
+          }
+        }
+      }
+    },
     "%lldд" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lldd"
+          }
+        }
+      }
     },
     "• " : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "• "
+          }
+        }
+      }
     },
     "+ Акция" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+ Deal"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+ Акция"
+          }
+        }
+      }
+    },
+    "+%lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+%lld"
+          }
+        }
+      }
+    },
+    "+%lld баллов гостю" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+%lld points for the guest"
+          }
+        }
+      }
+    },
+    "+%lld бонусов" : {
 
     },
     "+%lld бонусов 🎉" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+%lld bonuses 🎉"
+          }
+        }
+      }
+    },
+    "+996 …" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+996 …"
+          }
+        }
+      }
     },
     "−%lld%%" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "−%lld%%"
+          }
+        }
+      }
+    },
+    "−30% на манты по будням" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "−30% on manti on weekdays"
+          }
+        }
+      }
+    },
+    "∞" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "∞"
+          }
+        }
+      }
     },
     "★ 3+" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "★ 3+"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "★ 3+"
+          }
+        }
+      }
     },
     "★ 4+" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "★ 4+"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "★ 4+"
+          }
+        }
+      }
     },
     "⚠️ Купоны выключены — гости не увидят кнопку получения купона на ваших акциях. Рекомендуем включить: это привлекает больше гостей." : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "⚠️ Coupons are off — guests won’t see the claim button on your deals. We recommend turning them on: it brings in more guests."
+          }
+        }
+      }
     },
     "⭐️" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "⭐️"
+          }
+        }
+      }
     },
     "⭐️ Сегодня" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "⭐️ Today"
+          }
+        }
+      }
     },
     "🎁" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "🎁"
+          }
+        }
+      }
+    },
+    "💸" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "💸"
+          }
+        }
+      }
+    },
+    "🔥" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "🔥"
+          }
+        }
+      }
     },
     "0.3 (MVP)" : {
-
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "0.3 (MVP)"
+          }
+        }
+      }
     },
     "1 🍎 = 1 бонус · до %lld/день" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 🍎 = 1 bonus · up to %lld/day"
+          }
+        }
+      }
     },
     "1 км" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 km"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 км"
+          }
+        }
+      }
     },
-    "1 линия = 5 бонусов · до %lld/день" : {
-
+    "1 линия = %lld бонусов · до %lld/день" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "1 линия = %1$lld бонусов · до %2$lld/день"
+          }
+        }
+      }
+    },
+    "1–2 ★" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1–2 ★"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1–2 ★"
+          }
+        }
+      }
     },
     "2GIS" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "2GIS"
+          }
+        }
+      }
     },
     "3 км" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "3 km"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "3 км"
+          }
+        }
+      }
     },
-    "5 км" : {
-
+    "30" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "30"
+          }
+        }
+      }
+    },
+    "180 сом/день" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "180 som/day"
+          }
+        }
+      }
+    },
+    "195" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "195"
+          }
+        }
+      }
+    },
+    "240 сом/день" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "240 som/day"
+          }
+        }
+      }
     },
     "500 м" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "500 m"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "500 м"
+          }
+        }
+      }
     },
     "Apple Wallet" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Wallet"
+          }
+        }
+      }
     },
     "Ayant" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ayant"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ayant"
+          }
+        }
+      }
     },
     "AYANT" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AYANT"
+          }
+        }
+      }
     },
     "Ayant — это единая лента событий твоего города и платформа для получения скидок. Мы убрали весь информационный шум, оставив только то, что действительно важно для пользователя." : {
-
-    },
-    "Ayant · %@" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ayant is a single feed of what is happening in your city and a platform for getting discounts. We removed all the noise and kept only what really matters to you."
+          }
+        }
+      }
     },
     "AYANT-XXXXXX" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AYANT-XXXXXX"
+          }
+        }
+      }
     },
     "Email" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Email"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Email"
+          }
+        }
+      }
     },
     "English" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "English"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "English"
+          }
+        }
+      }
     },
     "Google Maps" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Google Maps"
+          }
+        }
+      }
+    },
+    "ID %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ID %@"
+          }
+        }
+      }
     },
     "Instagram" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Instagram"
+          }
+        }
+      }
     },
     "Instagram (ник или ссылка)" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Instagram (handle or link)"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Instagram (ник же шилтеме)"
+          }
+        }
+      }
     },
     "Payme / Click" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Payme / Click"
+          }
+        }
+      }
     },
     "PDF загружен" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PDF uploaded"
+          }
+        }
+      }
     },
-    "Push-уведомление" : {
-
+    "Push" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Push"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Push"
+          }
+        }
+      }
+    },
+    "QR верный" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "QR valid"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "QR туура"
+          }
+        }
+      }
+    },
+    "QR распознан" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "QR recognised"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "QR таанылды"
+          }
+        }
+      }
     },
     "Telegram (ник или ссылка)" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Telegram (handle or link)"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Telegram (ник же шилтеме)"
+          }
+        }
+      }
     },
     "Telegram-бот" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Telegram bot"
+          }
+        }
+      }
     },
     "Wallet" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wallet"
+          }
+        }
+      }
     },
     "WhatsApp" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "WhatsApp"
+          }
+        }
+      }
     },
     "WhatsApp (номер, напр. 996700123456)" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "WhatsApp (number, e.g. 996700123456)"
+          }
+        }
+      }
+    },
+    "you@example.com" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "you@example.com"
+          }
+        }
+      }
     },
     "Адрес" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Address"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Дарек"
+          }
+        }
+      }
     },
     "Активен" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Active"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Активдүү"
+          }
+        }
+      }
+    },
+    "Активна" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Active"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Активдүү"
+          }
+        }
+      }
+    },
+    "активных акций" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "active deals"
+          }
+        }
+      }
+    },
+    "активных карт" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "active cards"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "активдүү карталар"
+          }
+        }
+      }
+    },
+    "Активных: %lld" : {
 
+    },
+    "Акции" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deals"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Акциялар"
+          }
+        }
+      }
+    },
+    "Акция" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Promo"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Акция"
+          }
+        }
+      }
     },
     "Аналитика" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Analytics"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Аналитика"
+          }
+        }
+      }
     },
-    "Бизнес" : {
-
+    "баллов" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "points"
+          }
+        }
+      }
+    },
+    "Баллы" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Points"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Упайлар"
+          }
+        }
+      }
+    },
+    "Баллы копятся у вас и тратятся у вас. Это единственный механизм, который возвращает гостя именно к вам." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Points are earned with you and spent with you. It is the one mechanism that brings a guest back to you specifically."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Упайлар сизде чогулуп, сизде жумшалат. Бул конокту так сизге кайтарган бирден-бир механизм."
+          }
+        }
+      }
+    },
+    "Баллы копятся у этого заведения и тратятся у него же." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Points are earned at this venue and spent at this venue."
+          }
+        }
+      }
+    },
+    "Баллы можно потратить на награды заведения" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Points can be spent on this venue's rewards"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Упайларды мекеменин сыйлыктарына жумшоого болот"
+          }
+        }
+      }
+    },
+    "Баллы начислены" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Points awarded"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Упайлар кошулду"
+          }
+        }
+      }
+    },
+    "Баллы САН" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SAN points"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "САН упайлары"
+          }
+        }
+      }
+    },
+    "Баллы САН в каждом заведении" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ayant points at every venue"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ар бир мекемеде САН упайлары"
+          }
+        }
+      }
+    },
+    "Баллы САН, награды, правила" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ayant points, rewards, rules"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "САН упайлары, сыйлыктар, эрежелер"
+          }
+        }
+      }
+    },
+    "Баллы финансирует заведение. Платформа не берёт комиссию с начислений и списаний." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The venue funds the points. The platform takes no commission on earning or spending."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Упайларды мекеме каржылайт. Платформа эсептөө жана чыгымдоодон комиссия албайт."
+          }
+        }
+      }
+    },
+    "Без ответа" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unanswered"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Жоопсуз"
+          }
+        }
+      }
     },
     "Блюда и услуги, которые гости смогут оценивать отдельно." : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dishes and services guests will be able to rate separately."
+          }
+        }
+      }
     },
     "Блюдо" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dish"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Тамак"
+          }
+        }
+      }
     },
     "Больше гостей — быстрее" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "More guests — faster"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Көбүрөөк конок — тезирээк"
+          }
+        }
+      }
     },
     "Бонусы" : {
       "localizations" : {
@@ -301,14 +1459,89 @@
         }
       }
     },
+    "БОНУСЫ" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "BONUSES"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "БОНУСТАР"
+          }
+        }
+      }
+    },
     "Буст в ленте" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Feed boost"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Лентада буст"
+          }
+        }
+      }
+    },
+    "Буст в ленте и push-кампании" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Feed boost and push campaigns"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Тасмада бустоо жана push-өнөктүктөр"
+          }
+        }
+      }
     },
     "Был здесь" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Visited"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Болгон"
+          }
+        }
+      }
+    },
+    "Быстрые ответы" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quick replies"
+          }
+        }
+      }
     },
     "В категории «%@» в городе %@ пока нет акций." : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No deals yet in “%@” in %@."
+          }
+        },
         "ru" : {
           "stringUnit" : {
             "state" : "new",
@@ -318,19 +1551,114 @@
       }
     },
     "В приложении есть внутренняя система бонусов, которые можно собирать без лишних усилий:" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The app has its own bonus system you can collect without any extra effort:"
+          }
+        }
+      }
     },
-    "Ваш ответ (виден всем)" : {
-
+    "Ваш QR" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your QR"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сиздин QR"
+          }
+        }
+      }
+    },
+    "Ваш ответ" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your reply"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сиздин жообуңуз"
+          }
+        }
+      }
+    },
+    "Ваши баллы" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your points"
+          }
+        }
+      }
+    },
+    "Ваши баллы САН" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your Ayant points"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сиздин САН упайларыңыз"
+          }
+        }
+      }
     },
     "Ваши кампании" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your campaigns"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сиздин кампанияларыңыз"
+          }
+        }
+      }
     },
     "Ввести координаты вручную" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter coordinates manually"
+          }
+        }
+      }
     },
     "Вернуться в режим пользователя" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Back to user mode"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Колдонуучу режимине кайтуу"
+          }
+        }
+      }
     },
     "Версия" : {
       "localizations" : {
@@ -349,36 +1677,189 @@
       }
     },
     "Включена" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enabled"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Күйгүзүлгөн"
+          }
+        }
+      }
     },
     "Включите программу лояльности, чтобы гости возвращались: копили штампы за визиты и получали награду." : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turn on the loyalty programme so guests come back: they collect stamps for visits and get a reward."
+          }
+        }
+      }
     },
     "Включите, чтобы гости копили штампы за визиты и получали награду." : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turn it on so guests collect stamps for visits and get a reward."
+          }
+        }
+      }
     },
     "Включить" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turn on"
+          }
+        }
+      }
     },
     "Возобновить" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Resume"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Улантуу"
+          }
+        }
+      }
     },
     "Войдите в аккаунт" : {
-
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sign in required"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Аккаунтка кириңиз"
+          }
+        }
+      }
+    },
+    "Войдите в аккаунт, чтобы копить баллы" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sign in to earn points"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Упай чогултуу үчүн аккаунтка кириңиз"
+          }
+        }
+      }
+    },
+    "Войдите в аккаунт, чтобы копить баллы." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sign in to collect points."
+          }
+        }
+      }
     },
     "Войдите в аккаунт, чтобы копить штампы." : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sign in to collect stamps."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Штамп жыйноо үчүн аккаунтка кириңиз."
+          }
+        }
+      }
     },
     "Войдите в аккаунт, чтобы получить купон." : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sign in to get the coupon."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Купон алуу үчүн аккаунтка кириңиз."
+          }
+        }
+      }
     },
     "Войдите в аккаунт, чтобы приглашать друзей и получать бонусы." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sign in to invite friends and earn bonuses."
+          }
+        }
+      }
+    },
+    "Войдите или создайте аккаунт, чтобы копить баллы" : {
 
     },
     "Войдите, чтобы сохранять заведения и предложения. Гостям доступен только просмотр." : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sign in to save venues and deals. Guests can only browse."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Мекемелерди жана сунуштарды сактоо үчүн кириңиз. Конокторго көрүү гана жеткиликтүү."
+          }
+        }
+      }
     },
     "Войти" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sign in"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Кирүү"
+          }
+        }
+      }
+    },
+    "Войти или создать аккаунт" : {
 
     },
     "Вопросы и ответы" : {
@@ -397,20 +1878,146 @@
         }
       }
     },
+    "Все" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "All"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Баары"
+          }
+        }
+      }
+    },
+    "Всё" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "All"
+          }
+        }
+      }
+    },
+    "Все баллы" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "All points"
+          }
+        }
+      }
+    },
+    "Все кампании продвижения" : {
+
+    },
+    "Все карты" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "All cards"
+          }
+        }
+      }
+    },
     "Все категории" : {
 
     },
-    "Вся витрина заведения" : {
+    "Все фильтры" : {
 
+    },
+    "Всего баллов" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Total points"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Бардык упайлар"
+          }
+        }
+      }
+    },
+    "Вся витрина заведения" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Entire venue showcase"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Мекеменин бардык витринасы"
+          }
+        }
+      }
     },
     "Вся ключевая информация от заведений города собрана по системе **САН**:" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "All the key information from the city’s venues, organised by the **SAN** system:"
+          }
+        }
+      }
     },
     "Вход" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sign in"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Кирүү"
+          }
+        }
+      }
+    },
+    "Вы вернётесь на экран входа. Данные аккаунта сохранятся." : {
+
+    },
+    "Вы вернётесь на экран входа. Заведения и статистика сохранятся." : {
+
+    },
+    "Вы входили через Apple. Чтобы отвязать аккаунт от Apple ID и удалить его, подтвердите действие ещё раз." : {
+
+    },
+    "Вы ещё не оставили ни одного отзыва." : {
 
     },
     "Выбрать точку на карте" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pick a point on the map"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Картадан чекит тандоо"
+          }
+        }
+      }
     },
     "Выйти" : {
       "localizations" : {
@@ -428,11 +2035,40 @@
         }
       }
     },
-    "Выключена" : {
+    "Выйти из аккаунта?" : {
 
     },
+    "Выключена" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Off"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Өчүк"
+          }
+        }
+      }
+    },
     "Галочка повышает доверие гостей." : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A checkmark increases guest trust."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Белги конактардын ишенимин жогорулатат."
+          }
+        }
+      }
     },
     "Главная" : {
       "localizations" : {
@@ -467,11 +2103,60 @@
         }
       }
     },
-    "Гости смогут получать и гасить купоны на ваши акции. Рекомендуем оставить включённым — купоны заметно повышают посещаемость." : {
+    "Гостевой аккаунт нельзя восстановить: бонусы и купоны этой сессии будут удалены." : {
 
+    },
+    "Гости с баллами возвращаются в 2,4 раза чаще" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guests with points come back 2.4× more often"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Упайы бар коноктор 2,4 эсе көп кайтып келишет"
+          }
+        }
+      }
+    },
+    "Гости смогут получать и гасить купоны на ваши акции. Рекомендуем оставить включённым — купоны заметно повышают посещаемость." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guests will be able to claim and redeem coupons for your deals. We recommend leaving this on — coupons noticeably increase footfall."
+          }
+        }
+      }
+    },
+    "Гость" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guest"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Конок"
+          }
+        }
+      }
     },
     "Гость получает штамп за каждое погашение вашего купона/акции. На %lld-м штампе ему автоматически выдаётся купон «%@», который он показывает вам." : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A guest gets a stamp for every coupon or deal redeemed with you. On stamp %lld they automatically receive the coupon “%@”, which they show to you."
+          }
+        },
         "ru" : {
           "stringUnit" : {
             "state" : "new",
@@ -482,6 +2167,12 @@
     },
     "Гость получает штамп за каждое погашение купона у вас. На %lld-м штампе — «%@» купоном." : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A guest gets a stamp for every coupon redeemed with you. On stamp %lld — “%@” as a coupon."
+          }
+        },
         "ru" : {
           "stringUnit" : {
             "state" : "new",
@@ -490,17 +2181,88 @@
         }
       }
     },
+    "Гость получит" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guest gets"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Конок алат"
+          }
+        }
+      }
+    },
     "Гостям доступен только просмотр. Войдите в профиле, чтобы сохранять и оставлять отзывы." : {
-
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guests can only browse. Sign in from your profile to save and leave reviews."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Конокторго көрүү гана жеткиликтүү. Сактоо жана пикир калтыруу үчүн профилден кириңиз."
+          }
+        }
+      }
     },
     "Гостям доступен только просмотр. Войдите в профиле, чтобы сохранять места." : {
-
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guests can only browse. Sign in from your profile to save places."
+          }
+        }
+      }
     },
     "Гостям доступен только просмотр. Войдите в профиле, чтобы сохранять." : {
-
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guests can only browse. Sign in from your profile to save."
+          }
+        }
+      }
     },
     "Гостям доступен только просмотр. Войдите, чтобы добавлять заведения, сохранять места и оставлять отзывы." : {
-
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guests can only browse. Sign in to add venues, save places and leave reviews."
+          }
+        }
+      }
+    },
+    "Гостям код не выдаётся — начисление привязано к вашему профилю." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guests get no code — earning is tied to your profile."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Конокторго код берилбейт — эсептөө профилиңизге байланган."
+          }
+        }
+      }
     },
     "Готово" : {
       "localizations" : {
@@ -519,55 +2281,266 @@
       }
     },
     "Да, применить" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yes, apply"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ооба, колдонуу"
+          }
+        }
+      }
+    },
+    "Дальше" : {
 
     },
     "Данных пока нет" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No data yet"
+          }
+        }
+      }
     },
-    "Действует до" : {
-
+    "Действует" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Active"
+          }
+        }
+      }
     },
     "Действует до %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Valid until %@"
+          }
+        }
+      }
+    },
+    "Диапазоны" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bands"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Диапазондор"
+          }
+        }
+      }
+    },
+    "Диапазоны не настроены в админ-панели." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bands are not configured in the admin panel."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Диапазондор админ-панелде тууралана элек."
+          }
+        }
+      }
+    },
+    "Для какого заведения?" : {
 
     },
-    "Длительность" : {
+    "Для скидки укажите новую цену или процент" : {
 
     },
     "до" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "to"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "чейин"
+          }
+        }
+      }
     },
     "до %@" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "until %@"
+          }
+        }
+      }
+    },
+    "до %lld сом" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "up to %lld som"
+          }
+        }
+      }
     },
     "До 100 символов — пусто, чтобы убрать" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Up to 100 characters — leave empty to remove"
+          }
+        }
+      }
     },
     "Добавим первое заведение?" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add your first venue?"
+          }
+        }
+      }
     },
     "Добавить" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Кошуу"
+          }
+        }
+      }
+    },
+    "Добавить акцию" : {
 
     },
     "Добавить заведение" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add venue"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Мекеме кошуу"
+          }
+        }
+      }
     },
     "Добавить заведение сейчас" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add a venue now"
+          }
+        }
+      }
     },
     "Добавить филиал" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add branch"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Филиал кошуу"
+          }
+        }
+      }
     },
     "Добавить фото (до %lld)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add photos (up to %lld)"
+          }
+        }
+      }
+    },
+    "Добавьте заведение, чтобы включить карту штампов." : {
 
     },
     "Добавьте первое заведение, чтобы начать привлекать гостей." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add your first venue to start attracting guests."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Конокторду тарта баштоо үчүн биринчи мекемени кошуңуз."
+          }
+        }
+      }
+    },
+    "Документы" : {
 
     },
     "Долгота" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Longitude"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Узундук"
+          }
+        }
+      }
     },
     "Дополнительно" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "More"
+          }
+        }
+      }
     },
     "Доступные" : {
       "extractionState" : "stale",
@@ -587,21 +2560,126 @@
       }
     },
     "Друг получит приветственные бонусы, а ты — за каждого, кто присоединится." : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your friend gets welcome bonuses, and you get rewarded for everyone who joins."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Досуңуз тосуп алуу бонустарын алат, ал эми сиз кошулган ар бир адам үчүн бонус аласыз."
+          }
+        }
+      }
     },
     "Дублировать" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duplicate"
+          }
+        }
+      }
+    },
+    "Есть акции" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Has deals"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Акциялары бар"
+          }
+        }
+      }
     },
     "Есть дата окончания" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Has an end date"
+          }
+        }
+      }
     },
-    "ещё %@ до награды" : {
-
+    "Ещё %lld %@ до «%@»" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld %@ more until “%@”"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Ещё %1$lld %2$@ до «%3$@»"
+          }
+        }
+      }
+    },
+    "Ещё %lld до «%@»" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld more until “%@”"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Ещё %1$lld до «%2$@»"
+          }
+        }
+      }
     },
     "Ещё раз" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Again"
+          }
+        }
+      }
+    },
+    "Живые предложения рядом — обновляются каждый день." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Live offers near you — refreshed every day."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Жаныңыздагы сунуштар — күн сайын жаңырат."
+          }
+        }
+      }
     },
     "за %lld дней" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "in %lld days"
+          }
+        }
+      }
+    },
+    "Забыли пароль?" : {
 
     },
     "Заведение" : {
@@ -621,40 +2699,176 @@
       }
     },
     "Заведение на проверке. Появится в ленте после одобрения." : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The venue is under review. It will appear in the feed after approval."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Мекеме текшерүүдө. Жактыргандан кийин лентада пайда болот."
+          }
+        }
+      }
     },
     "Заведение не найдено" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Venue not found"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Мекеме табылган жок"
+          }
+        }
+      }
     },
     "Заведение отклонено. Отредактируйте данные и сохраните повторно." : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The venue was rejected. Edit the details and save again."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Мекеме четке кагылды. Маалыматты оңдоп, кайра сактаңыз."
+          }
+        }
+      }
     },
     "Заведение проверено" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Venue verified"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Мекеме текшерилген"
+          }
+        }
+      }
     },
     "Заведение, категория или акция" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Venue, category or deal"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Мекеме, категория же акция"
+          }
+        }
+      }
     },
     "Заведения" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Venues"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Мекемелер"
+          }
+        }
+      }
     },
     "Заведения — продвигайтесь в Ayant" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Venues — promote yourself on Ayant"
+          }
+        }
+      }
     },
     "Заведения здесь" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Venues here"
+          }
+        }
+      }
     },
     "Заголовок" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Title"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Аталышы"
+          }
+        }
+      }
     },
-    "Заголовок (до 60)" : {
-
+    "Заголовок push (до 60)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Push title (up to 60)"
+          }
+        }
+      }
     },
     "Загрузить PDF" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Upload PDF"
+          }
+        }
+      }
+    },
+    "Загрузить обложку" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Upload cover"
+          }
+        }
+      }
     },
     "Загрузить фото" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Upload photo"
+          }
+        }
+      }
     },
     "Загрузка…" : {
       "localizations" : {
@@ -673,7 +2887,20 @@
       }
     },
     "Зайти как гость" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Continue as guest"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Конок катары кирүү"
+          }
+        }
+      }
     },
     "Закрыто" : {
       "localizations" : {
@@ -692,22 +2919,140 @@
       }
     },
     "Закрыть" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Жабуу"
+          }
+        }
+      }
     },
     "Заменить PDF" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Replace PDF"
+          }
+        }
+      }
     },
     "Запросить «Проверено»" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Request \\\"Verified\\\""
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "«Текшерилген» суроо"
+          }
+        }
+      }
+    },
+    "Запустить кампанию" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Launch campaign"
+          }
+        }
+      }
     },
     "Запустить продвижение" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Launch promotion"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Жарнаманы ишке киргизүү"
+          }
+        }
+      }
+    },
+    "защищает от повторного скана одного чека" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "protects against re-scanning one check"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "бир чекти кайра скандоодон коргойт"
+          }
+        }
+      }
+    },
+    "Звонки" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Calls"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Чалуулар"
+          }
+        }
+      }
     },
     "Здесь может быть\nваша реклама" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your ad\ncould be here"
+          }
+        }
+      }
     },
     "Здесь нет спама, рекламы и лишних кнопок. Только САН, заведения и твоя выгода. Всё самое нужное — в одном приложении. Пользуйся!" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No spam, no ads and no extra buttons. Just SAN, venues and your savings. Everything you need in one app. Enjoy!"
+          }
+        }
+      }
+    },
+    "Здесь появятся ваши баллы" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your points will show up here"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Бул жерде упайларыңыз пайда болот"
+          }
+        }
+      }
     },
     "Змейка" : {
       "localizations" : {
@@ -726,10 +3071,30 @@
       }
     },
     "Знаешь хорошее место? Помоги нам — добавь заведение." : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Know a good spot? Help us — add a venue."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Жакшы жер билесизби? Бизге жардам бериңиз — мекеме кошуңуз."
+          }
+        }
+      }
     },
     "Игра окончена" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Game over"
+          }
+        }
+      }
     },
     "Игры" : {
       "extractionState" : "stale",
@@ -748,44 +3113,204 @@
         }
       }
     },
-    "Изменить" : {
+    "Изменения сохранятся сразу, статус публикации не изменится." : {
 
+    },
+    "Изменить" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Edit"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Өзгөртүү"
+          }
+        }
+      }
     },
     "Изменить данные заведения" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Edit venue details"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Мекеменин маалыматын өзгөртүү"
+          }
+        }
+      }
     },
     "Изменить заведение" : {
-
-    },
-    "Изменить ответ" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Edit venue"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Мекемени өзгөртүү"
+          }
+        }
+      }
     },
     "Изменить отзыв" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Edit review"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Пикирди өзгөртүү"
+          }
+        }
+      }
     },
     "Изменить предложение" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Edit deal"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сунушту өзгөртүү"
+          }
+        }
+      }
     },
     "ИИ-помощник — отвечает 24/7" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI assistant — answers 24/7"
+          }
+        }
+      }
     },
     "или" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "or"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "же"
+          }
+        }
+      }
     },
-    "ИЛИ ВВЕДИТЕ КОД" : {
-
+    "Или введите код" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Or enter a code"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Же кодду киргизиңиз"
+          }
+        }
+      }
     },
     "Или вставьте ссылку" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Or paste a link"
+          }
+        }
+      }
     },
     "ИНН / ОГРНИП" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TIN / Registration no."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ИНН / ОГРНИП"
+          }
+        }
+      }
+    },
+    "Инфо" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Info"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Маалымат"
+          }
+        }
+      }
     },
     "Информация о бизнесе" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Business information"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Бизнес жөнүндө маалымат"
+          }
+        }
+      }
     },
     "Использован" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Used"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Колдонулган"
+          }
+        }
+      }
     },
     "Использованные" : {
       "extractionState" : "stale",
@@ -821,16 +3346,137 @@
       }
     },
     "Использовать купон?" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use coupon?"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Купонду колдоносузбу?"
+          }
+        }
+      }
+    },
+    "Итого" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Total"
+          }
+        }
+      }
+    },
+    "К списанию: %lld б." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "To redeem: %lld pts"
+          }
+        }
+      }
+    },
+    "Каждый день до 12:00\nОдин напиток на гостя" : {
 
+    },
+    "Как начисляем" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "How we award"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Кантип эсептейбиз"
+          }
+        }
+      }
+    },
+    "Как увидят гости" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "How guests will see it"
+          }
+        }
+      }
     },
     "Как это работает" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "How it works"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Кантип иштейт"
+          }
+        }
+      }
+    },
+    "Калькулятор" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Calculator"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Калькулятор"
+          }
+        }
+      }
     },
     "Карта лояльности" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loyalty card"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Лоялдуулук картасы"
+          }
+        }
+      }
+    },
+    "Карта штампов" : {
 
     },
     "Карты лояльности" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loyalty cards"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Лоялдуулук карталары"
+          }
+        }
+      }
     },
     "Категория" : {
       "localizations" : {
@@ -848,11 +3494,104 @@
         }
       }
     },
-    "КОД КУПОНА" : {
-
+    "Кафе" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cafe"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Кафе"
+          }
+        }
+      }
     },
-    "Контактный телефон" : {
-
+    "Клики по акциям" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deal taps"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Акцияларга басуулар"
+          }
+        }
+      }
+    },
+    "КОД КУПОНА" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "COUPON CODE"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "КУПОН КОДУ"
+          }
+        }
+      }
+    },
+    "Кофейня" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Coffee shop"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Кофекана"
+          }
+        }
+      }
+    },
+    "Кошелёк" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wallet"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Капчык"
+          }
+        }
+      }
+    },
+    "Кто списывает" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Who redeems"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ким чыгымдайт"
+          }
+        }
+      }
     },
     "Купон" : {
       "localizations" : {
@@ -887,15 +3626,78 @@
       }
     },
     "Купон на предложение" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deal coupon"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сунушка купон"
+          }
+        }
+      }
     },
     "Купон получен 🎉" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Coupon claimed 🎉"
+          }
+        }
+      }
     },
     "Купоны" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Coupons"
+          }
+        }
+      }
+    },
+    "Купоны на акции заведений" : {
 
     },
     "Кыргызча" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Кыргызча"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Кыргызча"
+          }
+        }
+      }
+    },
+    "Кэшбэк" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cashback"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Кэшбэк"
+          }
+        }
+      }
+    },
+    "Линий: %lld" : {
 
     },
     "Линий: %lld → +%lld бонусов" : {
@@ -909,19 +3711,121 @@
       }
     },
     "Лови скидки и акции города в Ayant. Заходи по моей ссылке — бонусы получим оба!" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Catch the city’s discounts and deals on Ayant. Join with my link — we both get bonuses!"
+          }
+        }
+      }
     },
-    "Любое расстояние" : {
-
+    "Лояльность" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loyalty"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Лоялдуулук"
+          }
+        }
+      }
     },
-    "Любой рейтинг" : {
-
+    "Любое" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Any"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Каалаган"
+          }
+        }
+      }
+    },
+    "Любой" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Any"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Каалаган"
+          }
+        }
+      }
+    },
+    "Максимум %lld%%. Пауза между начислениями — %lld минут." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Maximum %lld%%. Pause between earnings — %lld minutes."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Максимум %1$lld%%. Пауза между начислениями — %2$lld минут."
+          }
+        }
+      }
+    },
+    "Маршруты" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Directions"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Багыттар"
+          }
+        }
+      }
     },
     "Местоположение" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Location"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Жайгашкан жери"
+          }
+        }
+      }
     },
     "Можно добавить сейчас или позже — со вкладки «Заведения»." : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You can add it now or later — from the “Venues” tab."
+          }
+        }
+      }
     },
     "Мои купоны" : {
       "localizations" : {
@@ -939,8 +3843,15 @@
         }
       }
     },
-    "Мои купоны%@" : {
-
+    "Мои купоны · %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "My coupons · %lld"
+          }
+        }
+      }
     },
     "Мои отзывы" : {
       "extractionState" : "stale",
@@ -959,56 +3870,369 @@
         }
       }
     },
+    "Мой QR" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "My QR"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Менин QR"
+          }
+        }
+      }
+    },
     "На паузу" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pause"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Тыныктыруу"
+          }
+        }
+      }
     },
     "На проверке" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Under review"
+          }
+        }
+      }
     },
-    "Наведите камеру на QR купона гостя" : {
-
+    "Наведите камеру на QR гостя — баллы, штамп или купон определятся сами" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Point the camera at the guest QR — points, stamp or coupon are detected automatically"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Камераны коноктун QR кодуна багыттаңыз — упай, штамп же купон өзү аныкталат"
+          }
+        }
+      }
     },
     "Наград получено: %lld" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rewards received: %lld"
+          }
+        }
+      }
     },
     "Наград получено: %lld. Штамп — за каждый использованный купон здесь." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rewards received: %lld. A stamp for every coupon used here."
+          }
+        }
+      }
+    },
+    "Наград получено: %lld. Штамп за визит: сотрудник сканирует QR вашей карты." : {
+
+    },
+    "Награда" : {
 
     },
     "Награда (напр. Бесплатный кофе)" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reward (e.g. Free coffee)"
+          }
+        }
+      }
     },
     "Награда: %@" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reward: %@"
+          }
+        }
+      }
     },
-    "Нажав на push, пользователь откроет это предложение." : {
-
+    "Награды" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rewards"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сыйлыктар"
+          }
+        }
+      }
+    },
+    "Награды доступны" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rewards available"
+          }
+        }
+      }
+    },
+    "Награды не заведены" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No rewards set up"
+          }
+        }
+      }
+    },
+    "Награды пока не заведены — их настраивает админ-панель." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No rewards yet — the admin panel configures them."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сыйлыктар азырынча жок — аларды админ-панель тууралайт."
+          }
+        }
+      }
     },
     "Нажми закладку на любом предложении, чтобы сохранить его сюда." : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tap the bookmark on any deal to save it here."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Каалаган сунушту бул жерге сактоо үчүн кыстырманы басыңыз."
+          }
+        }
+      }
     },
     "Нажмите на карту, чтобы поставить точку" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tap the map to drop a point"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Чекит коюу үчүн картаны басыңыз"
+          }
+        }
+      }
+    },
+    "Назад" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Back"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Артка"
+          }
+        }
+      }
     },
     "Название" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Name"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Аталышы"
+          }
+        }
+      }
     },
     "Название (напр. Лагман)" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Name (e.g. Lagman)"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Аталышы (мис. Лагман)"
+          }
+        }
+      }
     },
     "Название бизнеса" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Business name"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Бизнестин аталышы"
+          }
+        }
+      }
     },
     "Название юрлица" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Legal entity name"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Юр. жактын аталышы"
+          }
+        }
+      }
     },
-    "Найдено: %lld" : {
-
+    "Найдено %lld %@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Found %lld %@"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Найдено %1$lld %2$@"
+          }
+        }
+      }
+    },
+    "Найдено %lld заведение" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Found %lld venue"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld жай табылды"
+          }
+        }
+      }
+    },
+    "Найдено %lld заведений" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Found %lld venues"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld жай табылды"
+          }
+        }
+      }
+    },
+    "Найдено %lld заведения" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Found %lld venues"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld жай табылды"
+          }
+        }
+      }
     },
     "Найди его в «Мои купоны» и покажи сотруднику заведения." : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Find it in “My coupons” and show it to the staff."
+          }
+        }
+      }
+    },
+    "Например, Sierra Coffee" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "For example, Sierra Coffee"
+          }
+        }
+      }
     },
     "Настроить" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Set up"
+          }
+        }
+      }
     },
     "Настройки" : {
       "extractionState" : "stale",
@@ -1027,20 +4251,140 @@
         }
       }
     },
-    "Не нашли ответ в FAQ? Напишите нам — поможем быстро." : {
+    "Настройки баллов меняются через менеджера Ayant" : {
 
     },
+    "Начисление" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Award"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Эсептөө"
+          }
+        }
+      }
+    },
+    "Начислить баллы" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Award points"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Упай кошуу"
+          }
+        }
+      }
+    },
+    "Не нашли ответ в FAQ? Напишите нам — поможем быстро." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Didn’t find an answer in the FAQ? Write to us — we’ll help quickly."
+          }
+        }
+      }
+    },
     "Не подтверждено" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not verified"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Тастыкталган эмес"
+          }
+        }
+      }
+    },
+    "Не сейчас" : {
+
+    },
+    "Не удалось загрузить баллы" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn’t load points"
+          }
+        }
+      }
+    },
+    "Не удалось загрузить ленту" : {
 
     },
     "Не удалось открыть меню" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn’t open the menu"
+          }
+        }
+      }
+    },
+    "Не удалось удалить аккаунт" : {
+
+    },
+    "Не хватает" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not enough"
+          }
+        }
+      }
+    },
+    "Нет доступа к камере" : {
 
     },
     "Нет купонов" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No coupons"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Купондор жок"
+          }
+        }
+      }
     },
     "Нет предложений в категории" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No deals in this category"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Бул категорияда сунуш жок"
+          }
+        }
+      }
     },
     "Ничего не нашлось" : {
       "localizations" : {
@@ -1059,31 +4403,211 @@
       }
     },
     "Новая кампания" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New campaign"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Жаңы кампания"
+          }
+        }
+      }
     },
     "Новая цена, сом" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New price, som"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Жаңы баа, сом"
+          }
+        }
+      }
+    },
+    "Новинка" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Жаңылык"
+          }
+        }
+      }
+    },
+    "Новое" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Жаңы"
+          }
+        }
+      }
     },
     "Новое заведение" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New venue"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Жаңы мекеме"
+          }
+        }
+      }
+    },
+    "Новое заведение попадёт на модерацию — обычно до 24 часов." : {
 
     },
     "Новое предложение" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New deal"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Жаңы сунуш"
+          }
+        }
+      }
     },
     "Новые отзывы и статусы кампаний" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New reviews and campaign statuses"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Жаңы пикирлер жана кампания статустары"
+          }
+        }
+      }
+    },
+    "Новый баланс" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New balance"
+          }
+        }
+      }
+    },
+    "Новый баланс гостя" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guest's new balance"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Коноктун жаңы балансы"
+          }
+        }
+      }
     },
     "Новый объект" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New item"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Жаңы объект"
+          }
+        }
+      }
     },
     "Новый отзыв" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New review"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Жаңы пикир"
+          }
+        }
+      }
     },
     "Новый филиал" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New branch"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Жаңы филиал"
+          }
+        }
+      }
+    },
+    "Нравится" : {
+
+    },
+    "Нужен аккаунт" : {
 
     },
     "О бизнесе (коротко)" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "About the business (briefly)"
+          }
+        }
+      }
     },
     "О приложении" : {
       "localizations" : {
@@ -1102,7 +4626,6 @@
       }
     },
     "Обменять" : {
-      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1119,10 +4642,24 @@
       }
     },
     "Обменять бонусы?" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exchange bonuses?"
+          }
+        }
+      }
     },
     "Обменять за %lld" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exchange for %lld"
+          }
+        }
+      }
     },
     "Обменять себе" : {
       "localizations" : {
@@ -1141,52 +4678,218 @@
       }
     },
     "Объект" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Item"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Объект"
+          }
+        }
+      }
     },
     "Объект для отзывов" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Item to review"
+          }
+        }
+      }
     },
     "Объекты для отзывов" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Items to review"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Пикир үчүн объекттер"
+          }
+        }
+      }
+    },
+    "Объявление" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Announcement"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Жарыя"
+          }
+        }
+      }
     },
     "Ок" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OK"
+          }
+        }
+      }
     },
     "Они появятся здесь — нажми закладку на любом заведении." : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "They'll appear here — tap the bookmark on any venue."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Алар бул жерде пайда болот — каалаган мекемеде кыстырманы басыңыз."
+          }
+        }
+      }
     },
     "Описание" : {
 
     },
-    "Оплатить и запустить" : {
-
-    },
     "Опубликовать" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Publish"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Жарыялоо"
+          }
+        }
+      }
     },
     "Оскорбительное" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Offensive"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Кемсинтүүчү"
+          }
+        }
+      }
     },
     "Основное" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "General"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Негизги"
+          }
+        }
+      }
+    },
+    "Остаток: %lld. Заберите награду у сотрудника." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Balance: %lld. Collect your reward from the staff."
+          }
+        }
+      }
     },
     "Ответ заведения" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Venue reply"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Мекеменин жообу"
+          }
+        }
+      }
     },
     "Ответ на отзыв" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reply to review"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Пикирге жооп"
+          }
+        }
+      }
     },
     "Ответить" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reply"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Жооп берүү"
+          }
+        }
+      }
     },
     "Отзыв" : {
-
-    },
-    "Отзыв гостя" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Review"
+          }
+        }
+      }
     },
     "Отзыв об объекте: %@" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Review of: %@"
+          }
+        }
+      }
     },
     "Отзывы" : {
       "localizations" : {
@@ -1205,13 +4908,43 @@
       }
     },
     "Отзывы оставляются на конкретные блюда и услуги. Заведение пока не добавило объекты для оценки." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reviews are left for specific dishes and services. This venue hasn't added items to rate yet."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Пикирлер белгилүү тамактарга жана кызматтарга калтырылат. Мекеме азырынча баа берүү үчүн объекттерди кошо элек."
+          }
+        }
+      }
+    },
+    "Отзывы привязаны к аккаунту. Войдите или создайте аккаунт, чтобы оценивать блюда и услуги." : {
 
     },
     "Открой ссылку в приложении Ayant\nи забери купон" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open the link in the Ayant app\nand claim your coupon"
+          }
+        }
+      }
     },
     "Откройте страницу заведения с картой лояльности и покажите её QR сотруднику — за каждый визит штамп, а на финише награда." : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open the venue page with the loyalty card and show its QR to the staff — a stamp for every visit and a reward at the end."
+          }
+        }
+      }
     },
     "Открыто" : {
       "localizations" : {
@@ -1230,10 +4963,33 @@
       }
     },
     "Открыть на карте" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open in maps"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Картадан ачуу"
+          }
+        }
+      }
+    },
+    "Открыть настройки" : {
 
     },
     "Отлично" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Great"
+          }
+        }
+      }
     },
     "Отмена" : {
       "localizations" : {
@@ -1252,34 +5008,238 @@
       }
     },
     "Отменить кампанию" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel campaign"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Кампанияны жокко чыгаруу"
+          }
+        }
+      }
+    },
+    "Отправить ответ" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Send reply"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Жооп жөнөтүү"
+          }
+        }
+      }
     },
     "Отправь другу картинку со ссылкой — он заберёт купон в приложении." : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Send your friend the image with the link — they will claim the coupon in the app."
+          }
+        }
+      }
     },
     "Оценить блюдо или услугу" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rate a dish or service"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Тамак же кызматка баа бериңиз"
+          }
+        }
+      }
     },
     "Оценка" : {
-
-    },
-    "Очки: %lld" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rating"
+          }
+        }
+      }
     },
     "Ошибка" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Error"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ката"
+          }
+        }
+      }
+    },
+    "Пауза между начислениями" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pause between earns"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Эсептөөлөрдүн ортосундагы тыныгуу"
+          }
+        }
+      }
+    },
+    "Пауза скана" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scan cooldown"
+          }
+        }
+      }
+    },
+    "Пекарня" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bakery"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Нан бышыруучу"
+          }
+        }
+      }
     },
     "Период" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Period"
+          }
+        }
+      }
     },
     "По заведениям" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "By venue"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Мекемелер боюнча"
+          }
+        }
+      }
+    },
+    "По одному в строке — гость увидит их списком" : {
 
     },
-    "Поблагодарите или ответьте на замечание…" : {
+    "По сумме чека" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "By check amount"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Чектин суммасы боюнча"
+          }
+        }
+      }
+    },
+    "Повторить" : {
 
+    },
+    "повторные визиты" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "repeat visits"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "кайталанган келүүлөр"
+          }
+        }
+      }
+    },
+    "Повторный ответ — баллы уже были начислены." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Replayed response — the points were already awarded."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Кайталанган жооп — упайлар мурда кошулган."
+          }
+        }
+      }
     },
     "ПОГАШЕНО" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "REDEEMED"
+          }
+        }
+      }
+    },
+    "Погашено купонов" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Coupons redeemed"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Колдонулган купондор"
+          }
+        }
+      }
     },
     "Подарить другу" : {
       "localizations" : {
@@ -1298,16 +5258,44 @@
       }
     },
     "Подарить за %lld" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gift for %lld"
+          }
+        }
+      }
     },
     "Подарить купон?" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gift a coupon?"
+          }
+        }
+      }
     },
     "ПОДАРОК · AYANT" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GIFT · AYANT"
+          }
+        }
+      }
     },
     "Подарок готов!" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your gift is ready!"
+          }
+        }
+      }
     },
     "Поддержка" : {
       "localizations" : {
@@ -1326,7 +5314,14 @@
       }
     },
     "Поделитесь заведением, чтобы получить первые отзывы." : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Share the venue to get your first reviews."
+          }
+        }
+      }
     },
     "Поделиться" : {
       "localizations" : {
@@ -1345,25 +5340,123 @@
       }
     },
     "Поделиться приглашением" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Share invitation"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Чакырууну бөлүшүү"
+          }
+        }
+      }
     },
     "Подключение платёжных методов появится позже." : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Payment method setup will be available later."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Төлөм ыкмаларын туташтыруу кийинчерээк пайда болот."
+          }
+        }
+      }
+    },
+    "Подключите заведение к Ayant" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connect your venue to Ayant"
+          }
+        }
+      }
     },
     "Поднимите заведение в ленте или отправьте push об акции. Запуск за минуту." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Boost your venue in the feed or send a push about a deal. Launch in a minute."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Мекемени лентада жогорулатыңыз же акция жөнүндө push жөнөтүңүз. Бир мүнөттө ишке киргизиңиз."
+          }
+        }
+      }
+    },
+    "Подтвердите удаление через Apple" : {
 
     },
     "Подтверждай только при сотруднике — купон одноразовый." : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Confirm only in front of an employee — the coupon is single-use."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Купонду кызматкердин көзүнчө гана ырастаңыз — ал бир жолу колдонулат."
+          }
+        }
+      }
     },
     "Пожаловаться" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Report"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Даттануу"
+          }
+        }
+      }
     },
     "Пожаловаться на отзыв" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Report review"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Пикирге даттануу"
+          }
+        }
+      }
     },
     "Пожаловаться на фото" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Report photo"
+          }
+        }
+      }
     },
     "Поиск" : {
       "localizations" : {
@@ -1382,43 +5475,265 @@
       }
     },
     "Поиск адреса или места" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search for an address or place"
+          }
+        }
+      }
     },
     "Поиск заведения" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search venue"
+          }
+        }
+      }
     },
     "Пока нет активных кампаний. Запустите первую — и заведение начнёт получать больше просмотров." : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No active campaigns yet. Launch your first one and your venue will start getting more views."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Азырынча активдүү кампаниялар жок. Биринчисин ишке киргизиңиз — мекеме көбүрөөк көрүүлөрдү ала баштайт."
+          }
+        }
+      }
+    },
+    "Пока нет активных предложений." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No active offers yet."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Азырынча активдүү сунуштар жок."
+          }
+        }
+      }
+    },
+    "Пока нет баллов" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No points yet"
+          }
+        }
+      }
     },
     "Пока нет заведений в %@" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No venues in %@ yet"
+          }
+        }
+      }
     },
     "Пока нет карт лояльности" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No loyalty cards yet"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Азырынча лоялдуулук карталары жок"
+          }
+        }
+      }
     },
     "Пока нет объектов." : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No items yet."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Азырынча объекттер жок."
+          }
+        }
+      }
     },
     "Пока нет отзывов" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No reviews yet"
+          }
+        }
+      }
     },
     "Пока нет отзывов. Будь первым!" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No reviews yet. Be the first!"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Азырынча пикир жок. Биринчи болуңуз!"
+          }
+        }
+      }
     },
     "Пока нет предложений. Добавьте, чтобы привлекать гостей." : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No deals yet. Add one to attract guests."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Азырынча сунуштар жок. Конокторду тартуу үчүн кошуңуз."
+          }
+        }
+      }
+    },
+    "Покажите код на кассе — баллы прилетят на карту заведения." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show the code at the till — points land on that venue's card."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Кодду кассада көрсөтүңүз — упайлар мекеменин картасына түшөт."
+          }
+        }
+      }
+    },
+    "Покажите сотруднику — он начислит баллы" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show it to the staff — they'll award the points"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Кызматкерге көрсөтүңүз — ал упай кошот"
+          }
+        }
+      }
     },
     "Покажите сотруднику — он отсканирует для штампа" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show it to an employee — they scan it for a stamp"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Кызматкерге көрсөтүңүз — ал штамп үчүн скандайт"
+          }
+        }
+      }
+    },
+    "Покажите этот QR сотруднику — он спишет баллы и выдаст награду." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show this QR to the staff — they will deduct the points and hand over the reward."
+          }
+        }
+      }
     },
     "Показать QR" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show QR"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "QR көрсөтүү"
+          }
+        }
+      }
+    },
+    "Показать QR для начисления" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show QR to earn"
+          }
+        }
+      }
+    },
+    "Показать ещё %lld" : {
 
     },
     "Показать купон" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show coupon"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Купонду көрсөтүү"
+          }
+        }
+      }
+    },
+    "Показать список" : {
 
     },
     "Показывайте QR карты сотруднику при каждом визите — он сканирует его, и вам засчитывается штамп. Соберите %lld штампов и получите «%@»." : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show the card QR to the staff on every visit — they scan it and you get a stamp. Collect %lld stamps and get “%@”."
+          }
+        },
         "ru" : {
           "stringUnit" : {
             "state" : "new",
@@ -1427,11 +5742,79 @@
         }
       }
     },
+    "Показывайте QR при оплате — сотрудник сканирует его и начисляет баллы. Накопленные баллы тратьте на награды из списка выше." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show the QR when paying — the staff scans it and awards points. Spend the points you collect on the rewards above."
+          }
+        }
+      }
+    },
+    "Показывайте свой QR на кассе в заведениях с баллами САН — карта заведения появится в кошельке после первого начисления." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show your QR at the till in venues with Ayant points — the venue card appears here after your first earn."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "САН упайлары бар мекемелерде кассада QR көрсөтүңүз — биринчи эсептөөдөн кийин мекеменин картасы пайда болот."
+          }
+        }
+      }
+    },
+    "Показывайте свой QR при оплате в заведениях с бонусами САН — за визиты копятся баллы, которые можно потратить на награды. Награды — на странице заведения." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show your QR when paying at venues with SAN points — visits earn points you can spend on rewards. Rewards are on the venue page."
+          }
+        }
+      }
+    },
+    "Политика конфиденциальности" : {
+
+    },
     "Получи купон на акции заведений или обменяй бонусы во вкладке «Бонусы»." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Get a coupon for venue deals or exchange bonuses in the \"Bonuses\" tab."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Мекемелердин акцияларына купон ал же «Бонустар» бөлүмүндө бонустарды алмаштыр."
+          }
+        }
+      }
+    },
+    "Получите купон, чтобы показать QR" : {
 
     },
     "Получить купон" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Get coupon"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Купон алуу"
+          }
+        }
+      }
     },
     "Помощь" : {
       "extractionState" : "stale",
@@ -1467,12 +5850,65 @@
       }
     },
     "Попробуй другое название или расширь расстояние." : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try another name or widen the distance."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Башка ат менен издеп көрүңүз же аралыкты кеңейтиңиз."
+          }
+        }
+      }
+    },
+    "После изменений заведение уйдёт на модерацию — обычно до 24 часов." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "After the changes the venue goes to moderation — usually within 24 hours."
+          }
+        }
+      }
+    },
+    "После изменений предложение уйдёт на модерацию." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "After the changes the deal goes to moderation."
+          }
+        }
+      }
+    },
+    "После отправки заведение попадёт на модерацию. Обычно проверяем в течение суток." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "After submission the venue goes to moderation. We usually review within a day."
+          }
+        }
+      }
     },
     "Посмотреть все адреса (%lld)" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "View all addresses (%lld)"
+          }
+        }
+      }
     },
     "Потратить бонусы" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1488,20 +5924,92 @@
         }
       }
     },
+    "Правила" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rules"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Эрежелер"
+          }
+        }
+      }
+    },
     "Прайс-лист" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Price list"
+          }
+        }
+      }
     },
     "Прайс-лист / каталог (PDF)" : {
-
-    },
-    "Предложение" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Price list / catalog (PDF)"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Прайс-барак / каталог (PDF)"
+          }
+        }
+      }
     },
     "Предложение не найдено" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deal not found"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сунуш табылган жок"
+          }
+        }
+      }
+    },
+    "Предложение публикуется сразу, без модерации." : {
 
     },
     "Предложения" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deals"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сунуштар"
+          }
+        }
+      }
+    },
+    "Предпросмотр" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preview"
+          }
+        }
+      }
     },
     "Пригласить друга" : {
       "extractionState" : "stale",
@@ -1521,31 +6029,153 @@
       }
     },
     "Применить понедельник ко всем дням" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apply Monday to all days"
+          }
+        }
+      }
     },
     "Принимать купоны" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Accept coupons"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Купондорду кабыл алуу"
+          }
+        }
+      }
+    },
+    "Приходите с 11 до 15" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Come between 11 and 15"
+          }
+        }
+      }
     },
     "Проверенный визит" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verified visit"
+          }
+        }
+      }
     },
-    "Проверить купон" : {
-
+    "Проверено" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verified"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Текшерилген"
+          }
+        }
+      }
     },
-    "Проверяем купон…" : {
-
+    "Проверить код" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Check code"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Кодду текшерүү"
+          }
+        }
+      }
+    },
+    "Проверяем код…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking the code…"
+          }
+        }
+      }
     },
     "Программа лояльности" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loyalty programme"
+          }
+        }
+      }
     },
     "Продвигать это заведение" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Promote this venue"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Бул мекемени жарнамалоо"
+          }
+        }
+      }
     },
     "Продвижение" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Promote"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Жарнама"
+          }
+        }
+      }
+    },
+    "Продолжая, вы принимаете [политику конфиденциальности](https://ayant.kg/privacy.html)" : {
 
     },
     "Продолжить" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Continue"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Улантуу"
+          }
+        }
+      }
     },
     "Продолжить как гость" : {
       "extractionState" : "stale",
@@ -1565,10 +6195,52 @@
       }
     },
     "Продолжить с Google" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Continue with Google"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Google менен улантуу"
+          }
+        }
+      }
+    },
+    "просмотров" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "views"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "көрүү"
+          }
+        }
+      }
     },
     "Просмотры профиля" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Profile views"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Профилдин көрүүлөрү"
+          }
+        }
+      }
     },
     "Профиль" : {
       "localizations" : {
@@ -1586,8 +6258,22 @@
         }
       }
     },
-    "Процент скидки" : {
-
+    "Профиль заведения" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Venue profile"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Мекеменин профили"
+          }
+        }
+      }
     },
     "Публикации" : {
       "localizations" : {
@@ -1605,17 +6291,72 @@
         }
       }
     },
-    "Район" : {
+    "Публикация" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Publication"
+          }
+        }
+      }
+    },
+    "Размер списка" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "List size"
+          }
+        }
+      }
+    },
+    "Разрешите доступ в Настройках, чтобы сканировать QR гостей." : {
 
+    },
+    "Район" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "District"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Район"
+          }
+        }
+      }
     },
     "Расскажи о своём опыте…" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tell us about your experience…"
+          }
+        }
+      }
     },
     "Расскажите о вашем бизнесе. Оплата и верификация не требуются." : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tell us about your business. No payment or verification required."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Бизнесиңиз жөнүндө айтып бериңиз. Төлөм жана верификация талап кылынбайт."
+          }
+        }
+      }
     },
     "Расстояние" : {
-      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1632,13 +6373,54 @@
       }
     },
     "Регистрация" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Register"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Каттоо"
+          }
+        }
+      }
     },
     "Режим заведения" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Business mode"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Мекеме режими"
+          }
+        }
+      }
+    },
+    "Режим задаётся в админ-панели — здесь он только показан." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The mode is set in the admin panel — shown here only."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Режим админ-панелде коюлат — бул жерде көрсөтүлөт гана."
+          }
+        }
+      }
     },
     "Рейтинг" : {
-      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1654,8 +6436,37 @@
         }
       }
     },
+    "Рейтинг 4+" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rating 4+"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Рейтинг 4+"
+          }
+        }
+      }
+    },
     "Реквизиты и контакты" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Details and contacts"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Реквизиттер жана байланыштар"
+          }
+        }
+      }
     },
     "Реклама" : {
       "localizations" : {
@@ -1673,65 +6484,479 @@
         }
       }
     },
+    "РЕКЛАМА" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AD"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ЖАРНАК"
+          }
+        }
+      }
+    },
     "рекомендуем заведение" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "recommended venue"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "сунушталган мекеме"
+          }
+        }
+      }
+    },
+    "Ресторан" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Restaurant"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ресторан"
+          }
+        }
+      }
     },
     "Русский" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Русский"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Русский"
+          }
+        }
+      }
+    },
+    "Рядом" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nearby"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Жакын жерде"
+          }
+        }
+      }
+    },
+    "Рядом с вами" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Near you"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Жаныңызда"
+          }
+        }
+      }
     },
     "с" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "from"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "-дан"
+          }
+        }
+      }
+    },
+    "С 11:00 до 15:00" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "From 11:00 to 15:00"
+          }
+        }
+      }
+    },
+    "С 11:00 до 15:00 на все виды мантов" : {
 
+    },
+    "с последней активности гостя" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "from the guest's last activity"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "коноктун акыркы аракетинен"
+          }
+        }
+      }
     },
     "Сайт" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Website"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сайт"
+          }
+        }
+      }
+    },
+    "Сбросить" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reset"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Тазалоо"
+          }
+        }
+      }
     },
     "Сбросить фильтр" : {
-
-    },
-    "Свайп ←/→ — двигать · вверх — сбросить · вниз — вниз · тап — поворот" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reset filter"
+          }
+        }
+      }
     },
     "Свайпай, чтобы поворачивать" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Swipe to turn"
+          }
+        }
+      }
+    },
+    "свернуть" : {
 
     },
     "Связаться с нами" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Contact us"
+          }
+        }
+      }
+    },
+    "Сгорание" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Expiry"
+          }
+        }
+      }
     },
     "Сделаю позже" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "I’ll do it later"
+          }
+        }
+      }
     },
     "Сегодня" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Today"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Бүгүн"
+          }
+        }
+      }
     },
     "Сегодня в избранном" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Today at your favorites"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Бүгүн тандалмаларда"
+          }
+        }
+      }
     },
     "Сегодняшний специал" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Today’s special"
+          }
+        }
+      }
+    },
+    "Сканер" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scanner"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сканер"
+          }
+        }
+      }
     },
     "Сканер купонов" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Coupon scanner"
+          }
+        }
+      }
+    },
+    "Сканировать QR заведения" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scan a venue QR"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Мекеменин QR кодун сканерлөө"
+          }
+        }
+      }
     },
     "Сканировать ещё" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scan again"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Дагы скандоо"
+          }
+        }
+      }
     },
     "Сканировать купоны гостей" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scan guest coupons"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Конактардын купондорун скандоо"
+          }
+        }
+      }
+    },
+    "Скидка" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Discount"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Арзандатуу"
+          }
+        }
+      }
+    },
+    "Скидка — целое число от 1 до 99" : {
 
+    },
+    "Скидка 30% сегодня" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "30% off today"
+          }
+        }
+      }
+    },
+    "Скидка баллами · от %lld б." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Discount with points · from %lld pts"
+          }
+        }
+      }
+    },
+    "Скидка, %" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Discount, %"
+          }
+        }
+      }
+    },
+    "Скидка: %lld сом" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Discount: %lld som"
+          }
+        }
+      }
     },
     "скидки • акции • новинки" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "discounts • deals • new"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "арзандатуулар • акциялар • жаңылыктар"
+          }
+        }
+      }
     },
     "Скрыть QR" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hide QR"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "QR жашыруу"
+          }
+        }
+      }
     },
     "Скрыть адреса" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hide addresses"
+          }
+        }
+      }
     },
     "Смотреть все (%lld)" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "View all (%lld)"
+          }
+        }
+      }
     },
     "Сначала добавьте заведение" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add a venue first"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Адегенде мекеме кошуңуз"
+          }
+        }
+      }
     },
     "Со скидкой" : {
       "extractionState" : "stale",
@@ -1750,8 +6975,69 @@
         }
       }
     },
+    "сом" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "som"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "сом"
+          }
+        }
+      }
+    },
     "Сотрудник сканирует QR и применяет предложение перед оплатой." : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "An employee scans the QR and applies the deal before payment."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Кызматкер QR кодду скандап, төлөмдөн мурун сунушту колдонот."
+          }
+        }
+      }
+    },
+    "сотрудник сканирует QR награды" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "staff scans the reward QR"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "кызматкер сыйлыктын QR кодун скандайт"
+          }
+        }
+      }
+    },
+    "Сохранения" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saves"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сактоолор"
+          }
+        }
+      }
     },
     "Сохранённое" : {
       "localizations" : {
@@ -1768,9 +7054,6 @@
           }
         }
       }
-    },
-    "Сохранили %lld человек" : {
-
     },
     "Сохранить" : {
       "localizations" : {
@@ -1789,34 +7072,180 @@
       }
     },
     "Сохранить как черновик" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save as draft"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Долбоор катары сактоо"
+          }
+        }
+      }
     },
     "Сохранить специал" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save special"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Өзгөчө сунушту сактоо"
+          }
+        }
+      }
     },
     "Сохраняй любимые места" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save your favorite places"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сүйгөн жерлериңизди сактаңыз"
+          }
+        }
+      }
     },
     "Сохраняй предложения" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save deals"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сунуштарды сактаңыз"
+          }
+        }
+      }
     },
     "Соцсети" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Social media"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Социалдык тармактар"
+          }
+        }
+      }
     },
     "Спам" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Spam"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Спам"
+          }
+        }
+      }
     },
     "Спасибо, жалоба отправлена" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Thanks, your report has been sent"
+          }
+        }
+      }
     },
     "спецпредложение" : {
-
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "special offer"
+          }
+        }
+      }
+    },
+    "Списание баллов" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Redeeming points"
+          }
+        }
+      }
+    },
+    "Списано %lld баллов" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld points deducted"
+          }
+        }
+      }
+    },
+    "Списать %lld баллов" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deduct %lld points"
+          }
+        }
+      }
     },
     "Список блюд или услуг. Гости откроют его на странице заведения." : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A list of dishes or services. Guests will open it on the venue page."
+          }
+        }
+      }
+    },
+    "Списываем…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deducting…"
+          }
+        }
+      }
     },
     "Спишется %lld бонусов. Отправь ссылку другу — он заберёт «%@»." : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld bonuses will be deducted. Send the link to a friend — they will claim “%@”."
+          }
+        },
         "ru" : {
           "stringUnit" : {
             "state" : "new",
@@ -1826,16 +7255,118 @@
       }
     },
     "Способ оплаты" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Payment method"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Төлөм ыкмасы"
+          }
+        }
+      }
     },
-    "Срок" : {
+    "средний чек" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "average check"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "орточо чек"
+          }
+        }
+      }
+    },
+    "Срок сгорания" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Expiry"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Күйүү мөөнөтү"
+          }
+        }
+      }
+    },
+    "Статистика копится из реальных действий гостей: просмотров заведения, сохранений и сканов в зале. В первые недели цифры будут небольшими — это нормально." : {
 
     },
     "Статистика появится после первых просмотров заведения." : {
-
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Statistics will appear after the venue’s first views."
+          }
+        }
+      }
+    },
+    "Стоимость: %lld баллов" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cost: %lld points"
+          }
+        }
+      }
+    },
+    "Столько же за любой визит" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The same for any visit"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ар бир келүү үчүн бирдей"
+          }
+        }
+      }
+    },
+    "Сумма чека" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bill amount"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Чектин суммасы"
+          }
+        }
+      }
     },
     "Счёт: %lld → +%lld бонусов" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Score: %lld → +%lld bonuses"
+          }
+        },
         "ru" : {
           "stringUnit" : {
             "state" : "new",
@@ -1844,23 +7375,70 @@
         }
       }
     },
+    "Так гости увидят вас в ленте" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This is how guests will see you in the feed"
+          }
+        }
+      }
+    },
+    "Так карта выглядит у гостя" : {
+
+    },
     "Также в профиле каждого заведения доступна вся справочная информация: точный адрес, контакты и ссылки на соцсети." : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Each venue’s profile also has all the reference information: exact address, contacts and social links."
+          }
+        }
+      }
     },
-    "Твой баланс" : {
-
-    },
-    "Текст (до 120)" : {
-
-    },
-    "Текст уведомления" : {
-
+    "Текст push (до 120)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Push text (up to 120)"
+          }
+        }
+      }
     },
     "Телефон" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Phone"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Телефон"
+          }
+        }
+      }
     },
     "Телефон (необязательно)" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Phone (optional)"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Телефон (милдеттүү эмес)"
+          }
+        }
+      }
     },
     "Тема" : {
       "extractionState" : "stale",
@@ -1896,118 +7474,758 @@
       }
     },
     "Тип" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Type"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Түрү"
+          }
+        }
+      }
     },
     "Только для аккаунтов" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Accounts only"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Аккаунттар үчүн гана"
+          }
+        }
+      }
     },
     "Точка на карте" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Point on the map"
+          }
+        }
+      }
     },
     "Ты ещё не оставил ни одного отзыва." : {
-
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You haven't left any reviews yet."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сиз азырынча бир да пикир калтыра элексиз."
+          }
+        }
+      }
     },
     "У вас есть синяя галочка." : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You have the blue check."
+          }
+        }
+      }
     },
     "У вас пока нет заведений" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You have no venues yet"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сизде азырынча мекемелер жок"
+          }
+        }
+      }
+    },
+    "У заведения включены баллы САН — карта штампов не начисляется. Механика лояльности одна: либо баллы, либо штампы." : {
 
     },
     "У заведения пока нет объектов для отзыва. Оценить можно конкретное блюдо или услугу — попросите заведение добавить их." : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This venue has no items to review yet. You can rate a specific dish or service — ask the venue to add them."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Мекемеде азырынча пикир калтыруу үчүн объекттер жок. Белгилүү тамакка же кызматка баа берсе болот — мекемеден кошууну сураныңыз."
+          }
+        }
+      }
     },
     "Убрать" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remove"
+          }
+        }
+      }
+    },
+    "Убрать из сохранённых" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remove from saved"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сакталгандардан алып салуу"
+          }
+        }
+      }
+    },
+    "Убрать отметку «нравится»" : {
 
+    },
+    "Уведомления" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Notifications"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Билдирүүлөр"
+          }
+        }
+      }
     },
     "Удалить" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Өчүрүү"
+          }
+        }
+      }
     },
     "Удалить аккаунт" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete account"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Аккаунтту өчүрүү"
+          }
+        }
+      }
     },
     "Удалить аккаунт?" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete account?"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Аккаунтту өчүрөсүзбү?"
+          }
+        }
+      }
     },
     "Удалить заведение" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete venue"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Мекемени өчүрүү"
+          }
+        }
+      }
     },
     "Удалить заведение?" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete venue?"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Мекемени өчүрөсүзбү?"
+          }
+        }
+      }
     },
     "Управляйте своим бизнесом" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Manage your business"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Бизнесиңизди башкарыңыз"
+          }
+        }
+      }
+    },
+    "Условия" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Terms"
+          }
+        }
+      }
     },
     "Услуга" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Service"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Кызмат"
+          }
+        }
+      }
+    },
+    "Фастфуд" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fast food"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Фастфуд"
+          }
+        }
+      }
     },
     "Фейк" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fake"
+          }
+        }
+      }
+    },
+    "Фикс" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flat"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Туруктуу"
+          }
+        }
+      }
     },
     "Филиал" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Branch"
+          }
+        }
+      }
     },
     "Филиалы (доп. адреса)" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Branches (additional addresses)"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Филиалдар (кошумча даректер)"
+          }
+        }
+      }
+    },
+    "Фильтры" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Filters"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Чыпкалар"
+          }
+        }
+      }
     },
     "ФИО предпринимателя" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Entrepreneur full name"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ишкердин аты-жөнү"
+          }
+        }
+      }
     },
     "Форма деятельности" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Legal form"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ишкердик формасы"
+          }
+        }
+      }
     },
     "Форма и реквизиты" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Legal form and details"
+          }
+        }
+      }
     },
     "Фото" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Photos"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сүрөттөр"
+          }
+        }
+      }
     },
-    "Фото (до 3 — листаются каруселью)" : {
-
+    "ФОТО" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PHOTO"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "СҮРӨТ"
+          }
+        }
+      }
     },
     "Фото (до 3)" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Photos (up to 3)"
+          }
+        }
+      }
     },
     "Фото заведения" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Venue photo"
+          }
+        }
+      }
     },
     "Фото объекта" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Item photo"
+          }
+        }
+      }
+    },
+    "Цена — целое число сомов, не меньше 0" : {
 
     },
-    "Цена / скидка (необязательно)" : {
-
+    "Чайхана" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Teahouse"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Чайкана"
+          }
+        }
+      }
     },
     "Часы работы" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opening hours"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Иштөө убактысы"
+          }
+        }
+      }
+    },
+    "Чек" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Check"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Чек"
+          }
+        }
+      }
+    },
+    "Черновик не виден гостям" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A draft is not visible to guests"
+          }
+        }
+      }
+    },
+    "Черновик не виден гостям — опубликуйте, когда будет готово." : {
 
+    },
+    "Что видит гость" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "What the guest sees"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Конок эмнени көрөт"
+          }
+        }
+      }
     },
     "Что оцениваете" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "What are you rating"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Эмнеге баа бересиз"
+          }
+        }
+      }
     },
     "Что продвигаем" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "What to promote"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Эмнени жарнамалайбыз"
+          }
+        }
+      }
     },
     "Широта" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Latitude"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Кеңдик"
+          }
+        }
+      }
+    },
+    "Штамп" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stamp"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Штамп"
+          }
+        }
+      }
+    },
+    "Штамп за визит: сотрудник сканирует QR вашей карты." : {
+
+    },
+    "штамп за каждый визит" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "a stamp for every visit"
+          }
+        }
+      }
+    },
+    "Штамп за каждый использованный купон" : {
 
     },
     "Штамп начисляется за каждый использованный купон в этом заведении." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A stamp is given for every coupon used at this venue."
+          }
+        }
+      }
+    },
+    "Штампов до награды" : {
 
     },
     "Штампов до награды: %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stamps until reward: %lld"
+          }
+        }
+      }
+    },
+    "экономия %lld сом" : {
 
     },
     "Эмодзи" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Emoji"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Эмодзи"
+          }
+        }
+      }
     },
     "Эмодзи (если без фото)" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Emoji (if no photo)"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Эмодзи (сүрөтсүз болсо)"
+          }
+        }
+      }
     },
     "Эти данные видны только вам и модерации Ayant — они помогают быстрее пройти верификацию." : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This data is visible only to you and Ayant moderation — it helps you get verified faster."
+          }
+        }
+      }
     },
     "Это действие необратимо. Все отзывы и сохранённое будут удалены." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This action cannot be undone. All reviews and saved items will be deleted."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Бул аракетти артка кайтарууга болбойт. Бардык пикирлер жана сакталгандар өчүрүлөт."
+          }
+        }
+      }
+    },
+    "Это действие необратимо. Все отзывы, сохранённое, баллы и купоны будут удалены." : {
 
     },
+    "Это повтор предыдущего запроса — баллы списаны один раз." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This is a repeat of the previous request — the points were deducted once."
+          }
+        }
+      }
+    },
     "Юридический адрес" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Legal address"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Юридикалык дарек"
+          }
+        }
+      }
+    },
+    "Я гость" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "I'm a guest"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Мен конокмун"
+          }
+        }
+      }
     },
     "Язык" : {
       "extractionState" : "stale",

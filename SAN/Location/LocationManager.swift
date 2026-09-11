@@ -1,5 +1,6 @@
 import Foundation
 import CoreLocation
+import AyantDomain
 
 /// Управляет «while using» геолокацией. Публикует только последнюю позицию —
 /// история не хранится (по спецификации). Если доступ не выдан — расстояния скрыты.
@@ -36,20 +37,22 @@ final class LocationManager: NSObject, ObservableObject {
 
     // MARK: - Расстояние (Haversine, км)
 
-    /// Расстояние от пользователя до точки. nil — если позиция неизвестна.
+    /// Расстояние от пользователя до точки.
+    ///
+    /// `nil` — если позиция неизвестна ИЛИ она бессмысленно далеко от каталога
+    /// (см. `GeoDisplay`). Отсекаем здесь, в одном месте: все вызывающие уже
+    /// умеют прятать расстояние при `nil`, поэтому «11358.7 км» исчезает разом
+    /// везде — в поиске, ленте, карточке заведения и сохранённом.
     func distanceKm(to lat: Double, _ lng: Double) -> Double? {
         guard let me = lastLocation else { return nil }
-        return Self.haversine(me.latitude, me.longitude, lat, lng)
+        let km = Self.haversine(me.latitude, me.longitude, lat, lng)
+        return GeoDisplay.isMeaningful(km) ? km : nil
     }
 
+    /// Единственная реализация — в `Ranking.haversineKm` (Domain). Здесь — совместимый
+    /// фасад для существующих вызовов геолокации.
     static func haversine(_ lat1: Double, _ lon1: Double, _ lat2: Double, _ lon2: Double) -> Double {
-        let r = 6371.0 // радиус Земли, км
-        let dLat = (lat2 - lat1) * .pi / 180
-        let dLon = (lon2 - lon1) * .pi / 180
-        let a = sin(dLat / 2) * sin(dLat / 2)
-            + cos(lat1 * .pi / 180) * cos(lat2 * .pi / 180)
-            * sin(dLon / 2) * sin(dLon / 2)
-        return r * 2 * atan2(sqrt(a), sqrt(1 - a))
+        Ranking.haversineKm(lat1, lon1, lat2, lon2)
     }
 }
 

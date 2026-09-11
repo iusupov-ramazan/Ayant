@@ -1,5 +1,6 @@
 package kg.ayant.app.ui.bonus
 
+import androidx.compose.runtime.collectAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -32,6 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,7 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kg.ayant.app.R
-import kg.ayant.app.data.model.LoyaltyCard
+import kg.ayant.app.domain.model.LoyaltyCard
 import kg.ayant.app.ui.components.QrCode
 import kg.ayant.app.ui.theme.AyantTheme
 import kg.ayant.app.ui.vm.AppViewModel
@@ -54,9 +56,10 @@ import kg.ayant.app.ui.vm.LoyaltyViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LoyaltyScreen(onBack: () -> Unit) {
+fun LoyaltyScreen(vm: LoyaltyViewModel, onBack: () -> Unit) {
     val c = AyantTheme.colors
-    val vm: LoyaltyViewModel = viewModel()
+    val cards by vm.cards.collectAsState()
+    LaunchedEffect(Unit) { vm.observe(vm.userID) }   // живой поток, опроса нет
     Scaffold(
         containerColor = c.canvas,
         topBar = {
@@ -67,7 +70,7 @@ fun LoyaltyScreen(onBack: () -> Unit) {
             )
         },
     ) { padding ->
-        if (vm.cards.isEmpty()) {
+        if (cards.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Icon(Icons.Filled.CardGiftcard, null, tint = c.accent, modifier = Modifier.size(48.dp))
@@ -77,7 +80,7 @@ fun LoyaltyScreen(onBack: () -> Unit) {
             }
         } else {
             Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                vm.cards.forEach { LoyaltyCardView(it, vm.userID) }
+                cards.forEach { LoyaltyCardView(it, vm.userID) }
             }
         }
     }
@@ -149,9 +152,9 @@ fun LoyaltyCardView(card: LoyaltyCard, userID: String) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun VenueLoyaltyScreen(venueID: String, app: AppViewModel, onBack: () -> Unit) {
+fun VenueLoyaltyScreen(venueID: String, app: AppViewModel, vm: LoyaltyViewModel, onBack: () -> Unit) {
     val c = AyantTheme.colors
-    val vm: LoyaltyViewModel = viewModel()
+    LaunchedEffect(Unit) { vm.observe(vm.userID) }   // живой поток, опроса нет
     val venue = app.venue(id = venueID) ?: run {
         Box(Modifier.fillMaxSize().background(c.canvas), contentAlignment = Alignment.Center) { Text(stringResource(R.string.venue_not_found)) }
         return

@@ -8,6 +8,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -33,14 +34,15 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         deepLink.value = routeFrom(intent?.data)
         setContent {
-            val theme: ThemeViewModel = viewModel()
-            val dark = when (theme.theme) {
+            val theme: ThemeViewModel = viewModel(factory = kg.ayant.app.core.ayantFactory())
+            val themeMode by theme.theme.collectAsState()
+            val dark = when (themeMode) {
                 AppTheme.LIGHT -> false
                 AppTheme.DARK -> true
                 AppTheme.SYSTEM -> isSystemInDarkTheme()
             }
             AyantTheme(darkTheme = dark) {
-                val session: SessionViewModel = viewModel()
+                val session: SessionViewModel = viewModel(factory = kg.ayant.app.core.ayantFactory())
                 val link by deepLink
                 RootGate(session = session, initialDeepLink = link, theme = theme)
             }

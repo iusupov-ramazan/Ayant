@@ -6,9 +6,9 @@ import android.content.Intent
 import android.net.Uri
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import kg.ayant.app.core.AppConfig
 import kg.ayant.app.MainActivity
 import kg.ayant.app.R
 import kotlin.random.Random
@@ -24,10 +24,9 @@ class AyantMessagingService : FirebaseMessagingService() {
         // Persist so the backend can target this device (city added on sign-in too).
         val prefs = getSharedPreferences("ayant.store", 0)
         val city = prefs.getString("san.city", "bishkek") ?: "bishkek"
-        runCatching {
-            FirebaseFirestore.getInstance().collection("userTokens").document(token)
-                .set(mapOf("city" to city, "updatedAt" to System.currentTimeMillis()))
-        }
+        // Запись идёт через слой данных: этот класс — точка входа FCM, а не место
+        // для обращений к Firestore.
+        AppConfig.makePushService().registerKnownToken(token, uid = null, citySlug = city)
     }
 
     @SuppressLint("MissingPermission")
