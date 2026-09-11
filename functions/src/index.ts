@@ -82,7 +82,10 @@ const REFERRAL_MAX_REWARDS = capFromEnv(process.env.REFERRAL_MAX_REWARDS, 20);
 // ── Баллы САН (per-venue ledger, System 1) ──────────────────────────────────
 // 1 балл = 1 сом при погашении. Гардрейлы (даже при self-serve конфиге хоста):
 const DEFAULT_EARN_COOLDOWN_MIN = 60;   // не чаще 1 начисления баллов на гостя/заведение
-const DEFAULT_STAMP_COOLDOWN_MIN = 15;  // не чаще 1 штампа лояльности на гостя/заведение
+// Штампы: не чаще одного на гостя/заведение за это окно. Дефолт 15 мин;
+// на время тестирования переопределяется через env STAMP_COOLDOWN_MIN
+// (0 — без паузы). В продакшене переменную не задавать.
+const DEFAULT_STAMP_COOLDOWN_MIN = capFromEnv(process.env.STAMP_COOLDOWN_MIN, 15);
 const DEFAULT_EXPIRY_MONTHS = 6;        // баллы сгорают после N мес. без активности
 const MAX_CASHBACK_PERCENT = 20;        // потолок кэшбэка (защита от опечатки «50%»)
 const MAX_POINTS_PER_EARN = 10000;      // потолок за одно начисление
@@ -770,7 +773,7 @@ export const scanCoupon = onRequest(MONEY_PATH_OPTS, async (req, res) => {
       if (!cardUser || cardVenue !== venueID) { res.status(409).json({ error: "wrong_venue" }); return; }
 
       const nowMs = Date.now();
-      const cooldownMin = DEFAULT_STAMP_COOLDOWN_MIN;   // штампы: 15 мин (отдельно от баллов)
+      const cooldownMin = DEFAULT_STAMP_COOLDOWN_MIN;   // штампы: 15 мин по умолчанию (отдельно от баллов)
       const cardRef = db.collection("loyaltyCards").doc(`${cardUser}_${venueID}`);
       const keyRef = idempotencyKey ? cardRef.collection("scanKeys").doc(idempotencyKey) : null;
 
