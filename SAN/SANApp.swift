@@ -157,6 +157,20 @@ struct SANApp: App {
                 hostStore.send(.configure(ownerID: new))
                 hostStore.send(.sync)
             }
+            // Штампы пришли листенером: если карта заполнилась, сервер выдал
+            // купон-награду — подтягиваем купоны сразу и говорим об этом гостю,
+            // не дожидаясь следующего запуска.
+            .onChange(of: loyalty.cards) { old, new in
+                guard let uid = session.user?.id, !session.isGuest else { return }
+                let completed = new.first { card in
+                    let before = old.first { $0.venueID == card.venueID }?.completedRounds ?? 0
+                    return card.completedRounds > before
+                }
+                if let completed {
+                    store.toastMessage = "🎉 Карта «\(completed.venueName)» заполнена — купон «\(completed.reward)» в «Мои купоны»"
+                }
+                Task { await coupons.sync(userID: uid) }
+            }
             .onChange(of: bonus.reachedGoalToday) { _, reached in
                 NotificationManager.refresh(reachedGoalToday: reached)
             }

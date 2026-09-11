@@ -464,3 +464,35 @@ test("CARD: ключ хранит выданную награду, повтор 
   assert.equal(retry.body.replayed, true);
   assert.equal(h.read(`loyaltyCards/u1_${VENUE}`).completedRounds, 1);   // …но круг один
 });
+
+/* ═══════════════════════ Аналитика баллов для хоста ═══════════════════════ */
+
+function analyticsDayOf(h, venue) {
+  for (const [path, data] of h.db.store.entries()) {
+    if (path.startsWith(`analytics/${venue}/days/`)) return data;
+  }
+  return undefined;
+}
+
+test("PTS: начисление считается в аналитике (сумма баллов)", async () => {
+  const h = harness();
+  seedVenue(h, { pointsEnabled: true, pointsMode: "flat", pointsFlat: 25 });
+  const res = await scan(h, { code: "AYANT-PTS:u1", venueID: VENUE, idempotencyKey: "e-1" });
+  assert.equal(res.statusCode, 200);
+  assert.equal(analyticsDayOf(h, VENUE).pointsEarned, 25);
+  // Повтор с тем же ключом — не второе начисление и не второй счётчик.
+  await scan(h, { code: "AYANT-PTS:u1", venueID: VENUE, idempotencyKey: "e-1" });
+  assert.equal(analyticsDayOf(h, VENUE).pointsEarned, 25);
+});
+
+test("redeem: списание считает баллы и выданную награду", async () => {
+  const h = harness();
+  seedVenue(h, { pointsEnabled: true, pointsRewards: [ITEM_REWARD], redeemMode: "staffScan" });
+  h.seed(`venuePoints/${GUEST}_${VENUE}`, { userID: GUEST, venueID: VENUE, balance: 300 });
+  const res = await redeem(h, TOKEN, { venueID: VENUE, userID: GUEST, rewardId: "r1", idempotencyKey: "rd-1" });
+  assert.equal(res.statusCode, 200, JSON.stringify(res.body));
+  assert.equal(analyticsDayOf(h, VENUE).pointsRedeemed, 100);
+  assert.equal(analyticsDayOf(h, VENUE).rewardsIssued, 1);
+  await redeem(h, TOKEN, { venueID: VENUE, userID: GUEST, rewardId: "r1", idempotencyKey: "rd-1" });
+  assert.equal(analyticsDayOf(h, VENUE).pointsRedeemed, 100, "replay не считается второй раз");
+});

@@ -232,3 +232,63 @@ test("скан купона без userID не пишет метку (нечег
   await call(h, post({ code: "ABC", venueID: VENUE }));
   assert.equal(rankingEvent(h), undefined);
 });
+
+/* ── Заполненная карта → купон-награда + серверная аналитика ────────────── */
+
+function couponsOf(h) {
+  const out = [];
+  for (const [path, data] of h.db.store.entries()) if (path.startsWith("coupons/")) out.push(data);
+  return out;
+}
+
+test("CARD: штамп считается в аналитике заведения", async () => {
+  const h = makeHarness({ tokens: { [TOKEN]: HOST } });
+  seedVenue(h);
+  const res = await call(h, post({ code: `AYANT-CARD:u1:${VENUE}`, venueID: VENUE, idempotencyKey: "k-1" }));
+  assert.equal(res.statusCode, 200);
+  assert.equal(analyticsDay(h, VENUE).stamps, 1);
+  assert.equal(analyticsDay(h, VENUE).rewardsIssued, undefined);
+  assert.equal(couponsOf(h).length, 0, "до заполнения купона нет");
+});
+
+test("CARD: заполненная карта выдаёт купон-награду и считает награду", async () => {
+  const h = makeHarness({ tokens: { [TOKEN]: HOST } });
+  seedVenue(h, { loyaltyGoal: 3, loyaltyReward: "Кофе в подарок" });
+  h.seed(`loyaltyCards/u1_${VENUE}`, {
+    userID: "u1", venueID: VENUE, stamps: 2, completedRounds: 0, lastStampAt: { toMillis: () => 0 },
+  });
+  const res = await call(h, post({ code: `AYANT-CARD:u1:${VENUE}`, venueID: VENUE, idempotencyKey: "k-2" }));
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.rewardIssued, true);
+  assert.equal(h.read(`loyaltyCards/u1_${VENUE}`).stamps, 0);
+
+  const coupons = couponsOf(h);
+  assert.equal(coupons.length, 1);
+  assert.equal(coupons[0].userID, "u1");
+  assert.equal(coupons[0].venueID, VENUE);
+  assert.equal(coupons[0].kind, "loyalty");
+  assert.equal(coupons[0].title, "Кофе в подарок");
+  assert.equal(coupons[0].used, false);
+  assert.match(coupons[0].code, /^AYANT-[A-Z2-9]{6}$/);
+
+  assert.equal(analyticsDay(h, VENUE).stamps, 1);
+  assert.equal(analyticsDay(h, VENUE).rewardsIssued, 1);
+
+  // Повтор того же скана: ни второго купона, ни второй награды в аналитике.
+  const again = await call(h, post({ code: `AYANT-CARD:u1:${VENUE}`, venueID: VENUE, idempotencyKey: "k-2" }));
+  assert.equal(again.body.replayed, true);
+  assert.equal(couponsOf(h).length, 1);
+  assert.equal(analyticsDay(h, VENUE).rewardsIssued, 1);
+});
+
+test("купон-награда сканируется как обычный купон и считается в «Погашено»", async () => {
+  const h = makeHarness({ tokens: { [TOKEN]: HOST } });
+  seedVenue(h);
+  h.seed("coupons/c-loyalty", { userID: "u1", venueID: VENUE, title: "Кофе в подарок",
+                                code: "AYANT-ABC234", kind: "loyalty", dealID: "", used: false });
+  const res = await call(h, post({ code: "AYANT-ABC234", venueID: VENUE }));
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.title, "Кофе в подарок");
+  assert.equal(h.read("coupons/c-loyalty").used, true);
+  assert.equal(analyticsDay(h, VENUE).redemptions, 1);
+});

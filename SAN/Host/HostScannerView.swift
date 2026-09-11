@@ -610,7 +610,7 @@ enum ScanResultUI {
         case .success(let o):
             if o.points { return "Начислено \(o.awarded). Баланс гостя: \(o.balance) баллов." }
             guard o.loyalty else { return "Купон погашен." }
-            if o.rewardIssued { return "🎉 Карта заполнена! Сегодня награда: «\(o.rewardTitle)» — выдайте гостю." }
+            if o.rewardIssued { return "🎉 Карта заполнена! Гостю выдан купон «\(o.rewardTitle)» — он уже в «Мои купоны»; погасить можно сразу или в следующий визит." }
             // Итог — второй строкой: «2 из 6» — это всего на карте, не за скан.
             let total = "Всего на карте: \(o.stamps) из \(o.goal)."
             return o.title.isEmpty ? total : "Купон «\(o.title)» погашен. \(total)"

@@ -20,6 +20,7 @@ import { getMessaging } from "firebase-admin/messaging";
 import { getAuth } from "firebase-admin/auth";
 import * as fs from "fs";
 import * as path from "path";
+import * as crypto from "crypto";
 import type {
   Numeric,
   VenueDoc,
@@ -190,6 +191,31 @@ function toMillis(v: unknown): number {
   return v && typeof (v as { toMillis?: () => number }).toMillis === "function"
     ? (v as { toMillis: () => number }).toMillis()
     : 0;
+}
+
+/**
+ * Дневной счётчик заведения (`analytics/{venueID}/days/{day}`): несколько
+ * метрик одной записью. Не роняет ответ на скан, но и не молчит при ошибке.
+ * Здесь считаются ВСЕ серверные события лояльности — штампы, награды, баллы —
+ * иначе хост видел бы только купоны, а стамп-карта и баллы оставались невидимыми.
+ */
+function bumpAnalytics(venueID: string, inc: Record<string, number>): Promise<void> {
+  const day = dayKey();
+  const data: Record<string, unknown> = { date: day };
+  for (const [k, v] of Object.entries(inc)) if (v > 0) data[k] = FieldValue.increment(v);
+  if (Object.keys(data).length === 1) return Promise.resolve();
+  return db.collection("analytics").doc(venueID).collection("days").doc(day)
+    .set(data, { merge: true })
+    .then(() => undefined)
+    .catch((e) => console.warn(`⚠️ analytics increment failed: venue=${venueID}`, e));
+}
+
+/** Код купона-награды за заполненную карту — тот же формат, что у купонов акций. */
+function newCouponCode(): string {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let s = "";
+  for (const b of crypto.randomBytes(6)) s += alphabet[b % alphabet.length];
+  return `AYANT-${s}`;
 }
 
 // Рассылка идёт только после одобрения админом (status: "approved") и один раз
@@ -844,7 +870,7 @@ export const scanCoupon = onRequest(MONEY_PATH_OPTS, async (req, res) => {
         return;
       }
 
-      let stamps = 0, rewardIssued = false;
+      let stamps = 0, rewardIssued = false, applied = false;
       await db.runTransaction(async (tx) => {
         // Все чтения до записей (требование транзакций Firestore).
         const priorTx = keyRef ? await tx.get(keyRef) : null;
@@ -864,9 +890,21 @@ export const scanCoupon = onRequest(MONEY_PATH_OPTS, async (req, res) => {
           userID: cardUser, venueID, venueName, goal, reward,
           stamps: s, completedRounds: rounds, lastStampAt: new Date(nowMs), updatedAt: new Date(),
         }, { merge: true });
+        if (rewardIssued) {
+          // Награда — купон гостю: виден в «Мои купоны» и сканируется как
+          // обычный купон (ветка B) сразу или в следующий визит. Раньше награда
+          // существовала только в словах сотрудника и нигде не записывалась.
+          tx.set(db.collection("coupons").doc(), {
+            userID: cardUser, venueID, venueName, title: reward,
+            code: newCouponCode(), kind: "loyalty", dealID: "",
+            used: false, createdAt: new Date(nowMs), source: "loyaltyCard",
+          });
+        }
         if (keyRef) tx.set(keyRef, { code, stamps: s, rewardIssued, at: new Date(nowMs) });
         stamps = s;
+        applied = true;
       });
+      if (applied) await bumpAnalytics(venueID, { stamps: 1, rewardsIssued: rewardIssued ? 1 : 0 });
       res.status(200).json({
         ok: true, loyalty: true,
         title: rewardIssued ? "Карта заполнена!" : "Штамп начислен",
@@ -941,7 +979,7 @@ export const scanCoupon = onRequest(MONEY_PATH_OPTS, async (req, res) => {
         return;
       }
 
-      let balance = 0;
+      let balance = 0, appliedEarn = false;
       await db.runTransaction(async (tx) => {
         // Все чтения до записей (требование транзакций Firestore).
         const priorTx = keyRef ? await tx.get(keyRef) : null;
@@ -954,6 +992,7 @@ export const scanCoupon = onRequest(MONEY_PATH_OPTS, async (req, res) => {
         }
         const curLast = toMillis(cur.lastEarnAt);
         if (cooldownMin > 0 && nowMs - curLast < cooldownMin * 60000) throw new Error("cooldown");
+        appliedEarn = true;
         balance = (parseInt(String(cur.balance), 10) || 0) + awarded;
         tx.set(cardRef, {
           userID: ptsUser, venueID, venueName,
@@ -968,6 +1007,7 @@ export const scanCoupon = onRequest(MONEY_PATH_OPTS, async (req, res) => {
         if (keyRef) tx.set(keyRef, { code, awarded, balance, at: new Date(nowMs) });
       });
 
+      if (appliedEarn) await bumpAnalytics(venueID, { pointsEarned: awarded });
       res.status(200).json({ ok: true, points: true, awarded, balance, venueName, replayed: false });
       return;
     }
@@ -986,12 +1026,7 @@ export const scanCoupon = onRequest(MONEY_PATH_OPTS, async (req, res) => {
       tx.update(couponRef, { used: true, usedAt: new Date(), usedByVenue: venueID });
     });
 
-    const day = dayKey();
-    db.collection("analytics").doc(venueID).collection("days").doc(day)
-      .set({ redemptions: FieldValue.increment(1), date: day }, { merge: true })
-      // Не роняем ответ на скан, но и не глотаем молча: без строки в логах
-      // «погашено не растёт» нечем было бы объяснить.
-      .catch((e) => console.warn(`⚠️ analytics redemptions increment failed: venue=${venueID}`, e));
+    await bumpAnalytics(venueID, { redemptions: 1 });
 
     // Авторитетная метка погашения для обучения весов выдачи (кросс-платформенно).
     // Нужен userID купона для склейки с impression/tap; иначе метка бесполезна.
@@ -1118,6 +1153,7 @@ export const redeemVenuePoints = onRequest(MONEY_PATH_OPTS, async (req, res) => 
       if (keyRef) tx.set(keyRef, { rewardId, redeemed: cost, balance, at: new Date() });
     });
 
+    if (!replayed) await bumpAnalytics(venueID, { pointsRedeemed: cost, rewardsIssued: 1 });
     res.status(200).json({
       ok: true, redeemed: cost, balance,
       rewardTitle: String(reward.title || ""),

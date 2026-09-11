@@ -425,6 +425,10 @@ struct HostAnalyticsView: View {
     private var statGrid: some View {
         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 11), count: 2), spacing: 11) {
             metricCard("Погашено купонов", AnalyticsMetric.redemptions, "checkmark.seal.fill")
+            metricCard("Наград выдано", AnalyticsMetric.rewardsIssued, "gift.fill")
+            metricCard("Штампов выдано", AnalyticsMetric.stamps, "seal.fill")
+            metricCard("Баллов начислено", AnalyticsMetric.pointsEarned, "plus.circle.fill")
+            metricCard("Баллов списано", AnalyticsMetric.pointsRedeemed, "minus.circle.fill")
             metricCard("Клики по акциям", AnalyticsMetric.dealTaps, "hand.tap.fill")
             metricCard("Сохранения", AnalyticsMetric.saves, "bookmark.fill")
             metricCard("Звонки", AnalyticsMetric.calls, "phone.fill")

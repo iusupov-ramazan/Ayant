@@ -48,7 +48,13 @@ public enum AnalyticsMetric {
     public static let maps = "maps"
     public static let dealTaps = "dealTaps"
     public static let redemptions = "redemptions"   // купоны, погашенные в заведении
-    public static let all = [views, saves, calls, maps, dealTaps, redemptions]
+    // Серверные события лояльности (пишут только Cloud Functions):
+    public static let stamps = "stamps"                 // выдано штампов
+    public static let rewardsIssued = "rewardsIssued"   // заполненные карты + награды за баллы
+    public static let pointsEarned = "pointsEarned"     // начислено баллов (сумма)
+    public static let pointsRedeemed = "pointsRedeemed" // списано баллов (сумма)
+    public static let all = [views, saves, calls, maps, dealTaps, redemptions,
+                             stamps, rewardsIssued, pointsEarned, pointsRedeemed]
 }
 
 /// Журнал событий ранжирования (learning-to-rank): фичи на момент показа + исходы.
