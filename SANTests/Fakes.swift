@@ -143,3 +143,34 @@ final class FakeHostRepository: HostRepository {
     func queuePushCampaign(headline: String, body: String, city: String,
                            category: String?, venueID: String, dealID: String?, ownerID: String) async throws {}
 }
+
+/// Баллы САН: карты и журнал из памяти, списание — локально.
+@MainActor
+final class FakePointsRepository: PointsRepository {
+    var cards: [VenuePointsCard] = []
+    var ledger: [String: [PointsLedgerEntry]] = [:]
+    var ledgerError: AppError?
+    var redeemError: AppError?
+    var ledgerRequests = 0
+
+    nonisolated func cards(userID: String) -> AsyncStream<Result<[VenuePointsCard], AppError>> {
+        AsyncStream { continuation in
+            Task { @MainActor in
+                continuation.yield(.success(userID.isEmpty ? [] : self.cards))
+                continuation.finish()
+            }
+        }
+    }
+
+    func redeem(venueID: String, userID: String, rewardID: String,
+                pointsToSpend: Int, idempotencyKey: String) async -> Result<RedeemReceipt, AppError> {
+        if let redeemError { return .failure(redeemError) }
+        return .success(RedeemReceipt(redeemed: max(pointsToSpend, 1), balance: 0, rewardTitle: "Тест"))
+    }
+
+    func ledger(userID: String, venueID: String, limit: Int) async -> Result<[PointsLedgerEntry], AppError> {
+        ledgerRequests += 1
+        if let ledgerError { return .failure(ledgerError) }
+        return .success(Array((ledger[venueID] ?? []).prefix(limit)))
+    }
+}

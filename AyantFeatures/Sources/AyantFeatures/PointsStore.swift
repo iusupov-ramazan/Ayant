@@ -39,6 +39,32 @@ public final class PointsStore: ObservableObject {
         case .redeem(let venueID, let rewardID, let points):
             redeem(venueID: venueID, rewardID: rewardID, pointsToSpend: points)
         case .dismissRedeem:         state.redeem = .idle
+        case .loadHistory(let venueID): loadHistory(venueID: venueID)
+        }
+    }
+
+    // MARK: - История
+
+    /// Сколько записей журнала тянем за раз: хватает на месяцы визитов, а
+    /// пагинации у экрана пока нет.
+    public static let historyLimit = 100
+
+    private func loadHistory(venueID: String) {
+        guard state.isSignedIn else { state.history[venueID] = .loaded([]); return }
+        if state.history(for: venueID).value == nil { state.history[venueID] = .loading }
+        let userID = state.userID
+        Task { [repository] in
+            let result = await repository.ledger(userID: userID, venueID: venueID, limit: Self.historyLimit)
+            switch result {
+            case .success(let entries): state.history[venueID] = .loaded(entries)
+            case .failure(let error):
+                // Уже показанную историю не стираем из-за моргнувшей сети.
+                if let known = state.history(for: venueID).value {
+                    state.history[venueID] = .loaded(known)
+                } else {
+                    state.history[venueID] = .failed(error)
+                }
+            }
         }
     }
 
@@ -98,7 +124,9 @@ public final class PointsStore: ObservableObject {
             case .success(let receipt):
                 pendingRedeemKey[attemptID] = nil      // попытка закрыта, дальше — новая
                 state.redeem = .done(receipt)
-                // Баланс приедет сам snapshot-листенером; ничего не перезапрашиваем.
+                // Баланс приедет сам snapshot-листенером; журнал — по запросу,
+                // поэтому его обновляем, если экран его уже показывал.
+                if state.history(for: venueID).value != nil { loadHistory(venueID: venueID) }
             case .failure(let error):
                 // Ключ НЕ сбрасываем: повтор должен уйти с тем же ключом.
                 state.redeem = .failed(error)

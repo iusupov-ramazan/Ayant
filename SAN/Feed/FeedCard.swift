@@ -52,7 +52,7 @@ private struct FeedPostAvatar: View {
                     .fill(brush)
                     .overlay {
                         if let imageURL, !imageURL.isEmpty, let url = URL(string: imageURL) {
-                            AsyncImage(url: url) { $0.resizable().scaledToFill() } placeholder: { Color.clear }
+                            AsyncImage(url: url) { image in Color.clear.overlay { image.resizable().scaledToFill() } } placeholder: { Color.clear }
                                 .clipShape(Circle())
                         }
                     }

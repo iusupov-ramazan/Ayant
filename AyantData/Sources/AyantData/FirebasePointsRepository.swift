@@ -61,6 +61,21 @@ public final class FirebasePointsRepository: PointsRepository {
             return .failure(.network)
         }
     }
+
+    public func ledger(userID: String, venueID: String, limit: Int) async -> Result<[PointsLedgerEntry], AppError> {
+        guard !userID.isEmpty else { return .failure(.unauthenticated) }
+        do {
+            let snap = try await db.collection(FS.Collection.venuePoints)
+                .document("\(userID)_\(venueID)")
+                .collection(FS.VenuePointsDoc.ledger)
+                .order(by: FS.LedgerDoc.at, descending: true)
+                .limit(to: max(1, limit))
+                .getDocuments()
+            return .success(snap.documents.map { PointsLedgerEntry(firestore: $0.data(), id: $0.documentID) })
+        } catch {
+            return .failure(AppError(firestore: error))
+        }
+    }
 }
 
 /// Оффлайн-источник: отдаёт то, что положили в конструктор, и «списывает» локально.
@@ -86,8 +101,28 @@ public final class MockPointsRepository: PointsRepository {
               stored[index].balance >= spend else { return .failure(.server(code: "insufficient")) }
         stored[index].balance -= spend
         stored[index].lifetimeRedeemed += spend
+        ledgerByVenue[venueID, default: []].insert(
+            PointsLedgerEntry(id: UUID().uuidString, kind: .redeem, points: -spend, at: Date(), rewardID: rewardID),
+            at: 0)
         return .success(RedeemReceipt(redeemed: spend, balance: stored[index].balance,
                                       rewardTitle: "Демо-награда"))
+    }
+
+    /// Демо-журнал: пара начислений, чтобы экран истории не был пустым оффлайн.
+    private var ledgerByVenue: [String: [PointsLedgerEntry]] = [:]
+
+    public func ledger(userID: String, venueID: String, limit: Int) async -> Result<[PointsLedgerEntry], AppError> {
+        guard !userID.isEmpty else { return .failure(.unauthenticated) }
+        if ledgerByVenue[venueID] == nil, let card = stored.first(where: { $0.venueID == venueID }) {
+            let now = Date()
+            ledgerByVenue[venueID] = [
+                PointsLedgerEntry(id: "demo_1", kind: .earn, points: max(card.balance / 2, 10),
+                                  at: now.addingTimeInterval(-86_400 * 2), billAmount: 1200),
+                PointsLedgerEntry(id: "demo_2", kind: .earn, points: max(card.balance - card.balance / 2, 10),
+                                  at: now.addingTimeInterval(-86_400 * 9), billAmount: 800),
+            ]
+        }
+        return .success(Array((ledgerByVenue[venueID] ?? []).prefix(limit)))
     }
 }
 

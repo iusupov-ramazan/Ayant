@@ -41,6 +41,32 @@ public struct RedeemReceipt: Equatable, Sendable {
     }
 }
 
+// MARK: - История баллов
+
+/// Одна запись журнала карты (`venuePoints/{card}/ledger`): начисление за визит,
+/// списание на награду или сгорание. Пишет только сервер; клиент читает.
+public struct PointsLedgerEntry: Identifiable, Equatable, Sendable {
+    public enum Kind: String, Sendable {
+        case earn, redeem, expire, unknown
+    }
+
+    public let id: String
+    public let kind: Kind
+    /// Со знаком: начисление положительное, списание и сгорание — отрицательные.
+    public let points: Int
+    public let at: Date
+    /// Сумма чека при начислении (кэшбэк/диапазоны); у фикса — nil.
+    public let billAmount: Int?
+    /// Награда при списании; название подставляет экран по конфигу заведения.
+    public let rewardID: String?
+
+    public init(id: String, kind: Kind, points: Int, at: Date,
+                billAmount: Int? = nil, rewardID: String? = nil) {
+        self.id = id; self.kind = kind; self.points = points; self.at = at
+        self.billAmount = billAmount; self.rewardID = rewardID
+    }
+}
+
 // MARK: - Состояние
 
 /// Всё состояние экрана баллов — одним значением.
@@ -52,11 +78,19 @@ public struct PointsState: Equatable, Sendable {
     public var userID: String = ""
     public var cards: LoadState<[VenuePointsCard]> = .idle
     public var redeem: RedeemPhase = .idle
+    /// История по заведениям, новые сверху. Грузится по запросу экрана
+    /// (`loadHistory`), а не вместе с картами: журнал длиннее и нужен реже.
+    public var history: [String: LoadState<[PointsLedgerEntry]>] = [:]
 
     public init(userID: String = "",
                 cards: LoadState<[VenuePointsCard]> = .idle,
-                redeem: RedeemPhase = .idle) {
-        self.userID = userID; self.cards = cards; self.redeem = redeem
+                redeem: RedeemPhase = .idle,
+                history: [String: LoadState<[PointsLedgerEntry]>] = [:]) {
+        self.userID = userID; self.cards = cards; self.redeem = redeem; self.history = history
+    }
+
+    public func history(for venueID: String) -> LoadState<[PointsLedgerEntry]> {
+        history[venueID] ?? .idle
     }
 
     public var isSignedIn: Bool { !userID.isEmpty }
@@ -100,6 +134,8 @@ public enum PointsIntent: Equatable, Sendable {
     case redeem(venueID: String, rewardID: String, pointsToSpend: Int)
     /// Закрыть результат/ошибку списания.
     case dismissRedeem
+    /// Загрузить (или обновить) историю начислений и списаний по заведению.
+    case loadHistory(venueID: String)
 }
 
 // MARK: - Контракт данных
@@ -122,6 +158,9 @@ public protocol PointsRepository {
     ///   второго списания (`RedeemReceipt.replayed == true`).
     func redeem(venueID: String, userID: String, rewardID: String,
                 pointsToSpend: Int, idempotencyKey: String) async -> Result<RedeemReceipt, AppError>
+
+    /// Журнал карты гостя в заведении, новые записи сверху, не больше `limit`.
+    func ledger(userID: String, venueID: String, limit: Int) async -> Result<[PointsLedgerEntry], AppError>
 }
 
 // MARK: - Одна механика лояльности на заведение

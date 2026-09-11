@@ -401,6 +401,19 @@ extension LoyaltyCard {
     }
 }
 
+extension PointsLedgerEntry {
+    public init(firestore d: [String: Any], id: String) {
+        self.init(
+            id: id,
+            kind: Kind(rawValue: d.string(FS.LedgerDoc.type) ?? "") ?? .unknown,
+            points: d.int(FS.LedgerDoc.points) ?? 0,
+            at: d.date(FS.LedgerDoc.at) ?? Date(timeIntervalSince1970: 0),
+            billAmount: d.int(FS.LedgerDoc.billAmount),
+            rewardID: d.string(FS.LedgerDoc.rewardId)
+        )
+    }
+}
+
 extension VenuePointsCard {
     public init(firestore d: [String: Any]) {
         self.init(

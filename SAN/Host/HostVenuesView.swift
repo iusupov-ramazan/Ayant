@@ -1684,6 +1684,11 @@ struct HostDealFormView: View {
         return ZStack(alignment: .bottomLeading) {
             LinearGradient(colors: gradient, startPoint: .topLeading, endPoint: .bottomTrailing)
             SanRisoHatch(opacity: 0.2, stripe: 1.5, period: 14)
+            // Первое загруженное фото — как в карточке ленты. Размер задаёт
+            // контейнер (`VenuePhoto` обрезает снимок сам).
+            if let photo = imageURLs.first(where: { !$0.isEmpty }) {
+                VenuePhoto(urlString: photo, gradient: gradient)
+            }
             LinearGradient(
                 stops: [.init(color: Color(hex: 0x17130F).opacity(0.94), location: 0),
                         .init(color: Color(hex: 0x17130F).opacity(0.74), location: 0.34),

@@ -115,9 +115,10 @@ struct ImagePickerField: View {
         VStack(alignment: .leading, spacing: 8) {
             if !imageURL.isEmpty, let url = URL(string: imageURL) {
                 AsyncImage(url: url) { img in
-                    img.resizable().scaledToFill()
+                    Color.clear.overlay { img.resizable().scaledToFill() }
                 } placeholder: { Color(.systemGray6) }
-                .frame(height: 140).clipped().clipShape(RoundedRectangle(cornerRadius: 10))
+                .frame(height: 140).frame(maxWidth: .infinity)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
             }
 
             HStack(spacing: 12) {
@@ -176,7 +177,7 @@ struct MultiImagePickerField: View {
                         ForEach(urls, id: \.self) { u in
                             ZStack(alignment: .topTrailing) {
                                 AsyncImage(url: URL(string: u)) { img in
-                                    img.resizable().scaledToFill()
+                                    Color.clear.overlay { img.resizable().scaledToFill() }
                                 } placeholder: { Color(.systemGray6) }
                                 .frame(width: 72, height: 72)
                                 .clipShape(RoundedRectangle(cornerRadius: 10))
@@ -229,8 +230,10 @@ struct GalleryImage: View {
     var body: some View {
         if value.hasPrefix("http"), let url = URL(string: value) {
             AsyncImage(url: url) { img in
-                img.resizable().scaledToFill()
+                // Размер — от контейнера, не от снимка (см. `VenuePhoto`).
+                Color.clear.overlay { img.resizable().scaledToFill() }
             } placeholder: { Color(.systemGray6) }
+            .clipped()
         } else {
             ZStack {
                 Color(.systemGray6)

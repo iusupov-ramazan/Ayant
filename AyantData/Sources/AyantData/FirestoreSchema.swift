@@ -254,6 +254,19 @@ public enum FS {
         public static let balance = "balance"
         public static let lifetimeEarned = "lifetimeEarned"
         public static let lifetimeRedeemed = "lifetimeRedeemed"
+        /// Подколлекция журнала карты (`venuePoints/{card}/ledger`).
+        public static let ledger = "ledger"
+    }
+
+    /// `venuePoints/{card}/ledger/{auto}` — пишет только `scanCoupon` (ветка C),
+    /// `redeemVenuePoints` и `expireVenuePoints` (functions/src/index.ts).
+    public enum LedgerDoc {
+        public static let type = "type"            // "earn" | "redeem" | "expire"
+        public static let points = "points"        // со знаком
+        public static let billAmount = "billAmount"
+        public static let rewardId = "rewardId"
+        public static let byVenue = "byVenue"
+        public static let at = "at"
     }
 
     public enum BonusGrantDoc {
