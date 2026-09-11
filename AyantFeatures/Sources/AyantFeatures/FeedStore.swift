@@ -37,8 +37,13 @@ public final class FeedStore: ObservableObject {
     // профиль. Поэтому рейтинг для ленты по этому массиву считать НЕЛЬЗЯ:
     // он придёт неполным. Для ленты источник правды — денормализованные
     // `venue.rating`/`venue.reviewCount`, которые пишет Cloud Function.
-    private var baseReviews: [Review] = MockData.reviews
-    public private(set) var reviews: [Review] = MockData.reviews
+    //
+    // На старте кэш ПУСТ. Раньше сюда клали `MockData.reviews`, а их venueID
+    // (`navat`, `sierra`, …) совпадают с реальными заведениями в Firestore —
+    // выдуманные отзывы показывались как настоящие. Отзывы приходят только
+    // из репозитория (`loadReviews…`); в мок-режиме их отдаёт `MockDataRepository`.
+    private var baseReviews: [Review] = []
+    public private(set) var reviews: [Review] = []
     private var hostReplies: [String: HostReply] = [:]
 
     /// Заведения, отзывы которых загружены ПОЛНОСТЬЮ (пришло меньше лимита —
@@ -66,10 +71,8 @@ public final class FeedStore: ObservableObject {
            let dict = try? JSONDecoder().decode([String: HostReply].self, from: data) {
             hostReplies = dict
         }
-        // Демо-набор локальный и полный — для его заведений живой агрегат точен.
-        // Заведения из Firestore сюда не попадут (другие id) и останутся на
-        // денормализованном рейтинге, как и задумано.
-        fullyLoadedReviewVenueIDs = Set(MockData.reviews.map(\.venueID))
+        // «Полностью загруженных» заведений на старте нет: до первого
+        // `loadReviews(forVenue:)` все остаются на денормализованном рейтинге.
         mergeReviews()
     }
 
@@ -263,6 +266,15 @@ public final class FeedStore: ObservableObject {
         var scoped = state
         scoped.category = category
         return scoped.deals(now: clock.now)
+    }
+
+    /// Заведения города для категории — тот же `FeedBuilder.rankedVenues`, что
+    /// и `venues`: только одобренные и не на паузе, отсортированные по рангу.
+    /// Нужно секции «Заведения» на главной, пока вкладка поиска скрыта.
+    public func venues(category: VenueCategory?) -> [Venue] {
+        var scoped = state
+        scoped.category = category
+        return scoped.venues(now: clock.now)
     }
 
     public var isLoading: Bool { state.catalog.isLoading }

@@ -423,6 +423,12 @@ extension HostProfile {
             FS.HostDoc.phone: phone,
             FS.HostDoc.email: email,
             FS.HostDoc.verification: verification.rawValue,
+            FS.HostDoc.legalForm: legalForm,
+            FS.HostDoc.legalName: legalName,
+            FS.HostDoc.inn: inn,
+            FS.HostDoc.registrationAddress: registrationAddress,
+            FS.HostDoc.website: website,
+            FS.HostDoc.about: about,
         ]
     }
     public init?(firestore d: [String: Any]) {
@@ -432,7 +438,13 @@ extension HostProfile {
             categoryRaw: d.string(FS.HostDoc.categoryRaw) ?? VenueCategory.cafe.rawValue,
             phone: d.string(FS.HostDoc.phone) ?? "",
             email: d.string(FS.HostDoc.email) ?? "",
-            verification: VerificationStatus(rawValue: d.string(FS.HostDoc.verification) ?? "none") ?? .none)
+            verification: VerificationStatus(rawValue: d.string(FS.HostDoc.verification) ?? "none") ?? .none,
+            legalForm: d.string(FS.HostDoc.legalForm) ?? "",
+            legalName: d.string(FS.HostDoc.legalName) ?? "",
+            inn: d.string(FS.HostDoc.inn) ?? "",
+            registrationAddress: d.string(FS.HostDoc.registrationAddress) ?? "",
+            website: d.string(FS.HostDoc.website) ?? "",
+            about: d.string(FS.HostDoc.about) ?? "")
     }
 }
 
@@ -472,6 +484,11 @@ extension HostVenueDTO {
             FS.VenueDoc.branches: branches.map(\.firestoreMap),
             FS.VenueDoc.boostedUntil: boostedUntil.map { Timestamp(date: $0) } as Any,
             FS.VenueDoc.todaySpecial: todaySpecial ?? "",
+            // Карта лояльности — её настраивает сам хост, в отличие от баллов САН.
+            FS.VenueDoc.loyaltyEnabled: loyaltyEnabled,
+            FS.VenueDoc.loyaltyGoal: loyaltyGoal,
+            FS.VenueDoc.loyaltyReward: loyaltyReward,
+            FS.VenueDoc.couponsEnabled: couponsEnabled,
         ]
     }
 

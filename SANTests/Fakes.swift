@@ -26,6 +26,83 @@ final class FakeAnalyticsService: AnalyticsService {
     func fetchDailyStats(venueID: String, days: Int) async throws -> [String: [String: Int]] { [:] }
 }
 
+/// Авторизация: отвечает мгновенно и запоминает вызовы.
+///
+/// `calls` — порядок вызовов денежно-чувствительных методов: тест удаления
+/// аккаунта проверяет, что отзыв гранта Apple идёт ДО удаления записи.
+final class FakeAuth: AuthService {
+    var stored: SANUser?
+    var discardedGuest = false
+    var deleted = false
+    /// Что вернуть/бросить из `deleteAccount` и `revokeAppleToken`.
+    var deleteError: Error?
+    var revokeError: Error?
+    private(set) var passwordResets: [String] = []
+    private(set) var revokedAppleCodes: [String] = []
+    private(set) var calls: [String] = []
+    /// Продолжение потока — тест может «прислать» восстановленную сессию.
+    var continuation: AsyncStream<SANUser?>.Continuation?
+
+    func currentUser() -> SANUser? { stored }
+
+    func userChanges() -> AsyncStream<SANUser?> {
+        AsyncStream { continuation in
+            self.continuation = continuation
+            continuation.yield(self.stored)
+        }
+    }
+
+    func idToken() async -> String? { "token" }
+
+    func signInWithEmail(_ email: String, password: String) async throws -> SANUser {
+        let user = SANUser(id: "u1", name: "Тест", email: email, provider: .email)
+        stored = user
+        return user
+    }
+
+    func registerWithEmail(name: String, email: String, password: String) async throws -> SANUser {
+        let user = SANUser(id: "u1", name: name, email: email, provider: .email)
+        stored = user
+        return user
+    }
+
+    func sendPasswordReset(email: String) async throws {
+        calls.append("reset")
+        passwordResets.append(email)
+    }
+
+    func signInWithGoogle() async throws -> SANUser {
+        throw AuthError.notConfigured("Google")
+    }
+
+    func signInWithApple(_ credential: AppleCredential) async throws -> SANUser {
+        throw AuthError.cancelled
+    }
+
+    func continueAsGuest() async throws -> SANUser {
+        let user = SANUser(id: "guest", name: "Гость", email: nil, provider: .guest)
+        stored = user
+        return user
+    }
+
+    func signOut() { stored = nil }
+
+    func deleteAccount() async throws {
+        calls.append("delete")
+        if let deleteError { throw deleteError }
+        deleted = true
+        stored = nil
+    }
+
+    func revokeAppleToken(authorizationCode: String) async throws {
+        calls.append("revoke")
+        if let revokeError { throw revokeError }
+        revokedAppleCodes.append(authorizationCode)
+    }
+
+    func discardGuestAccount() async { discardedGuest = true; stored = nil }
+}
+
 /// Push: подписки в тесте не нужны.
 final class FakePushService: PushService {
     func requestAuthorization() async -> Bool { true }

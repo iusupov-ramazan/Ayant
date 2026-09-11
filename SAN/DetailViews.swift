@@ -90,6 +90,30 @@ struct DealDetailView: View {
         }
     }
 
+    /// QR есть только у купона, который записан в Firestore. Пока купона нет —
+    /// замок поверх размытой заглушки: сканируемого кода без документа на
+    /// сервере быть не должно, иначе сотрудник отсканирует «пустоту».
+    @ViewBuilder
+    private func couponQR(_ coupon: Coupon?, used: Bool) -> some View {
+        if let coupon {
+            QRCodeView(text: coupon.code, size: 92)
+                .opacity(used ? 0.4 : 1)
+        } else {
+            QRCodeView(text: Self.lockedQRPlaceholder, size: 92)
+                .blur(radius: 6)
+                .opacity(0.35)
+                .overlay {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .accessibilityLabel("Получите купон, чтобы показать QR")
+        }
+    }
+
+    /// Константа под размытым QR: не код купона и ни к чему на сервере не ведёт.
+    private static let lockedQRPlaceholder = "AYANT-LOCKED"
+
     private var hero: some View {
         ImageCarousel(urls: deal.allImages, gradient: venue?.gradientColors ?? [.sanAccent, .orange],
                       emoji: deal.emoji, height: 300)
@@ -113,12 +137,13 @@ struct DealDetailView: View {
             let used = dealCoupon?.used ?? false
             VStack(spacing: 12) {
                 HStack(spacing: 14) {
-                    QRCodeView(text: dealCoupon?.code ?? "AYANT-\(deal.id.uppercased())", size: 92)
-                        .opacity(used ? 0.4 : 1)
+                    couponQR(dealCoupon, used: used)
                     VStack(alignment: .leading, spacing: 4) {
                         Text(used ? "Купон использован" : "Купон на предложение")
                             .font(.subheadline.weight(.semibold))
-                        Text("Сотрудник сканирует QR и применяет предложение перед оплатой.")
+                        Text(dealCoupon == nil
+                             ? "Получите купон, чтобы показать QR"
+                             : "Сотрудник сканирует QR и применяет предложение перед оплатой.")
                             .font(.caption).foregroundStyle(.secondary)
                         if let c = dealCoupon {
                             Text(c.code).font(.caption2.monospaced()).foregroundStyle(.secondary)
@@ -817,9 +842,11 @@ struct VenueDetailView: View {
                 }
                 HStack(spacing: 6) {
                     Image(systemName: "info.circle.fill").font(.caption2)
+                    // Штамп ставит только сервер, когда сотрудник сканирует QR
+                    // карты (`scanCoupon`, ветка A) — не за купон.
                     Text(rounds > 0
-                         ? "Наград получено: \(rounds). Штамп — за каждый использованный купон здесь."
-                         : "Штамп начисляется за каждый использованный купон в этом заведении.")
+                         ? "Наград получено: \(rounds). Штамп за визит: сотрудник сканирует QR вашей карты."
+                         : "Штамп за визит: сотрудник сканирует QR вашей карты.")
                         .font(.caption2)
                     Spacer()
                     Image(systemName: "chevron.right").font(.caption2)

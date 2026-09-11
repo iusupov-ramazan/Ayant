@@ -10,56 +10,8 @@ import AyantFeatures
 @MainActor
 final class SessionStoreTests: XCTestCase {
 
-    /// Фальшивый сервис: отвечает мгновенно и запоминает вызовы.
-    /// Живёт в тестах, а не в слое данных (тот тянет за собой Firestore).
-    private final class FakeAuth: AuthService {
-        var stored: SANUser?
-        var discardedGuest = false
-        var deleted = false
-        /// Продолжение потока — тест может «прислать» восстановленную сессию.
-        var continuation: AsyncStream<SANUser?>.Continuation?
-
-        func currentUser() -> SANUser? { stored }
-
-        func userChanges() -> AsyncStream<SANUser?> {
-            AsyncStream { continuation in
-                self.continuation = continuation
-                continuation.yield(self.stored)
-            }
-        }
-
-        func idToken() async -> String? { "token" }
-
-        func signInWithEmail(_ email: String, password: String) async throws -> SANUser {
-            let user = SANUser(id: "u1", name: "Тест", email: email, provider: .email)
-            stored = user
-            return user
-        }
-
-        func registerWithEmail(name: String, email: String, password: String) async throws -> SANUser {
-            let user = SANUser(id: "u1", name: name, email: email, provider: .email)
-            stored = user
-            return user
-        }
-
-        func signInWithGoogle() async throws -> SANUser {
-            throw AuthError.notConfigured("Google")
-        }
-
-        func signInWithApple(_ credential: AppleCredential) async throws -> SANUser {
-            throw AuthError.cancelled
-        }
-
-        func continueAsGuest() async throws -> SANUser {
-            let user = SANUser(id: "guest", name: "Гость", email: nil, provider: .guest)
-            stored = user
-            return user
-        }
-
-        func signOut() { stored = nil }
-        func deleteAccount() async throws { deleted = true; stored = nil }
-        func discardGuestAccount() async { discardedGuest = true; stored = nil }
-    }
+    // Фальшивый сервис `FakeAuth` — в `Fakes.swift`, рядом с остальными
+    // дублями доменных контрактов.
 
     /// Ждём, пока условие станет истинным, но не дольше таймаута: операции
     /// стора асинхронные, а тест не должен зависеть от их скорости.
@@ -139,6 +91,132 @@ final class SessionStoreTests: XCTestCase {
 
         try await waitUntil { store.isSignedIn }
         XCTAssertEqual(store.user?.id, "u9")
+    }
+
+    /// Провал операции обязан и погасить спиннер, и объяснить себя — иначе
+    /// экран входа «залипает» без единого слова.
+    func testFailedOperationClearsWorkingAndSetsError() async throws {
+        let store = SessionStore(service: FakeAuth())
+
+        store.signInGoogle()   // фейк отвечает notConfigured
+
+        try await waitUntil { store.errorMessage != nil }
+        XCTAssertFalse(store.isWorking)
+        XCTAssertFalse(store.isSignedIn)
+        XCTAssertEqual(store.errorMessage, AuthError.notConfigured("Google").errorDescription)
+    }
+
+    // MARK: Сброс пароля
+
+    /// «Забыли пароль?» доходит до сервиса и сообщает пользователю, куда ушло
+    /// письмо. Почта нормализуется той же функцией, что и при входе.
+    func testSendPasswordResetSetsInfoMessage() async throws {
+        let service = FakeAuth()
+        let store = SessionStore(service: service)
+
+        store.sendPasswordReset(email: " User@Mail.ru ")
+
+        try await waitUntil { store.infoMessage != nil }
+        XCTAssertEqual(service.passwordResets, ["user@mail.ru"])
+        XCTAssertEqual(store.infoMessage, "Письмо для сброса пароля отправлено на user@mail.ru")
+        XCTAssertNil(store.errorMessage)
+        XCTAssertFalse(store.isWorking)
+        XCTAssertFalse(store.isSignedIn, "Сброс пароля не меняет сессию")
+    }
+
+    // MARK: Удаление аккаунта
+
+    /// Удаление зовёт именно `deleteAccount` сервиса (не `signOut`) и
+    /// заканчивается выходом.
+    func testDeleteAccountCallsServiceAndSignsOut() async throws {
+        let service = FakeAuth()
+        let store = SessionStore(service: service)
+        store.signInEmail("user@mail.ru", "123456")
+        try await waitUntil { store.isSignedIn }
+
+        var finished = false
+        var result: String? = "не вызван"
+        store.deleteAccount { result = $0; finished = true }
+
+        try await waitUntil { finished }
+        XCTAssertTrue(service.deleted)
+        XCTAssertFalse(store.isSignedIn)
+        XCTAssertFalse(store.isWorking)
+        XCTAssertNil(store.errorMessage)
+        XCTAssertNil(result, "onFinish(nil) — успех")
+        XCTAssertFalse(service.calls.contains("revoke"), "Почтовый аккаунт грант Apple не отзывает")
+    }
+
+    /// Вход через Apple: перед удалением отзываем грант свежим кодом, и
+    /// именно в этом порядке (App Review 5.1.1(v)).
+    func testDeleteAppleAccountRevokesTokenBeforeDelete() async throws {
+        let service = FakeAuth()
+        service.stored = SANUser(id: "a1", name: "Apple", email: nil, provider: .apple)
+        let store = SessionStore(service: service)
+        XCTAssertTrue(store.isSignedIn)
+
+        store.deleteAccount(appleAuthorizationCode: "c_abc")
+
+        try await waitUntil { !store.isSignedIn }
+        XCTAssertEqual(service.revokedAppleCodes, ["c_abc"])
+        XCTAssertEqual(service.calls, ["revoke", "delete"])
+        XCTAssertTrue(service.deleted)
+        XCTAssertFalse(store.isWorking)
+    }
+
+    /// Не удалось отозвать грант — аккаунт НЕ удаляем: остался бы живой грант
+    /// в настройках iOS без аккаунта за ним. Пользователь остаётся в системе.
+    func testDeleteAppleAccountStopsWhenRevokeFails() async throws {
+        let service = FakeAuth()
+        service.stored = SANUser(id: "a1", name: "Apple", email: nil, provider: .apple)
+        service.revokeError = AuthError.network
+        let store = SessionStore(service: service)
+
+        var finished = false
+        store.deleteAccount(appleAuthorizationCode: "c_abc") { _ in finished = true }
+
+        try await waitUntil { finished }
+        XCTAssertEqual(service.calls, ["revoke"])
+        XCTAssertFalse(service.deleted)
+        XCTAssertTrue(store.isSignedIn)
+        XCTAssertFalse(store.isWorking)
+        XCTAssertEqual(store.errorMessage, AuthError.network.errorDescription)
+    }
+
+    /// Сервер отказал в удалении (например, аккаунт владеет заведениями):
+    /// пользователь остаётся в аккаунте, ошибка показана, спиннер погашен.
+    func testDeleteAccountFailureKeepsUserSignedIn() async throws {
+        let service = FakeAuth()
+        let store = SessionStore(service: service)
+        store.signInEmail("user@mail.ru", "123456")
+        try await waitUntil { store.isSignedIn }
+        service.deleteError = AuthError.unknown("409")
+
+        var finished = false
+        var result: String?
+        store.deleteAccount { result = $0; finished = true }
+
+        try await waitUntil { finished }
+        XCTAssertTrue(store.isSignedIn)
+        XCTAssertFalse(store.isWorking)
+        XCTAssertEqual(store.errorMessage, "409")
+        XCTAssertEqual(result, "409")
+    }
+
+    /// Хук `willSignOut` (отписка от push) не должен держать выход: мёртвая
+    /// сеть раньше оставляла вечный спиннер. Здесь хук не завершается никогда.
+    func testSignOutProceedsWhenHookHangs() async throws {
+        let service = FakeAuth()
+        let store = SessionStore(service: service)
+        store.signInEmail("user@mail.ru", "123456")
+        try await waitUntil { store.isSignedIn }
+        store.willSignOut = { _ = try? await Task.sleep(for: .seconds(60)) }
+
+        store.signOut()
+
+        // Предел хука — 5 с; ждём с запасом, но много меньше 60 с.
+        try await waitUntil(8) { !store.isSignedIn }
+        XCTAssertFalse(store.isWorking)
     }
 
     // MARK: Apple

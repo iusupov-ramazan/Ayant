@@ -23,6 +23,8 @@ struct AuthView: View {
     @State private var name = ""
     @State private var email = ""
     @State private var password = ""
+    /// Подсказка под «Забыли пароль?», когда почта ещё не введена.
+    @State private var resetHint: String?
     @FocusState private var focused: Field?
 
     enum Mode { case signIn, register }
@@ -78,6 +80,14 @@ struct AuthView: View {
         }
     }
 
+    /// «Письмо отправлено» — не ошибка, поэтому свой алерт. Висит на карточке,
+    /// а не на корне: два `.alert` на одной вьюхе SwiftUI не показывает
+    /// (см. тот же урок в `ProfileView`).
+    private var infoAlert: Binding<Bool> {
+        Binding(get: { session.infoMessage != nil },
+                set: { if !$0 { session.infoMessage = nil } })
+    }
+
     private var closeButton: some View {
         Button { dismiss() } label: {
             Image(systemName: "xmark")
@@ -114,13 +124,19 @@ struct AuthView: View {
             .pickerStyle(.segmented)
 
             if mode == .register {
-                field("Имя", text: $name, icon: "person", field: .name,
-                      hint: AuthValidation.nameHint(name))
+                field("Имя", text: $name, icon: "person", contentType: .name,
+                      field: .name, hint: AuthValidation.nameHint(name))
             }
             field("Почта", text: $email, icon: "envelope", keyboard: .emailAddress,
-                  field: .email, hint: AuthValidation.emailHint(email))
+                  contentType: .emailAddress,
+                  field: .email, hint: AuthValidation.emailHint(email) ?? resetHint)
+            // `.newPassword` на регистрации — iOS предложит сгенерировать и
+            // сохранить пароль; `.password` на входе — подставит сохранённый.
             secureField("Пароль", text: $password,
+                        contentType: mode == .register ? .newPassword : .password,
                         hint: mode == .register ? AuthValidation.passwordHint(password) : nil)
+
+            if mode == .signIn { forgotPassword }
 
             Button(action: submitEmail) {
                 primaryLabel(mode == .signIn ? "Войти" : "Создать аккаунт")
@@ -156,9 +172,53 @@ struct AuthView: View {
             }
 
             if session.isWorking { ProgressView() }
+
+            privacyFooter
         }
         .padding(20)
         .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 24))
+        .alert("Готово", isPresented: infoAlert) {
+            Button("Ок") { session.infoMessage = nil }
+        } message: {
+            Text(session.infoMessage ?? "")
+        }
+        // Подсказка «введите почту» живёт до первого изменения поля.
+        .onChange(of: email) { _, _ in resetHint = nil }
+    }
+
+    /// «Забыли пароль?» — только в режиме входа. Почту проверяем той же
+    /// `AuthValidation`, что и форму: без адреса письмо слать некуда, и вместо
+    /// похода в Firebase за английской ошибкой подсвечиваем поле.
+    private var forgotPassword: some View {
+        HStack {
+            Spacer()
+            Button("Забыли пароль?") {
+                guard AuthValidation.isValidEmail(email) else {
+                    resetHint = "Введите почту выше — на неё придёт письмо для сброса пароля"
+                    focused = .email
+                    return
+                }
+                resetHint = nil
+                focused = nil
+                session.sendPasswordReset(email: email)
+            }
+            .font(.subheadline)
+            .foregroundStyle(Color.sanAccentText)
+            .disabled(session.isWorking)
+        }
+        .padding(.top, -6)
+    }
+
+    /// Ссылка на политику: единый текст под всеми способами входа.
+    /// Markdown-ссылка в `Text` открывается системным `openURL`.
+    private var privacyFooter: some View {
+        Text("Продолжая, вы принимаете [политику конфиденциальности](https://ayant.kg/privacy.html)")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .tint(Color.sanAccentText)
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity)
+            .padding(.top, 4)
     }
 
     private var divider: some View {
@@ -169,14 +229,18 @@ struct AuthView: View {
         }
     }
 
+    /// `contentType` включает системный AutoFill: почту и имя iOS подставляет
+    /// из контактов, пароль — из связки ключей.
     private func field(_ placeholder: String, text: Binding<String>,
                        icon: String, keyboard: UIKeyboardType = .default,
+                       contentType: UITextContentType,
                        field: Field, hint: String?) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Image(systemName: icon).foregroundStyle(.secondary).frame(width: 22)
                 TextField(placeholder, text: text)
                     .keyboardType(keyboard)
+                    .textContentType(contentType)
                     .textInputAutocapitalization(field == .name ? .words : .never)
                     .autocorrectionDisabled()
                     .focused($focused, equals: field)
@@ -189,11 +253,13 @@ struct AuthView: View {
     }
 
     private func secureField(_ placeholder: String, text: Binding<String>,
+                             contentType: UITextContentType,
                              hint: String?) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Image(systemName: "lock").foregroundStyle(.secondary).frame(width: 22)
                 SecureField(placeholder, text: text)
+                    .textContentType(contentType)
                     .focused($focused, equals: .password)
                     .submitLabel(.go)
                     .onSubmit { if canSubmit { submitEmail() } }

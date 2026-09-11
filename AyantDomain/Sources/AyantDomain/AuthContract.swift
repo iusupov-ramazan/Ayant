@@ -55,7 +55,9 @@ public enum AuthError: LocalizedError, Equatable {
         case .cancelled: return "Вход отменён"
         case .invalidCredentials: return "Неверная почта или пароль"
         case .invalidEmail: return "Неверный формат почты"
-        case .emailAlreadyInUse: return "Эта почта уже зарегистрирована. Войдите или восстановите пароль."
+        // «Забыли пароль?» — реальная кнопка на экране входа (`sendPasswordReset`),
+        // поэтому подсказка обещает то, что есть.
+        case .emailAlreadyInUse: return "Эта почта уже зарегистрирована. Войдите или нажмите «Забыли пароль?»."
         case .weakPassword: return "Слишком простой пароль — нужно минимум \(AuthValidation.minPasswordLength) символов"
         case .userNotFound: return "Аккаунт с такой почтой не найден"
         case .userDisabled: return "Аккаунт заблокирован. Напишите в поддержку."
@@ -88,6 +90,12 @@ public protocol AuthService {
     func idToken() async -> String?
     func signInWithEmail(_ email: String, password: String) async throws -> SANUser
     func registerWithEmail(name: String, email: String, password: String) async throws -> SANUser
+    /// Письмо для сброса пароля на указанную почту.
+    ///
+    /// Firebase с включённой защитой от перебора отвечает успехом и на
+    /// незнакомую почту, поэтому единственный честный ответ пользователю —
+    /// «письмо отправлено», а не «такого аккаунта нет».
+    func sendPasswordReset(email: String) async throws
     func signInWithGoogle() async throws -> SANUser
     /// Результат нативного Sign in with Apple. idTokenString + rawNonce нужны
     /// для обмена на Firebase-credential; mock использует только id/имя/email.
@@ -102,6 +110,13 @@ public protocol AuthService {
     /// Каскад по коллекциям делает Cloud Function `deleteAccount` (правила
     /// запрещают клиенту трогать чужие/денежные документы).
     func deleteAccount() async throws
+    /// Отзывает грант Sign in with Apple по свежему `authorizationCode`.
+    ///
+    /// App Review 5.1.1(v): приложение с входом через Apple обязано при удалении
+    /// аккаунта отозвать и выданный Apple токен — иначе аккаунт продолжает
+    /// висеть у пользователя в «Вход с Apple» в настройках iOS. Код живёт
+    /// несколько минут и берётся из повторной шторки Apple прямо перед удалением.
+    func revokeAppleToken(authorizationCode: String) async throws
     /// Гостевая (анонимная) запись после выхода никому не нужна: войти в неё
     /// повторно невозможно, а в Firebase Auth она копится мусором.
     /// Тихо удаляет её, если текущий пользователь анонимный.

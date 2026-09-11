@@ -145,8 +145,8 @@ public final class HostStore: ObservableObject {
             async let v = repo.fetchOwnedVenues(ownerID: ownerID)
             async let d = repo.fetchOwnedDeals(ownerID: ownerID)
             let (remoteV, remoteD) = try await (v, d)
-            venueDTOs = Self.merge(remote: remoteV, local: venueDTOs)
-            dealDTOs = Self.merge(remote: remoteD, local: dealDTOs)
+            venueDTOs = Self.merge(remote: remoteV, local: venueDTOs, by: \.name)
+            dealDTOs = Self.merge(remote: remoteD, local: dealDTOs, by: \.title)
             persist(key(Key.venues), venueDTOs)
             persist(key(Key.deals), dealDTOs)
             pushToAppStore()
@@ -163,11 +163,21 @@ public final class HostStore: ObservableObject {
     }
 
     /// Remote — источник истины; локальные элементы без удалённой копии сохраняются.
-    private static func merge<T: Identifiable>(remote: [T], local: [T]) -> [T] where T.ID == String {
+    /// Порядок стабильный: по названию (локализованно, без учёта регистра), затем по id.
+    /// Словарь перечисляется как попало — без сортировки список в кабинете
+    /// перетасовывался бы после каждого синка.
+    private static func merge<T: Identifiable>(remote: [T], local: [T],
+                                               by name: (T) -> String) -> [T] where T.ID == String {
         var byID: [String: T] = [:]
         for x in local { byID[x.id] = x }
         for x in remote { byID[x.id] = x }
-        return Array(byID.values)
+        return byID.values.sorted { a, b in
+            switch name(a).localizedCaseInsensitiveCompare(name(b)) {
+            case .orderedAscending: return true
+            case .orderedDescending: return false
+            case .orderedSame: return a.id < b.id
+            }
+        }
     }
 
     private func remoteSaveVenue(_ dto: HostVenueDTO) {

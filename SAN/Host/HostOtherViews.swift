@@ -484,9 +484,11 @@ struct HostAnalyticsView: View {
         VStack(spacing: 14) {
             SanIconTile(systemName: "chart.line.uptrend.xyaxis", filled: true, size: 64)
             Text("Данных пока нет").font(.golos(18, .bold)).foregroundStyle(Color.sanInk)
-            Text("Статистика появится после первых просмотров заведения.")
+            // Демо-цифр в проде нет: первые недели здесь честные нули и единицы.
+            Text("Статистика копится из реальных действий гостей: просмотров заведения, сохранений и сканов в зале. В первые недели цифры будут небольшими — это нормально.")
                 .font(.golos(15)).foregroundStyle(Color.sanInkSoft)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity).padding(24).padding(.top, 40)
     }
@@ -1018,7 +1020,6 @@ struct VenueSearchPicker: View {
 struct HostProfileView: View {
     @EnvironmentObject private var host: HostStore
     @EnvironmentObject private var session: SessionStore
-    @Environment(\.dismiss) private var dismiss
     @AppStorage("san.hostMode") private var hostMode = false
     @AppStorage("san.host.notify") private var notify = true
     @State private var showSignOutConfirm = false
@@ -1047,6 +1048,9 @@ struct HostProfileView: View {
                         }
                         Spacer(minLength: 0)
                     }
+                    // Выход в режим гостя — первым и во всю ширину: раньше он
+                    // лежал в самом низу листа, и хосты его не находили.
+                    guestModeButton
                     headerCard
                     businessInfoCard
                     verificationCard
@@ -1058,10 +1062,20 @@ struct HostProfileView: View {
                 .padding(.top, 12).padding(.bottom, 32)
                 .sanScreenEnter()
             }
-            .sanNavBar { dismiss() }
+            // Экран — корень вкладки «Профиль», собственная кнопка «назад» не нужна.
             .sanScreenBackground()
+            .sanStatusBarCap()
             .toolbar(.hidden, for: .navigationBar)
         }
+    }
+
+    // MARK: Режим гостя
+
+    private var guestModeButton: some View {
+        Button { hostMode = false } label: {
+            Label("Вернуться в режим пользователя", systemImage: "person.crop.circle")
+        }
+        .buttonStyle(SanPrimaryButton())
     }
 
     // MARK: Шапка
@@ -1207,10 +1221,6 @@ struct HostProfileView: View {
 
     private var actionsCard: some View {
         VStack(spacing: 10) {
-            Button { hostMode = false } label: {
-                Label("Вернуться в режим пользователя", systemImage: "person.crop.circle")
-            }
-            .buttonStyle(SanPillButton())
             // Спрашиваем подтверждение, как и в профиле пользователя: случайный
             // тап здесь выкидывает владельца из режима заведения посреди работы.
             Button { showSignOutConfirm = true } label: {

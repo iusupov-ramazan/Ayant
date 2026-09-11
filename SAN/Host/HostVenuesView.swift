@@ -21,7 +21,6 @@ struct HostVenuesView: View {
     @EnvironmentObject private var host: HostStore
     @EnvironmentObject private var store: AppStore
     @AppStorage("san.hostMode") private var hostMode = true
-    @State private var showProfile = false
     @State private var showAddVenue = false
     @State private var venueToDelete: HostVenueDTO?
     @State private var editingVenue: HostVenueDTO?
@@ -74,8 +73,9 @@ struct HostVenuesView: View {
                     sandHeader
                         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headerHeight = $0 }
                     Section {
-                        if host.state.venues.isEmpty { emptyState }
-                        grid
+                        // Без заведений — только пустое состояние: сетка с одной
+                        // плиткой «+» под ним дублировала бы призыв.
+                        if host.state.venues.isEmpty { emptyState } else { grid }
                     } header: {
                         segmentedTabs
                             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { tabsHeight = $0 }
@@ -93,7 +93,6 @@ struct HostVenuesView: View {
             .sanStatusBarCap(.sanHostHeader)
             .toolbar(.hidden, for: .navigationBar)
             .refreshable { host.send(.sync) }
-            .sheet(isPresented: $showProfile) { HostProfileView() }
             .task(id: host.state.venues.count) { await loadViews() }
             .navigationDestination(for: String.self) { id in
                 if let dto = host.state.venue(id: id) { HostVenueDetailView(venueID: dto.id) }
@@ -139,17 +138,8 @@ struct HostVenuesView: View {
                 HStack(spacing: 8) {
                     HostModeChip()
                     Spacer(minLength: 8)
+                    // Профиль — отдельная вкладка «Профиль», аватар из шапки убран.
                     HostGuestPill { hostMode = false }
-                    Button { showProfile = true } label: {
-                        RoundedRectangle(cornerRadius: 13, style: .continuous)
-                            .fill(LinearGradient.sanAccentGradient)
-                            .frame(width: 36, height: 36)
-                            .overlay(Image(systemName: "person.fill")
-                                .font(.system(size: 15, weight: .semibold)).foregroundStyle(.white))
-                    }
-                    .buttonStyle(.sanPress(0.90))
-                    .frame(width: SanMetrics.minHitTarget, height: SanMetrics.minHitTarget)
-                    .accessibilityLabel("Профиль заведения")
                 }
                 .padding(.top, 2)
 
@@ -534,6 +524,9 @@ struct HostVenuesView: View {
             Text("Добавьте первое заведение, чтобы начать привлекать гостей.")
                 .font(.golos(15, .regular)).foregroundStyle(Color.sanInkSoft)
                 .multilineTextAlignment(.center)
+            Button("Добавить заведение") { showAddVenue = true }
+                .buttonStyle(SanPrimaryButton())
+                .padding(.top, 8)
         }
         .frame(maxWidth: .infinity)
         .padding(24)
@@ -791,26 +784,6 @@ struct HostVenueDetailView: View {
                     in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
-    private func header(_ v: HostVenueDTO) -> some View {
-        VStack(spacing: 0) {
-            VenuePhoto(urlString: v.imageURL)
-                .frame(height: 130).clipShape(RoundedRectangle(cornerRadius: 16))
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(v.name).font(.golos(18, .bold))
-                    Text("\(v.category.rawValue) · \(v.district)").font(.caption).foregroundStyle(.secondary)
-                }
-                Spacer()
-                Toggle("", isOn: Binding(
-                    get: { !v.isPaused },
-                    set: { _ in host.send(.togglePause(venueID: v.id)) }
-                )).labelsHidden().tint(.green)
-            }
-            .padding(.top, 10)
-        }
-        .padding(.horizontal, 16)
-    }
-
     private func moderationBanner(_ v: HostVenueDTO) -> some View {
         HStack(spacing: 10) {
             Image(systemName: v.moderation == .rejected ? "xmark.octagon.fill" : "clock.fill")
@@ -970,20 +943,23 @@ struct HostVenueDetailView: View {
                 Label("Изменить данные заведения", systemImage: "pencil")
             }
             .buttonStyle(SanPillButton())
-            NavigationLink(value: HostPromoteTarget(venueID: v.id)) {
-                Label("Продвигать это заведение", systemImage: "megaphone.fill")
-                    .font(.golos(15, .semibold)).foregroundStyle(Color.sanAccentText)
-                    .frame(maxWidth: .infinity).padding(.vertical, 14)
-                    .background(Color.sanAccent.opacity(0.12), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            }
-            // Единственный вход в список кампаний: ряд быстрых действий на
-            // «Заведениях» убран вместе с карточками, а без этой строки хост
-            // перестал бы видеть, что у него уже крутится.
-            NavigationLink(value: HostQuickAction.promote) {
-                Label("Все кампании продвижения", systemImage: "list.bullet.rectangle")
-                    .font(.golos(15, .semibold)).foregroundStyle(Color.sanInk)
-                    .frame(maxWidth: .infinity).padding(.vertical, 14)
-                    .background(Color.sanSurface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            // Продвижение скрыто до подключения оплаты — см. `ReleaseFlags.promote`.
+            if ReleaseFlags.promote {
+                NavigationLink(value: HostPromoteTarget(venueID: v.id)) {
+                    Label("Продвигать это заведение", systemImage: "megaphone.fill")
+                        .font(.golos(15, .semibold)).foregroundStyle(Color.sanAccentText)
+                        .frame(maxWidth: .infinity).padding(.vertical, 14)
+                        .background(Color.sanAccent.opacity(0.12), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+                // Единственный вход в список кампаний: ряд быстрых действий на
+                // «Заведениях» убран вместе с карточками, а без этой строки хост
+                // перестал бы видеть, что у него уже крутится.
+                NavigationLink(value: HostQuickAction.promote) {
+                    Label("Все кампании продвижения", systemImage: "list.bullet.rectangle")
+                        .font(.golos(15, .semibold)).foregroundStyle(Color.sanInk)
+                        .frame(maxWidth: .infinity).padding(.vertical, 14)
+                        .background(Color.sanSurface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
             }
             Button(role: .destructive) { showDeleteConfirm = true } label: {
                 Label("Удалить заведение", systemImage: "trash")
@@ -1280,7 +1256,11 @@ struct HostVenueFormView: View {
                     .buttonStyle(SanPrimaryButton())
                     .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
                     .opacity(name.trimmingCharacters(in: .whitespaces).isEmpty ? 0.6 : 1)
-                Text("После изменений заведение уйдёт на модерацию — обычно до 24 часов.")
+                // Правка сохраняет статус (`HostForms` не трогает `status`) —
+                // на модерацию уходит только новое заведение.
+                Text(existing == nil
+                     ? "Новое заведение попадёт на модерацию — обычно до 24 часов."
+                     : "Изменения сохранятся сразу, статус публикации не изменится.")
                     .font(.golos(11.5)).foregroundStyle(Color(hex: 0x9A9188))
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1501,7 +1481,34 @@ struct HostDealFormView: View {
     }
 
     private var venue: HostVenueDTO? { host.state.venue(id: venueID) }
-    private var canSave: Bool { !title.trimmingCharacters(in: .whitespaces).isEmpty }
+
+    // MARK: Проверка полей
+
+    /// Пустое поле — «не задано», а не ошибка; ноль в скидке — тоже «без скидки».
+    private var priceText: String { newPrice.trimmingCharacters(in: .whitespaces) }
+    private var discountText: String { discount.trimmingCharacters(in: .whitespaces) }
+    private var priceIsValid: Bool { priceText.isEmpty || (Int(priceText).map { $0 >= 0 } ?? false) }
+    private var discountIsValid: Bool { discountText.isEmpty || (Int(discountText).map { (0...99).contains($0) } ?? false) }
+    /// Значения, которые уйдут в DTO: цена ≥ 0, скидка 1…99, иначе `nil`.
+    private var priceValue: Int? { Int(priceText).map { max(0, $0) } }
+    private var discountValue: Int? { Int(discountText).flatMap { $0 <= 0 ? nil : min($0, 99) } }
+    /// Только «Скидка» обязана нести цену или процент; акция, новинка и
+    /// объявление — это текст.
+    private var needsOffer: Bool { type == .discount }
+    private var hasOffer: Bool { priceValue != nil || discountValue != nil }
+    private var canSave: Bool {
+        !title.trimmingCharacters(in: .whitespaces).isEmpty
+            && priceIsValid && discountIsValid
+            && (!needsOffer || hasOffer)
+    }
+    private var priceHint: LocalizedStringKey? {
+        priceIsValid ? nil : "Цена — целое число сомов, не меньше 0"
+    }
+    private var discountHint: LocalizedStringKey? {
+        if !discountIsValid { return "Скидка — целое число от 1 до 99" }
+        if needsOffer && !hasOffer { return "Для скидки укажите новую цену или процент" }
+        return nil
+    }
 
     var body: some View {
         NavigationStack {
@@ -1517,12 +1524,12 @@ struct HostDealFormView: View {
                                 SanFieldInput(placeholder: "−30% на манты по будням", text: $title)
                             }
                             SanHairline(leading: 16)
-                            SanFieldRow(label: "Новая цена, сом") {
+                            SanFieldRow(label: "Новая цена, сом", hint: priceHint) {
                                 SanFieldInput(placeholder: "195", text: $newPrice, keyboard: .numberPad)
                                     .foregroundStyle(Color.sanAccentText)
                             }
                             SanHairline(leading: 16)
-                            SanFieldRow(label: "Скидка, %") {
+                            SanFieldRow(label: "Скидка, %", hint: discountHint) {
                                 SanFieldInput(placeholder: "30", text: $discount, keyboard: .numberPad)
                             }
                             SanHairline(leading: 16)
@@ -1582,11 +1589,13 @@ struct HostDealFormView: View {
                         .buttonStyle(SanPrimaryButton())
                         .disabled(!canSave)
                         .opacity(canSave ? 1 : 0.6)
-                    if existing != nil {
-                        Text("После изменений предложение уйдёт на модерацию.")
-                            .font(.golos(11.5)).foregroundStyle(Color(hex: 0x9A9188))
-                            .multilineTextAlignment(.center)
-                    }
+                    // Предложения модерацию не проходят: не черновик — виден гостям сразу.
+                    Text(isDraft
+                         ? "Черновик не виден гостям — опубликуйте, когда будет готово."
+                         : "Предложение публикуется сразу, без модерации.")
+                        .font(.golos(11.5)).foregroundStyle(Color(hex: 0x9A9188))
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .sanScreenBackground()
@@ -1683,15 +1692,15 @@ struct HostDealFormView: View {
     private func save() {
         host.send(.saveDeal(existing: existing, fields: HostForms.DealFields(
             venueID: venueID, type: type, title: title, details: details, emoji: emoji,
-            newPrice: Int(newPrice), discountPercent: Int(discount),
+            newPrice: priceValue, discountPercent: discountValue,
             endDate: hasEnd ? endDate : nil, isDraft: isDraft, imageURLs: imageURLs,
             terms: termsText.split(separator: "\n").map(String.init))))
         dismiss()
     }
 }
 
-/// Быстрые действия из шапки «Заведений».
+/// Маршруты из карточки заведения к экранам без собственного маршрута.
 enum HostQuickAction: Hashable {
-    /// Только «Продвижение»: «Лояльность» — вкладка, её открывает `onOpenLoyalty`.
+    /// Список кампаний продвижения. Показывается только при `ReleaseFlags.promote`.
     case promote
 }

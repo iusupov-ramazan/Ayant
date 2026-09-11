@@ -97,21 +97,38 @@ public final class FirebaseAuthService: AuthService {
         }
     }
 
+    /// Сброс пароля. Ошибку «нет такого аккаунта» Firebase (с защитой от
+    /// перебора) не отдаёт — для пользователя это всегда «письмо отправлено».
+    public func sendPasswordReset(email: String) async throws {
+        let clean = AuthValidation.normalizedEmail(email)
+        try await Self.translating {
+            try await Auth.auth().sendPasswordReset(withEmail: clean)
+        }
+    }
+
+    /// `@MainActor`: шторка Google — UIKit-презентация поверх корневого
+    /// контроллера, окно ищем на главном потоке.
+    ///
+    /// ВЕСЬ вызов GIDSignIn стоит внутри `translating`: раньше туда попадал
+    /// только обмен credential на Firebase-пользователя, и отмена шторки
+    /// (`com.google.GIDSignIn`, код -5) улетала наружу английским системным
+    /// текстом вместо `AuthError.cancelled`, который стор молча проглатывает.
+    @MainActor
     public func signInWithGoogle() async throws -> SANUser {
         #if canImport(GoogleSignIn)
         guard let clientID = FirebaseApp.app()?.options.clientID,
-              let root = await UIApplication.shared.firstKeyWindow?.rootViewController
+              let root = UIApplication.shared.firstKeyWindow?.rootViewController
         else { throw AuthError.notConfigured("Google") }
 
-        GIDSignIn.sharedInstance.configuration = GIDConfiguration(clientID: clientID)
-        let result = try await GIDSignIn.sharedInstance.signIn(withPresenting: root)
-        guard let idToken = result.user.idToken?.tokenString else {
-            throw AuthError.invalidCredentials
-        }
-        let credential = GoogleAuthProvider.credential(
-            withIDToken: idToken,
-            accessToken: result.user.accessToken.tokenString)
         return try await Self.translating {
+            GIDSignIn.sharedInstance.configuration = GIDConfiguration(clientID: clientID)
+            let result = try await GIDSignIn.sharedInstance.signIn(withPresenting: root)
+            guard let idToken = result.user.idToken?.tokenString else {
+                throw AuthError.invalidCredentials
+            }
+            let credential = GoogleAuthProvider.credential(
+                withIDToken: idToken,
+                accessToken: result.user.accessToken.tokenString)
             return map(try await signInLinkingGuest(with: credential), provider: .google)
         }
         #else
@@ -183,6 +200,15 @@ public final class FirebaseAuthService: AuthService {
         }
     }
 
+    /// Отзыв гранта Apple (App Review 5.1.1(v)). Код — из повторной шторки
+    /// Sign in with Apple, показанной перед удалением; Firebase сам обменивает
+    /// его у Apple на refresh-токен и отзывает.
+    public func revokeAppleToken(authorizationCode: String) async throws {
+        try await Self.translating {
+            try await Auth.auth().revokeToken(withAuthorizationCode: authorizationCode)
+        }
+    }
+
     public func discardGuestAccount() async {
         guard let user = Auth.auth().currentUser, user.isAnonymous else { return }
         try? await user.delete()
@@ -248,7 +274,15 @@ public final class FirebaseAuthService: AuthService {
         case .networkError: return .network
         case .requiresRecentLogin: return .requiresRecentLogin
         case .webContextCancelled: return .cancelled
-        default: return .unknown(ns.localizedDescription)
+        // Связка ключей недоступна (обычно неподписанная сборка в симуляторе;
+        // на устройстве — сразу после восстановления из бэкапа). Английский
+        // текст SDK пользователю ни о чём не говорит.
+        case .keychainError:
+            return .unknown("Не удалось сохранить сессию на устройстве. Перезапустите приложение и попробуйте снова.")
+        // Остальные коды SDK — по-русски и с кодом для поддержки, а не
+        // `localizedDescription` на английском.
+        default:
+            return .unknown("Не удалось выполнить операцию. Попробуйте ещё раз (код \(ns.code)).")
         }
     }
 }

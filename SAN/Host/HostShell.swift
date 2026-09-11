@@ -8,12 +8,13 @@ import AyantFeatures
 // тёмного хрома: единственный тёмный элемент во всём хост-приложении — окно
 // камеры на сканере.
 //
-// Вкладки: Заведения · Лояльность · [Сканер FAB] · Аналитика · Отзывы.
-// «Продвижение» отдало слот «Лояльности» и живёт в быстрых действиях на
-// «Заведениях»; «Профиль» переехал на аватар в шапке.
+// Вкладки: Заведения · Лояльность · Сканер · Аналитика · Отзывы · Профиль.
+// «Продвижение» отдало слот «Лояльности» и живёт в действиях заведения (за
+// `ReleaseFlags.promote`); «Профиль» — своя вкладка: на аватаре в шапке его
+// не находили, а вместе с ним не находили и выход в режим гостя.
 
 enum HostTab: Hashable {
-    case venues, loyalty, scanner, analytics, reviews
+    case venues, loyalty, scanner, analytics, reviews, profile
 }
 
 // MARK: - Песочная шапка
@@ -96,7 +97,6 @@ struct HostGuestPill: View {
 struct HostRootView: View {
     @EnvironmentObject private var host: HostStore
     @EnvironmentObject private var store: AppStore
-    @AppStorage("san.hostMode") private var hostMode = true
 
     @State private var tab: HostTab = .venues
 
@@ -133,6 +133,9 @@ struct HostRootView: View {
                 .task(id: host.state.ownedVenueIDs) {
                     await store.loadReviews(forVenueIDs: host.state.ownedVenueIDs)
                 }
+            HostProfileView()
+                .tabItem { Label("Профиль", systemImage: "person.crop.circle") }
+                .tag(HostTab.profile)
         }
         .tint(Color.sanAccentText)
     }

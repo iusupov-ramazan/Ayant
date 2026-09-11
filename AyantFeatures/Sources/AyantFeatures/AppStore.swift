@@ -520,7 +520,16 @@ public final class AppStore: ObservableObject {
         let reply: HostReply? = trimmed.isEmpty ? nil
             : HostReply(text: trimmed, createdAt: existing?.createdAt ?? now, updatedAt: now)
         feed.setHostReply(reviewID: reviewID, reply: reply)
-        Task { try? await repository.updateReviewReply(reviewID: reviewID, reply: reply) }
+        Task {
+            do {
+                try await repository.updateReviewReply(reviewID: reviewID, reply: reply)
+            } catch {
+                // Оптимистичное обновление откатываем, иначе хост видит ответ,
+                // которого на сервере нет.
+                feed.setHostReply(reviewID: reviewID, reply: existing)
+                toastMessage = "Не удалось отправить ответ. Проверьте соединение."
+            }
+        }
     }
 
     public func reviews(for venue: Venue) -> [Review] {

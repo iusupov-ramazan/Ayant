@@ -2,25 +2,26 @@ import SwiftUI
 import AyantDomain
 import AyantFeatures
 
-/// «Лояльность» — флагманский экран хоста (SCREENS.md H6).
+/// «Лояльность» — экран настройки лояльности заведения (SCREENS.md H6).
 ///
-/// Одновременно питч, который выигрывает заведение, и поверхность настройки.
-/// Порядок разделов намеренный: сначала ценность, потом органы управления.
+/// Здесь только то, что есть на самом деле: карта штампов, которую владелец
+/// правит сам, и конфиг баллов САН, который он видит. Прежние «ROI-герой» с
+/// выдуманными «2,4×» и калькулятор, который ничего не сохранял, убраны —
+/// цифры, за которыми не стоит данных, подрывают доверие ко всему экрану.
 ///
-/// ВАЖНО: конфиг баллов на хост-стороне сейчас **только для чтения** — им
-/// владеет админ-панель, и путь сохранения хоста его не пишет (см. CLAUDE.md).
+/// ВАЖНО: конфиг баллов на хост-стороне **только для чтения** — им владеет
+/// админ-панель, и путь сохранения хоста его не пишет (см. CLAUDE.md).
 /// Поэтому режимы/награды/правила здесь показываются, но не редактируются:
 /// сделать их записываемыми — это изменение Firestore-правил и `HostForms`,
-/// а не UI-решение. Калькулятор считает предпросмотр через `PointsMath`.
+/// а не UI-решение.
 struct HostLoyaltyView: View {
     @EnvironmentObject private var host: HostStore
 
     @State private var selectedVenueID: String?
-    /// Процент кэшбэка в калькуляторе — локальный «а что если», не запись.
-    @State private var calcPercent: Double = 5
-    /// Черновик текста награды, пока пользователь печатает.
+    /// Черновик текста награды, пока пользователь печатает. Сохраняется по
+    /// Return, по паузе в наборе (`rewardCommit`) и при смене заведения.
     @State private var rewardDraft: String?
-    private static let calcBill = 1_200
+    @State private var rewardCommit: Task<Void, Never>?
 
     private var venue: HostVenueDTO? {
         host.state.venues.first { $0.id == selectedVenueID } ?? host.state.venues.first
@@ -31,13 +32,12 @@ struct HostLoyaltyView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
                     header
-                    roiHero
-                    modesSection
-                    calculator
                     stampCardSection
+                    modesSection
                     rewardsSection
                     rulesSection
                     guestPreview
+                    footer
                 }
                 .padding(.horizontal, SanMetrics.screenPadding)
                 .padding(.top, 12)
@@ -49,8 +49,8 @@ struct HostLoyaltyView: View {
             .toolbar(.hidden, for: .navigationBar)
             .onAppear {
                 if selectedVenueID == nil { selectedVenueID = host.state.venues.first?.id }
-                if let v = venue, v.cashbackPercent > 0 { calcPercent = v.cashbackPercent }
             }
+            .onDisappear { flushRewardDraft() }
         }
     }
 
@@ -85,7 +85,7 @@ struct HostLoyaltyView: View {
                             Stepper(value: Binding(
                                 get: { v.loyaltyGoal },
                                 set: { newValue in commit(v) { $0.loyaltyGoal = max(2, newValue) } }
-                            ), in: 2...20) {
+                            ), in: 2...12) {
                                 Text("\(v.loyaltyGoal)")
                                     .font(.golos(15.5, .semibold))
                                     .foregroundStyle(Color.sanInk)
@@ -97,7 +97,9 @@ struct HostLoyaltyView: View {
                                           text: Binding(
                                             get: { rewardDraft ?? v.loyaltyReward },
                                             set: { rewardDraft = $0 }))
-                                .onSubmit { commit(v) { $0.loyaltyReward = rewardDraft ?? $0.loyaltyReward } }
+                                .onSubmit { flushRewardDraft() }
+                                // Return нажимают не все: сохраняем и по паузе в наборе.
+                                .onChange(of: rewardDraft) { _, _ in scheduleRewardCommit() }
                         }
                     }
                 }
@@ -121,6 +123,28 @@ struct HostLoyaltyView: View {
         var fields = HostForms.fields(from: dto)
         change(&fields)
         host.send(.saveVenue(existing: dto, fields: fields))
+    }
+
+    /// Дебаунс сохранения награды: пишем через 0,8 с после последнего символа,
+    /// а не на каждую букву — иначе каждое нажатие уходило бы в Firestore.
+    private func scheduleRewardCommit() {
+        rewardCommit?.cancel()
+        rewardCommit = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(800))
+            guard !Task.isCancelled else { return }
+            flushRewardDraft()
+        }
+    }
+
+    /// Записывает черновик награды в ТЕКУЩЕЕ заведение, если он отличается.
+    /// Вызывается по Return, по паузе, при уходе с экрана и перед сменой
+    /// заведения — чтобы текст не утёк в соседнее.
+    private func flushRewardDraft() {
+        rewardCommit?.cancel()
+        guard let v = venue, let draft = rewardDraft else { return }
+        let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != v.loyaltyReward else { return }
+        commit(v) { $0.loyaltyReward = trimmed }
     }
 
     // MARK: Заголовок
@@ -149,8 +173,11 @@ struct HostLoyaltyView: View {
                     let isOn = v.id == venue?.id
                     Button {
                         SanHaptics.selection()
+                        // Черновик награды принадлежит прошлому заведению:
+                        // дописываем его туда и начинаем с чистого поля.
+                        flushRewardDraft()
                         selectedVenueID = v.id
-                        if v.cashbackPercent > 0 { calcPercent = v.cashbackPercent }
+                        rewardDraft = nil
                     } label: {
                         Text(v.name)
                             .font(.golos(13, .bold))
@@ -169,50 +196,7 @@ struct HostLoyaltyView: View {
         .scrollClipDisabled()
     }
 
-    // MARK: 2. ROI-герой
-
-    private var roiHero: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text("Гости с баллами возвращаются в 2,4 раза чаще")
-                .sanText(27, .heavy, tracking: -1.3, lineHeight: 1.1)
-                .foregroundStyle(.white)
-                .fixedSize(horizontal: false, vertical: true)
-
-            HStack(alignment: .top, spacing: 18) {
-                roiStat("2,4×", "повторные визиты")
-                roiStat("+18%", "средний чек")
-                roiStat("412", "активных карт")
-            }
-            .padding(.top, 18)
-
-            Text("Баллы финансирует заведение. Платформа не берёт комиссию с начислений и списаний.")
-                .font(.golos(12.5, .semibold))
-                .foregroundStyle(.white.opacity(0.94))
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(14)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.white.opacity(0.18),
-                            in: RoundedRectangle(cornerRadius: 15, style: .continuous))
-                .padding(.top, 18)
-        }
-        .padding(22)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(LinearGradient.sanAccentGradient,
-                    in: RoundedRectangle(cornerRadius: 28, style: .continuous))
-        .sanShadow(.hero)
-    }
-
-    private func roiStat(_ value: String, _ label: LocalizedStringKey) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(value).font(.golos(26, .heavy)).foregroundStyle(.white)
-            Text(label)
-                .font(.golos(11)).foregroundStyle(.white.opacity(0.9))
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    // MARK: 3. Как начисляем
+    // MARK: Как начисляем
 
     private var modesSection: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -252,80 +236,11 @@ struct HostLoyaltyView: View {
         }
     }
 
-    // MARK: 4. Калькулятор
-    //
-    // Арифметика — только `PointsMath` (округление half-up, как на сервере).
-    // Своей формулы здесь нет и быть не должно.
-
-    private var calculator: some View {
-        // Считает домен: `PointsMath.award` — то же округление half-up, что на
-        // сервере. Своей формулы здесь нет и быть не должно.
-        let config = PointsConfig(pointsEnabled: true, pointsMode: "cashback",
-                                  cashbackPercent: calcPercent)
-        let award = (try? PointsMath.award(config: config, billAmount: Self.calcBill,
-                                           bandIndex: nil).get()) ?? 0
-        return VStack(alignment: .leading, spacing: 0) {
-            Text("Калькулятор")
-                .textCase(.uppercase)
-                .sanEyebrowText()
-                .foregroundStyle(Color.sanEyebrow)
-
-            HStack(alignment: .center, spacing: 14) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Чек").font(.golos(11.5, .bold)).foregroundStyle(Color.sanSandInk)
-                    Text(Self.calcBill.sanThousands)
-                        .font(.golos(26, .heavy)).foregroundStyle(Color.sanInk)
-                }
-                Image(systemName: "arrow.right")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(Color(hex: 0xC97A3A))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Гость получит").font(.golos(11.5, .bold)).foregroundStyle(Color.sanSandInk)
-                    Text("+\(award)")
-                        .font(.golos(26, .heavy)).foregroundStyle(Color(hex: 0xE04206))
-                        .contentTransition(.numericText())
-                        .animation(.snappy, value: award)
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(.top, 14)
-
-            HStack(spacing: 8) {
-                ForEach([3.0, 5.0, 8.0, 10.0], id: \.self) { p in
-                    Button {
-                        SanHaptics.selection()
-                        calcPercent = p
-                    } label: {
-                        Text("\(p.sanPercentText)%")
-                            .font(.golos(13, .bold))
-                            .foregroundStyle(calcPercent == p ? Color.white : Color.sanSandInk)
-                            .padding(.horizontal, 14).padding(.vertical, 8)
-                            .background {
-                                if calcPercent == p { Capsule().fill(LinearGradient.sanAccentGradient) }
-                                else { Capsule().fill(Color.white.opacity(0.8)) }
-                            }
-                    }
-                    .buttonStyle(.sanPress(0.93))
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(.top, 16)
-
-            Text("Максимум \(Int(PointsMath.maxCashbackPercent))%. Пауза между начислениями — \(cooldownMinutes) минут.")
-                .font(.golos(11.5)).foregroundStyle(Color.sanSandInk)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 12)
-        }
-        .padding(20)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .sanSandPanel(radius: SanRadius.hero)
-    }
-
     private var cooldownMinutes: Int {
         PointsMath.effectiveCooldownMinutes(venue?.earnCooldownMinutes ?? PointsMath.defaultEarnCooldownMinutes)
     }
 
-    // MARK: 5. Награды
+    // MARK: Награды
 
     private var rewardsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -369,7 +284,7 @@ struct HostLoyaltyView: View {
         .sanCard(padding: 0, radius: SanRadius.card)
     }
 
-    // MARK: 6. Правила
+    // MARK: Правила
 
     private var rulesSection: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -412,26 +327,28 @@ struct HostLoyaltyView: View {
         .padding(.horizontal, 16).padding(.vertical, 14)
     }
 
-    // MARK: 7. Что видит гость
+    // MARK: Что видит гость
 
     private var guestPreview: some View {
         VStack(alignment: .leading, spacing: 12) {
             eyebrow("Что видит гость")
-            // Живая связь: карточка перерисовывается, пока хост крутит калькулятор.
+            // Баланс 0 — это макет, а не чей-то счёт: выдуманные «340 баллов»
+            // здесь читались бы как реальные данные.
             WalletPointsCard(
                 card: VenuePointsCard(venueID: venue?.id ?? "preview",
                                       venueName: venue?.name ?? "Ваше заведение",
-                                      balance: 340),
+                                      balance: 0),
                 venue: previewVenue,
                 isFront: true)
                 .padding(6)
                 .background(Color.sanSurfaceMuted,
                             in: RoundedRectangle(cornerRadius: 30, style: .continuous))
+            Text("Так карта выглядит у гостя")
+                .font(.golos(11.5)).foregroundStyle(Color.sanInkSoft)
         }
     }
 
-    /// Доменное заведение для превью — берём конфиг текущего и подставляем
-    /// процент из калькулятора, чтобы связь «настройка → карта гостя» была видна.
+    /// Доменное заведение для превью — конфиг баллов текущего заведения как есть.
     private var previewVenue: Venue? {
         guard let dto = venue else { return nil }
         var v = Venue(id: dto.id, name: dto.name, category: .cafe, district: "",
@@ -440,9 +357,18 @@ struct HostLoyaltyView: View {
         v.pointsEnabled = true
         v.pointsMode = dto.pointsMode
         v.pointsFlat = dto.pointsFlat
-        v.cashbackPercent = calcPercent      // связь «настройка → карта гостя»
+        v.cashbackPercent = dto.cashbackPercent
         v.pointsRewards = dto.pointsRewards
         return v
+    }
+
+    // MARK: Подвал
+
+    private var footer: some View {
+        Text("Настройки баллов меняются через менеджера Ayant")
+            .font(.golos(12.5)).foregroundStyle(Color.sanInkSoft)
+            .frame(maxWidth: .infinity)
+            .multilineTextAlignment(.center)
     }
 
     private func eyebrow(_ text: LocalizedStringKey) -> some View {

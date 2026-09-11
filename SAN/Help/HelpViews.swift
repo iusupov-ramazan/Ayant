@@ -1,5 +1,11 @@
 import SwiftUI
 
+/// Публичные ссылки приложения — одно место, чтобы адрес не расходился между
+/// экранами (тот же URL стоит в подписи под кнопками входа в `AuthView`).
+enum AyantLinks {
+    static let privacyPolicy = URL(string: "https://ayant.kg/privacy.html")!
+}
+
 // MARK: - О приложении
 
 struct AboutView: View {
@@ -29,6 +35,10 @@ struct AboutView: View {
 
                 Text("Здесь нет спама, рекламы и лишних кнопок. Только САН, заведения и твоя выгода. Всё самое нужное — в одном приложении. Пользуйся!")
                     .font(.subheadline).foregroundStyle(.secondary)
+
+                Link("Политика конфиденциальности", destination: AyantLinks.privacyPolicy)
+                    .font(.subheadline.weight(.medium))
+                    .padding(.top, 4)
             }
             .padding(16)
         }
@@ -131,6 +141,11 @@ struct SupportView: View {
                     Label { Text("WhatsApp") } icon: { assetIcon("whatsapp") }
                 }
                 Link(destination: email) { Label("Email", systemImage: "envelope.fill") }
+            }
+            Section("Документы") {
+                Link(destination: AyantLinks.privacyPolicy) {
+                    Label("Политика конфиденциальности", systemImage: "hand.raised.fill")
+                }
             }
         }
         .navigationTitle("Поддержка")

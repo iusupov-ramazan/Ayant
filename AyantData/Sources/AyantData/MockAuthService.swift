@@ -76,6 +76,18 @@ public final class MockAuthService: AuthService {
         return user
     }
 
+    /// Куда «отправили» письма для сброса — чтобы это было видно при отладке.
+    public private(set) var passwordResetEmails: [String] = []
+
+    /// Письма mock не шлёт. Незнакомую почту не выдаём — как и Firebase с
+    /// защитой от перебора: ответ всегда «отправлено».
+    public func sendPasswordReset(email: String) async throws {
+        try await fakeDelay()
+        let key = AuthValidation.normalizedEmail(email)
+        guard AuthValidation.isValidEmail(key) else { throw AuthError.invalidEmail }
+        passwordResetEmails.append(key)
+    }
+
     // MARK: Соцсети (имитация — в проде заменит Firebase)
 
     public func signInWithGoogle() async throws -> SANUser {
@@ -112,6 +124,14 @@ public final class MockAuthService: AuthService {
             accounts = db
         }
         signOut()
+    }
+
+    /// Отозванные коды Apple — mock только запоминает их.
+    public private(set) var revokedAppleCodes: [String] = []
+
+    public func revokeAppleToken(authorizationCode: String) async throws {
+        try await fakeDelay()
+        revokedAppleCodes.append(authorizationCode)
     }
 
     public func discardGuestAccount() async {

@@ -52,6 +52,10 @@ struct RootView: View {
             set: { next in
                 if session.isGuest, next == .qr || next == .wallet {
                     showAuth = true
+                } else if next == .search, !ReleaseFlags.searchTab {
+                    // Вкладки нет на панели — выбрать её нельзя (кейс в enum
+                    // остаётся, чтобы включить обратно одним флагом).
+                    return
                 } else {
                     tab = next
                 }
@@ -64,9 +68,11 @@ struct RootView: View {
             HomeFeedView()
                 .tabItem { Label("Главная", systemImage: "house.fill") }
                 .tag(GuestTab.home)
-            SearchView()
-                .tabItem { Label("Поиск", systemImage: "magnifyingglass") }
-                .tag(GuestTab.search)
+            if ReleaseFlags.searchTab {
+                SearchView()
+                    .tabItem { Label("Поиск", systemImage: "magnifyingglass") }
+                    .tag(GuestTab.search)
+            }
             MyQRView(showsDone: false)
                 .tabItem { Label("Мой QR", systemImage: "qrcode") }
                 .tag(GuestTab.qr)

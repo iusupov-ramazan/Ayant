@@ -295,15 +295,22 @@ struct CouponDetailView: View {
 
             perforation
 
-            // Тело: QR + код
+            // Тело: QR + код. QR только у купона заведения — он записан в
+            // Firestore и его сканирует сотрудник. У бонус-купона документа
+            // на сервере нет, показывать сканируемый код нельзя: остаётся
+            // код текстом и кнопка «Использовать купон» ниже.
             VStack(spacing: 16) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .fill(.white)
-                        .frame(width: 224, height: 224)
-                        .shadow(color: .black.opacity(0.06), radius: 6, y: 2)
-                    QRCodeView(text: coupon.code, size: 188).opacity(isUsed ? 0.35 : 1)
-                    if isUsed { usedStamp }
+                if coupon.isVenueBound {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .fill(.white)
+                            .frame(width: 224, height: 224)
+                            .shadow(color: .black.opacity(0.06), radius: 6, y: 2)
+                        QRCodeView(text: coupon.code, size: 188).opacity(isUsed ? 0.35 : 1)
+                        if isUsed { usedStamp }
+                    }
+                } else if isUsed {
+                    usedStamp.padding(.vertical, 12)
                 }
                 VStack(spacing: 6) {
                     Text("КОД КУПОНА").font(.caption2.weight(.semibold))

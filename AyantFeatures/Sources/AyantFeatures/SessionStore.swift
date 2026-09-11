@@ -11,6 +11,9 @@ public final class SessionStore: ObservableObject {
     @Published public private(set) var user: SANUser?
     @Published public var isWorking = false
     @Published public var errorMessage: String?
+    /// Не-ошибка, о которой всё же надо сказать («письмо отправлено»).
+    /// Отдельный канал: `errorMessage` показывается с заголовком «Ошибка».
+    @Published public var infoMessage: String?
 
     private let service: AuthService
     private var currentNonce: String?
@@ -61,6 +64,15 @@ public final class SessionStore: ObservableObject {
 
     public func registerEmail(name: String, email: String, password: String) {
         run { try await self.service.registerWithEmail(name: name, email: email, password: password) }
+    }
+
+    /// «Забыли пароль?». Сессию не меняет — только сообщает, что письмо ушло.
+    public func sendPasswordReset(email: String) {
+        let clean = AuthValidation.normalizedEmail(email)
+        perform {
+            try await self.service.sendPasswordReset(email: clean)
+            self.infoMessage = "Письмо для сброса пароля отправлено на \(clean)"
+        }
     }
 
     // MARK: Google
@@ -142,12 +154,13 @@ public final class SessionStore: ObservableObject {
     /// ДО `service.signOut()`, иначе запись в Firestore уже некому авторизовать
     /// и токен остаётся получать чужие кампании. Поэтому `user = nil`
     /// выставляем в самом конце — экран входа не должен появиться раньше.
+    /// Ждём хук не дольше `signOutHookTimeout`: выход не должен зависеть от сети.
     public func signOut() {
         let wasGuest = isGuest
         isWorking = true
         errorMessage = nil
         Task {
-            await willSignOut?()
+            await runWillSignOutBounded()
             if wasGuest { await service.discardGuestAccount() }
             service.signOut()
             user = nil
@@ -157,13 +170,33 @@ public final class SessionStore: ObservableObject {
 
     /// Полное удаление аккаунта: Firestore-данные и запись в Firebase Auth.
     /// `onFinish(nil)` — успех; иначе текст ошибки для алерта.
-    public func deleteAccount(onFinish: @escaping (String?) -> Void = { _ in }) {
+    ///
+    /// Порядок: (1) отзыв гранта Apple, если пользователь входил через Apple и
+    /// экран принёс свежий `authorizationCode` (App Review 5.1.1(v)); (2) само
+    /// удаление; (3) `willSignOut` — уже best-effort и с пределом по времени;
+    /// (4) чистка локального состояния.
+    ///
+    /// Раньше `willSignOut` шёл ПЕРВЫМ: если облачная функция затем отвечала
+    /// 409 («владеет заведениями»), 401 или 500, пользователь оставался в
+    /// аккаунте, но устройство уже было отписано от push. Push-токены удаляет
+    /// та же функция каскадом по `uid`, так что после успешного удаления хук
+    /// нужен только ради локальной отписки от топиков.
+    ///
+    /// Если отзыв Apple не удался — НЕ удаляем: остался бы Firebase-аккаунт
+    /// без записи, но с живым грантом в настройках iOS у пользователя.
+    public func deleteAccount(appleAuthorizationCode: String? = nil,
+                              onFinish: @escaping (String?) -> Void = { _ in }) {
+        let needsAppleRevoke = user?.provider == .apple
         isWorking = true
         errorMessage = nil
         Task {
-            await willSignOut?()
+            defer { publishServiceUserIfChanged() }
             do {
+                if needsAppleRevoke, let code = appleAuthorizationCode {
+                    try await service.revokeAppleToken(authorizationCode: code)
+                }
                 try await service.deleteAccount()
+                await runWillSignOutBounded()
                 self.user = nil
                 self.isWorking = false
                 onFinish(nil)
@@ -176,6 +209,24 @@ public final class SessionStore: ObservableObject {
         }
     }
 
+    /// Сколько ждём хук `willSignOut` (отписка устройства от push).
+    /// Без предела мёртвая сеть блокировала выход НАВСЕГДА: спиннер без
+    /// ошибки, и выйти из аккаунта нельзя. По таймауту выходим всё равно —
+    /// лишний токен в `userTokens` дешевле запертого пользователя.
+    private static let signOutHookTimeout: Duration = .seconds(5)
+
+    private func runWillSignOutBounded() async {
+        guard let hook = willSignOut else { return }
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await hook() }
+            group.addTask { _ = try? await Task.sleep(for: Self.signOutHookTimeout) }
+            // Кто первый — тот и решает; второго отменяем (хук, если он
+            // не смотрит на отмену, дорабатывает в фоне — нам это не мешает).
+            _ = await group.next()
+            group.cancelAll()
+        }
+    }
+
     // MARK: Общий запуск async-операции
 
     /// Сколько ждём ответ провайдера, прежде чем признать попытку неудачной.
@@ -184,7 +235,14 @@ public final class SessionStore: ObservableObject {
     /// без ошибки и без возможности повторить.
     private static let authTimeout: Duration = .seconds(30)
 
+    /// Операция, меняющая сессию: результат становится текущим пользователем.
     private func run(_ op: @escaping () async throws -> SANUser) {
+        perform { self.user = try await op() }
+    }
+
+    /// Общая обвязка любой операции провайдера: спиннер, сторожевой таймер,
+    /// перевод ошибки в текст, молчание на отмену.
+    private func perform(_ op: @escaping () async throws -> Void) {
         isWorking = true
         errorMessage = nil
         let watchdog = Task { [weak self] in
@@ -196,15 +254,25 @@ public final class SessionStore: ObservableObject {
         Task {
             defer { watchdog.cancel() }
             do {
-                let u = try await op()
-                self.user = u
+                try await op()
             } catch AuthError.cancelled {
                 // Пользователь сам закрыл шторку входа — это не ошибка.
             } catch {
                 self.errorMessage = (error as? AuthError)?.errorDescription ?? error.localizedDescription
             }
             self.isWorking = false
+            publishServiceUserIfChanged()
         }
+    }
+
+    /// События `userChanges()`, пришедшие ПОКА шла наша операция, слушатель
+    /// пропускает (см. `init`) — и раньше ничем не добирал. Отзыв сессии или
+    /// выход с другого экрана, попавшие в это окно, терялись: стор показывал
+    /// вошедшего пользователя, которого у провайдера уже нет. Поэтому по
+    /// окончании каждой операции сверяемся с провайдером ещё раз.
+    private func publishServiceUserIfChanged() {
+        let current = service.currentUser()
+        if user != current { user = current }
     }
 
     // MARK: Nonce (для безопасного Apple-входа через Firebase)

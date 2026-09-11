@@ -4,144 +4,10 @@ import AyantFeatures
 
 // Карточка ленты после редизайна (SCREENS.md G2).
 //
-// Главное изменение всего редизайна: карточка во всю ширину, высота 600,
-// скругления нет, между карточками 10pt канваса. Не «плитка в сетке», а полоса —
-// поэтому фото занимает весь кадр, а текст лежит поверх на четырёхстоповом
-// скриме.
-//
-// Слои снизу вверх: фото → скрим → бейдж скидки → сердечко → блок контента.
-
-// MARK: - Размер карточки
-//
-// Карточка больше не фиксирована по высоте: она принимает пропорции самой
-// фотографии, как в ленте Instagram. Пропорции ограничены коридором — иначе
-// панорама схлопнется в полоску, а очень вертикальный кадр вытеснит всё
-// остальное с экрана. Ограничиваем именно СООТНОШЕНИЕ, а не высоту в точках:
-// так одна и та же карточка одинаково смотрится на любой ширине экрана.
-
-enum SanFeedCard {
-    /// Ширина / высота. Меньше — выше карточка.
-    static let tallestAspect: CGFloat = 0.63    // ≈638pt на экране 402pt
-    static let widestAspect: CGFloat = 0.95     // ≈423pt
-    /// Пока фото не загрузилось (и когда его нет) — пропорция из макета:
-    /// 600pt при ширине 402pt.
-    static let placeholderAspect: CGFloat = 0.67
-
-    /// Пропорция кадра, зажатая в коридор.
-    static func aspect(for size: CGSize) -> CGFloat {
-        guard size.width > 0, size.height > 0 else { return placeholderAspect }
-        return min(max(size.width / size.height, tallestAspect), widestAspect)
-    }
-}
-
-/// Загружает фото один раз и отдаёт и картинку, и её реальные пропорции.
-///
-/// Именно загрузка, а не `AsyncImage`: из фазы `AsyncImage` размеры не достать,
-/// а высоту карточки нужно знать до отрисовки. Сеть общая с `URLCache`
-/// (настроен в `SANApp`), так что повторной закачки не происходит.
-@MainActor
-final class FeedPhotoLoader: ObservableObject {
-    @Published var image: UIImage?
-    private var requested: URL?
-
-    func load(_ urlString: String?) async {
-        guard let s = urlString, !s.isEmpty, let url = URL(string: s), requested != url else { return }
-        requested = url
-        guard let (data, _) = try? await URLSession.shared.data(from: url) else { return }
-        image = UIImage(data: data)
-    }
-}
-
-/// Фото на весь кадр, иначе фолбэк: градиент заведения + штриховка + «ФОТО».
-private struct FeedPhoto: View {
-    let image: UIImage?
-    let gradient: [Color]
-
-    var body: some View {
-        ZStack {
-            LinearGradient(colors: gradient, startPoint: .topLeading, endPoint: .bottomTrailing)
-            if let image {
-                // Кадр уже в своих пропорциях, поэтому `fill` почти ничего не режет —
-                // обрезка остаётся только на краях коридора пропорций.
-                Image(uiImage: image).resizable().scaledToFill()
-            } else {
-                placeholder
-            }
-        }
-    }
-
-    private var placeholder: some View {
-        ZStack {
-            // Та же riso-штриховка, что у хоста, но плотнее (период 14) — как в макете.
-            SanRisoHatch(opacity: 0.21, stripe: 1.5, period: 14)
-            VStack(spacing: 9) {
-                Image(systemName: "camera")
-                    .font(.system(size: 34, weight: .light))
-                Text("ФОТО")
-                    .font(.golos(10.5, .heavy))
-                    .tracking(2)
-            }
-            .foregroundStyle(.white.opacity(0.6))
-            // По макету глиф стоит на 44% высоты, а не по центру.
-            .frame(maxHeight: .infinity, alignment: .top)
-            // Глиф на 44% высоты кадра — как в макете.
-            .padding(.top, 180)
-        }
-    }
-}
-
-/// Четырёхстоповый скрим. Плоскую заливку не ставить: белый текст внизу держится
-/// на 12:1 именно из-за нижних двух стопов.
-private struct FeedScrim: View {
-    var body: some View {
-        LinearGradient(
-            stops: [
-                .init(color: Color(hex: 0x17130F).opacity(0.94), location: 0),
-                .init(color: Color(hex: 0x17130F).opacity(0.74), location: 0.30),
-                .init(color: Color(hex: 0x17130F).opacity(0.10), location: 0.62),
-                .init(color: Color(hex: 0x17130F).opacity(0.28), location: 1),
-            ],
-            startPoint: .bottom, endPoint: .top)
-    }
-}
-
-/// Стеклянный чип поверх фото.
-private struct FeedGlassChip<Content: View>: View {
-    @ViewBuilder var content: Content
-    var body: some View {
-        content
-            .font(.golos(12.5, .semibold))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 12).padding(.vertical, 7)
-            .background(.ultraThinMaterial.opacity(0.6), in: Capsule())
-            .background(Color.white.opacity(0.14), in: Capsule())
-    }
-}
-
-/// Сердечко «сохранить»: стекло → акцентный градиент с «попом».
-private struct FeedSaveButton: View {
-    let isSaved: Bool
-    var action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(isSaved ? AnyShapeStyle(LinearGradient.sanAccentGradient)
-                                  : AnyShapeStyle(Color.white.opacity(0.18)))
-                    .background(.ultraThinMaterial.opacity(isSaved ? 0 : 0.5),
-                                in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                Image(systemName: isSaved ? "heart.fill" : "heart")
-                    .font(.system(size: 19, weight: .semibold))
-                    .foregroundStyle(.white)
-            }
-            .frame(width: 44, height: 44)
-            .sanPop(on: isSaved)
-        }
-        .buttonStyle(.sanPress(0.86))
-        .accessibilityLabel(isSaved ? "Убрать из сохранённых" : "Сохранить")
-    }
-}
+// Карточка во всю ширину, без скруглений, между карточками 10pt канваса:
+// не «плитка в сетке», а пост. Старый вариант с фото на весь кадр и текстом
+// поверх скрима (`SanFeedCard`, `FeedPhoto`, `FeedScrim`, стеклянные чипы)
+// удалён — ниже только то, что рисуется сейчас.
 
 // MARK: - Пост ленты (SCREENS.md G2)
 //
@@ -777,18 +643,6 @@ struct FeedSkeleton: View {
 }
 
 // MARK: - Мелкие производные для карточки
-
-extension DealType {
-    /// Надпись на бейдже, когда скидки в процентах нет.
-    var badgeLabel: String {
-        switch self {
-        case .discount: return "СКИДКА"
-        case .promo: return "ПРОМО"
-        case .novelty: return "НОВОЕ"
-        case .announcement: return "АНОНС"
-        }
-    }
-}
 
 extension Venue {
     /// Чип «сколько начислим»: читает конфиг баллов, ничего не считает.

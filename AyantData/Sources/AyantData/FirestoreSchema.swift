@@ -159,6 +159,14 @@ public enum FS {
         public static let phone = "phone"
         public static let email = "email"
         public static let verification = "verification"
+        // Реквизиты / расширенная информация о бизнесе. Имена полей совпадают
+        // с именами свойств `HostProfile`.
+        public static let legalForm = "legalForm"
+        public static let legalName = "legalName"
+        public static let inn = "inn"
+        public static let registrationAddress = "registrationAddress"
+        public static let website = "website"
+        public static let about = "about"
     }
 
     // MARK: - categories/{slug}

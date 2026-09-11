@@ -39,38 +39,65 @@ struct BonusHubView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
-                    headerRow
-                    if !pointsCards.isEmpty {
-                        WalletDeck(cards: pointsCards, venues: venuesByID) { openedCard = $0 }
-                            .padding(.horizontal, -SanMetrics.screenPadding)
-                    } else {
-                        emptyPointsCard
+            walletFlow(hubContent)
+        }
+    }
+
+    private var hubContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                headerRow
+                if !pointsCards.isEmpty {
+                    WalletDeck(cards: pointsCards, venues: venuesByID) { openedCard = $0 }
+                        .padding(.horizontal, -SanMetrics.screenPadding)
+                } else {
+                    emptyPointsCard
+                }
+                if let stampCard {
+                    section("Карта лояльности") {
+                        WalletStampCard(card: stampCard)
                     }
-                    if let stampCard {
-                        section("Карта лояльности") {
-                            WalletStampCard(card: stampCard)
-                        }
-                    }
+                }
+                // Глобальный кошелёк (награды, подарки, игры) выключен на
+                // релиз: он локальный и без записи в Firestore. Без него
+                // хаб — колода баллов, карта штампов и строка в купоны.
+                if ReleaseFlags.globalBonusWallet {
                     rewardsSection
                     gamesSection
-                }
-                .padding(.horizontal, SanMetrics.screenPadding)
-                .padding(.top, 8)
-                .padding(.bottom, 28)
-                .sanScreenEnter()
-            }
-            .sanScreenBackground()
-            .sanStatusBarCap()
-            .toolbar(.hidden, for: .navigationBar)
-            .navigationDestination(item: $openedCard) { card in
-                if let venue = venuesByID[card.venueID] {
-                    VenuePointsScreen(venue: venue)
                 } else {
-                    VenuePointsListView()
+                    couponsSection
                 }
             }
+            .padding(.horizontal, SanMetrics.screenPadding)
+            .padding(.top, 8)
+            .padding(.bottom, 28)
+            .sanScreenEnter()
+        }
+        .sanScreenBackground()
+        .sanStatusBarCap()
+        .toolbar(.hidden, for: .navigationBar)
+        .navigationDestination(item: $openedCard) { card in
+            if let venue = venuesByID[card.venueID] {
+                VenuePointsScreen(venue: venue)
+            } else {
+                VenuePointsListView()
+            }
+        }
+    }
+
+    /// Тост, алерты и листы глобального кошелька — только с включённым
+    /// флагом: без него ни одно из этих состояний не наступает.
+    @ViewBuilder
+    private func walletFlow<Content: View>(_ content: Content) -> some View {
+        if ReleaseFlags.globalBonusWallet {
+            walletModals(content)
+        } else {
+            content
+        }
+    }
+
+    private func walletModals<Content: View>(_ content: Content) -> some View {
+        content
             .overlay(alignment: .top) { rewardToast }
             .guestAlert(isPresented: $showGuestAlert, message: GuestGate.game)
             .alert("Купон получен 🎉", isPresented: Binding(
@@ -104,7 +131,6 @@ struct BonusHubView: View {
             .sheet(item: $giftShare) { item in
                 GiftShareSheet(url: item.url, title: item.title)
             }
-        }
     }
 
     // MARK: Шапка
@@ -122,22 +148,65 @@ struct BonusHubView: View {
             Spacer(minLength: 8)
             // Глобальный кошелёк BonusEngine — визуально подчинённый: он
             // зарабатывается почти в ноль и не должен спорить с баллами САН.
-            NavigationLink { MyCouponsView() } label: {
-                VStack(alignment: .trailing, spacing: 1) {
-                    Text("БОНУСЫ")
-                        .font(.golos(10.5, .heavy)).tracking(0.4)
-                        .foregroundStyle(Color(hex: 0x9A9188))
-                    Text("\(bonus.balance)")
-                        .font(.golos(16, .heavy)).tracking(-0.5)
-                        .foregroundStyle(Color.sanInk)
-                        .contentTransition(.numericText())
-                        .animation(.snappy, value: bonus.balance)
+            // Скрыт вместе с кошельком (`ReleaseFlags.globalBonusWallet`).
+            if ReleaseFlags.globalBonusWallet {
+                NavigationLink { MyCouponsView() } label: {
+                    VStack(alignment: .trailing, spacing: 1) {
+                        Text("БОНУСЫ")
+                            .font(.golos(10.5, .heavy)).tracking(0.4)
+                            .foregroundStyle(Color(hex: 0x9A9188))
+                        Text("\(bonus.balance)")
+                            .font(.golos(16, .heavy)).tracking(-0.5)
+                            .foregroundStyle(Color.sanInk)
+                            .contentTransition(.numericText())
+                            .animation(.snappy, value: bonus.balance)
+                    }
+                    .padding(.horizontal, 14).padding(.vertical, 9)
+                    .background(Color.sanSurface, in: Capsule())
+                    .overlay(Capsule().strokeBorder(Color.sanHairline, lineWidth: 0.5))
                 }
-                .padding(.horizontal, 14).padding(.vertical, 9)
-                .background(Color.sanSurface, in: Capsule())
-                .overlay(Capsule().strokeBorder(Color.sanHairline, lineWidth: 0.5))
+                .buttonStyle(.sanPress(0.94))
             }
-            .buttonStyle(.sanPress(0.94))
+        }
+    }
+
+    // MARK: Купоны без глобального кошелька
+
+    /// «Мои купоны» + ссылки на полные списки. Раньше в купоны вели только
+    /// капсула «БОНУСЫ» и заголовок наград — оба спрятаны вместе с кошельком,
+    /// а купоны на акции заведений выдаются и без него.
+    private var couponsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            NavigationLink { MyCouponsView() } label: {
+                HStack(spacing: 14) {
+                    RoundedRectangle(cornerRadius: 15, style: .continuous)
+                        .fill(LinearGradient.sanAccentGradient)
+                        .frame(width: 46, height: 46)
+                        .overlay(Image(systemName: "ticket.fill")
+                            .font(.system(size: 19, weight: .semibold)).foregroundStyle(.white))
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Мои купоны").font(.golos(14.5, .bold)).tracking(-0.2)
+                            .foregroundStyle(Color.sanInk)
+                        Text(coupons.activeCount > 0
+                             ? "Активных: \(coupons.activeCount)"
+                             : "Купоны на акции заведений")
+                            .font(.golos(12.5)).foregroundStyle(Color.sanInkSoft)
+                    }
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Color(hex: 0x9A9188))
+                }
+                .padding(15)
+                .sanCard(padding: 0, radius: SanRadius.card)
+            }
+            .buttonStyle(.sanPress(0.97))
+            // Колода показывает не все карты — ссылки на полные списки остаются.
+            HStack(spacing: 10) {
+                listLink("Все баллы", "star.circle.fill") { VenuePointsListView() }
+                listLink("Все карты", "creditcard.fill") { LoyaltyView() }
+            }
+            .padding(.top, 2)
         }
     }
 

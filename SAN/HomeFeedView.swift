@@ -24,6 +24,12 @@ struct HomeFeedView: View {
 
     private var items: [FeedItem] { feedStore.items(category: category) }
     private var feed: [Deal] { feedStore.deals(category: category) }
+    /// Заведения для ряда «Заведения»: ранжированный каталог по категории
+    /// (одобренные, не на паузе), первые `venueRailLimit` — ряд, а не список.
+    private var railVenues: [Venue] {
+        Array(feedStore.venues(category: category).prefix(Self.venueRailLimit))
+    }
+    private static let venueRailLimit = 12
 
     /// Якорь самого верха экрана — к нему возвращаемся при смене категории.
     ///
@@ -45,6 +51,12 @@ struct HomeFeedView: View {
                         // молча не удалил.
                         if !store.savedTodaySpecials.isEmpty {
                             todaySpecialStrip.padding(.bottom, 18)
+                        }
+                        // Пока вкладка «Поиск» скрыта (`ReleaseFlags.searchTab`),
+                        // это единственный список заведений в приложении —
+                        // без него человек видел бы только акции.
+                        if showsVenueRail {
+                            venueRail.padding(.bottom, 18)
                         }
                         feedContent
                     } header: {
@@ -133,12 +145,11 @@ struct HomeFeedView: View {
             Image(systemName: "mappin.and.ellipse")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(Color.sanAccentText)
+            // Без шеврона: города пока не выбираются, и стрелка обещала бы
+            // меню, которого нет. Это подпись, а не кнопка.
             Text(L(store.selectedCity.name))
                 .font(.golos(13.5, .bold)).tracking(-0.2)
                 .foregroundStyle(Color.sanInk)
-            Image(systemName: "chevron.down")
-                .font(.system(size: 9, weight: .bold))
-                .foregroundStyle(Color(hex: 0x9A9188))
         }
     }
 
@@ -377,6 +388,42 @@ struct HomeFeedView: View {
         visibleCount = min(visibleCount + Self.pageSize, items.count)
     }
 
+    // MARK: Заведения
+
+    /// Ряд есть только у готовой ленты: на скелетоне, ошибке и пустом городе
+    /// показывать нечего. Для выбранной категории ряд тоже остаётся — он
+    /// полезнее всего, когда акций в категории ещё нет.
+    private var showsVenueRail: Bool {
+        !feedStore.isLoading && !feedStore.loadFailed && !railVenues.isEmpty
+    }
+
+    private var venueRail: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Заведения")
+                .textCase(.uppercase)
+                .sanEyebrowText()
+                .foregroundStyle(Color.sanInkSoft)
+                .padding(.horizontal, SanMetrics.screenPadding)
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: 10) {
+                    ForEach(railVenues) { venue in
+                        // Тот же маршрут, что у рекламной карточки в ленте:
+                        // `Venue` в `path` → `VenueDetailView`.
+                        Button { path.append(venue) } label: {
+                            FeedVenueTile(
+                                venue: venue,
+                                rating: store.aggregate(for: venue).rating,
+                                distanceKm: location.distanceKm(to: venue.latitude, venue.longitude))
+                        }
+                        .buttonStyle(.sanPress(0.97))
+                    }
+                }
+                .padding(.horizontal, SanMetrics.screenPadding)
+            }
+            .scrollClipDisabled()
+        }
+    }
+
     // MARK: «Сегодня в избранном»
 
     private var todaySpecialStrip: some View {
@@ -469,6 +516,68 @@ enum FeedRoute: Hashable {
     case saved
 }
 
+/// Плитка заведения в ряду «Заведения» на главной: обложка, название,
+/// категория, рейтинг и расстояние. Нарочно лёгкая — в `LazyHStack` их дюжина.
+struct FeedVenueTile: View {
+    let venue: Venue
+    let rating: Double
+    var distanceKm: Double?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            VenuePhoto(urlString: venue.imageURL, gradient: venue.gradientColors)
+                .frame(height: 96)
+                .frame(maxWidth: .infinity)
+                .clipped()
+                .overlay(alignment: .topTrailing) {
+                    if venue.isOpenNow {
+                        Circle().fill(Color(hex: 0x2FA24C))
+                            .frame(width: 8, height: 8)
+                            .overlay(Circle().strokeBorder(.white, lineWidth: 1.5))
+                            .padding(8)
+                            .accessibilityLabel("Открыто")
+                    }
+                }
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 4) {
+                    Text(venue.name)
+                        .font(.golos(13.5, .bold)).tracking(-0.25)
+                        .foregroundStyle(Color.sanInk).lineLimit(1)
+                    if venue.isVerified {
+                        Image(systemName: "checkmark.seal.fill")
+                            .font(.system(size: 10.5))
+                            .foregroundStyle(Color(hex: 0x4DA3FF))
+                    }
+                }
+                Text(venue.category.locKey)
+                    .font(.golos(11.5)).foregroundStyle(Color.sanInkSoft).lineLimit(1)
+                HStack(spacing: 6) {
+                    if rating > 0 {
+                        HStack(spacing: 3) {
+                            Image(systemName: "star.fill").font(.system(size: 9.5))
+                                .foregroundStyle(Color(hex: Palette.orange))
+                            Text(rating.sanRatingText)
+                        }
+                    }
+                    if let distanceKm {
+                        Text(distanceKm.distanceText)
+                    }
+                }
+                .font(.golos(11.5, .semibold)).foregroundStyle(Color.sanInkSoft)
+                .lineLimit(1)
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(width: 156)
+        .background(Color.sanSurface)
+        .clipShape(RoundedRectangle(cornerRadius: SanRadius.card, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: SanRadius.card, style: .continuous)
+            .strokeBorder(Color.sanHairline, lineWidth: 0.5))
+        .contentShape(Rectangle())
+    }
+}
+
 #Preview {
     HomeFeedView()
         .environmentObject(AyantStores.app())
@@ -486,13 +595,13 @@ struct DealShare: Identifiable {
     let venue: Venue?
     var id: String { deal.id }
 
-    /// Текст без ссылки: у приложения нет публичных веб-страниц предложений,
-    /// а выдуманный адрес открывался бы в никуда.
+    /// Тот же Universal Link, что и в шаринге с экрана предложения
+    /// (`DeepLinks.dealURL`): получатель откроет акцию в приложении.
     var text: String {
         var parts = [deal.title]
         if let venue { parts.append(venue.name) }
         if let new = deal.newPrice { parts.append("\(new) сом") }
-        return parts.joined(separator: " · ")
+        return parts.joined(separator: " · ") + "\n" + DeepLinks.dealURL(deal.id).absoluteString
     }
 }
 

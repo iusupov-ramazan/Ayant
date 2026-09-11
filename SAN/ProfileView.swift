@@ -1,4 +1,5 @@
 import SwiftUI
+import AuthenticationServices
 import AyantDomain
 import AyantFeatures
 
@@ -40,7 +41,9 @@ struct ProfileView: View {
                     settingsGroup
                     hostModeCard
                     reviewsSection
-                    referralSection
+                    // Реферальная программа платит бонусами глобального кошелька,
+                    // которые в первом релизе некуда тратить — скрыта флагом.
+                    if ReleaseFlags.referrals { referralSection }
                     helpGroup
                     accountCard
                 }
@@ -61,6 +64,15 @@ struct ProfileView: View {
                     }
                 case .hostMode:
                     HostOnboardingView { hostMode = true }
+                case .appleDelete:
+                    AppleDeleteConfirmSheet { code in
+                        session.deleteAccount(appleAuthorizationCode: code) { error in
+                            deleteError = error
+                        }
+                    } onFailure: { text in
+                        deleteError = text
+                    }
+                    .presentationDetents([.medium])
                 }
             }
         }
@@ -139,10 +151,14 @@ struct ProfileView: View {
         VStack(alignment: .leading, spacing: 10) {
             SanSectionHeader("Настройки")
             VStack(spacing: 0) {
+                // Город — справочная строка, не выбор: пока каталог только на
+                // Бишкек, и намёков на тап (шеврон, акцентный цвет, `Menu`)
+                // здесь быть не должно. Вернуть `Menu`, когда появится второй город.
                 settingRow(icon: "building.2.fill", title: "Город") {
                     Text(L(store.selectedCity.name))
-                        .font(.golos(15, .semibold)).foregroundStyle(Color.sanInkSoft)
+                        .font(.golos(15, .medium)).foregroundStyle(Color.sanInkSoft)
                 }
+                .accessibilityElement(children: .combine)
                 SanHairline(leading: 60)
                 settingRow(icon: "globe", title: "Язык") {
                     Menu {
@@ -314,12 +330,21 @@ struct ProfileView: View {
                 HStack {
                     Text("Версия").font(.golos(16, .medium)).foregroundStyle(Color.sanInk)
                     Spacer()
-                    Text("0.3 (MVP)").font(.golos(15, .semibold)).foregroundStyle(Color.sanInkSoft)
+                    Text(Self.bundleVersion).font(.golos(15, .semibold)).foregroundStyle(Color.sanInkSoft)
                 }
                 .padding(.horizontal, 14).padding(.vertical, 14)
             }
             .sanGroupCard()
         }
+    }
+
+    /// «X (Y)» из Info.plist — маркетинговая версия и номер сборки. Раньше
+    /// строка была захардкожена и отставала от релизов.
+    private static var bundleVersion: String {
+        let info = Bundle.main.infoDictionary
+        let short = info?["CFBundleShortVersionString"] as? String ?? "—"
+        let build = info?["CFBundleVersion"] as? String ?? "—"
+        return "\(short) (\(build))"
     }
 
     private func linkRow(_ title: String) -> some View {
@@ -344,6 +369,12 @@ struct ProfileView: View {
                 accountRow("Удалить аккаунт", icon: "trash")
             }.buttonStyle(.plain)
         }
+        // Выход и удаление ждут сеть (отписка от push, облачная функция):
+        // пока идут — спиннер и заблокированные строки, иначе второй тап
+        // запускал операцию повторно, а экран ничем не показывал, что занят.
+        .disabled(session.isWorking)
+        .opacity(session.isWorking ? 0.5 : 1)
+        .overlay { if session.isWorking { ProgressView() } }
         // Алерт ошибки — на внутреннем стеке: на одной вьюхе SwiftUI покажет
         // только одну презентацию, а ниже уже висит диалог подтверждения.
         .alert("Не удалось удалить аккаунт", isPresented: Binding(
@@ -369,7 +400,16 @@ struct ProfileView: View {
                 Button("Удалить аккаунт", role: .destructive) {
                     // Раньше здесь стоял signOut(): пользователь «удалялся»
                     // только с экрана, а запись и данные оставались в Firebase.
-                    session.deleteAccount { error in deleteError = error }
+                    //
+                    // Вход через Apple: сначала повторная шторка Apple — она даёт
+                    // `authorizationCode`, которым отзываем грант (App Review
+                    // 5.1.1(v)); удаление запускает уже лист. Остальные
+                    // провайдеры удаляются сразу.
+                    if session.user?.provider == .apple {
+                        activeSheet = .appleDelete
+                    } else {
+                        session.deleteAccount { error in deleteError = error }
+                    }
                 }
             }
             Button("Отмена", role: .cancel) {}
@@ -400,11 +440,81 @@ struct ProfileView: View {
 private enum ProfileSheet: Identifiable {
     case editReview(Review)
     case hostMode
+    /// Повторная шторка Apple перед удалением аккаунта — за `authorizationCode`.
+    case appleDelete
 
     var id: String {
         switch self {
         case .editReview(let r): return "review_\(r.id)"
         case .hostMode: return "hostMode"
+        case .appleDelete: return "appleDelete"
+        }
+    }
+}
+
+// MARK: - Подтверждение удаления через Apple
+
+/// Лист «Подтвердите удаление через Apple».
+///
+/// Apple требует отозвать грант Sign in with Apple при удалении аккаунта
+/// (App Review 5.1.1(v)), а для отзыва нужен СВЕЖИЙ `authorizationCode` — его
+/// даёт только повторная шторка. Scope не запрашиваем: имя и почта уже есть,
+/// а лишний запрос показал бы пользователю «поделиться почтой?» на удалении.
+///
+/// Отмена шторки закрывает лист молча; прочие отказы Apple уходят в алерт
+/// профиля через `onFailure`. Кнопка — отдельная вьюха по той же причине, что
+/// `AppleSignInButton` на экране входа: её нельзя пересобирать под открытой
+/// шторкой.
+private struct AppleDeleteConfirmSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let onCode: (String) -> Void
+    let onFailure: (String) -> Void
+
+    var body: some View {
+        VStack(spacing: 18) {
+            Image(systemName: "trash.circle.fill")
+                .font(.system(size: 44)).foregroundStyle(.red)
+                .padding(.top, 12)
+            Text("Подтвердите удаление через Apple")
+                .font(.golos(20, .bold)).foregroundStyle(Color.sanInk)
+                .multilineTextAlignment(.center)
+            Text("Вы входили через Apple. Чтобы отвязать аккаунт от Apple ID и удалить его, подтвердите действие ещё раз.")
+                .font(.golos(15, .regular)).foregroundStyle(Color.sanInkSoft)
+                .multilineTextAlignment(.center)
+            SignInWithAppleButton(.continue) { request in
+                request.requestedScopes = []
+            } onCompletion: { result in
+                handle(result)
+            }
+            .signInWithAppleButtonStyle(.black)
+            .frame(height: 50)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            Button("Отмена") { dismiss() }
+                .font(.golos(15, .medium)).foregroundStyle(Color.sanInkSoft)
+            Spacer(minLength: 0)
+        }
+        .padding(24)
+        .sanScreenBackground()
+    }
+
+    private func handle(_ result: Result<ASAuthorization, Error>) {
+        switch result {
+        case .failure(let error):
+            dismiss()
+            if let authError = error as? ASAuthorizationError, authError.code == .canceled {
+                return   // пользователь сам закрыл шторку — это не ошибка
+            }
+            onFailure(AuthError.appleFailed.errorDescription ?? "")
+        case .success(let auth):
+            dismiss()
+            guard let cred = auth.credential as? ASAuthorizationAppleIDCredential,
+                  let data = cred.authorizationCode,
+                  let code = String(data: data, encoding: .utf8)
+            else {
+                onFailure(AuthError.appleFailed.errorDescription ?? "")
+                return
+            }
+            onCode(code)
         }
     }
 }

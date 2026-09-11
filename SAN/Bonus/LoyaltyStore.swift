@@ -88,15 +88,17 @@ struct LoyaltyCardView: View {
                         .background(.white.opacity(0.92), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
                 .buttonStyle(.plain).disabled(!canScan)
-                Button {
-                    WalletService.addLoyaltyPass(card, userID: userID) { walletError = $0 }
-                } label: {
-                    Label("Wallet", systemImage: "wallet.pass.fill")
-                        .font(.golos(15, .bold)).foregroundStyle(.white)
-                        .frame(maxWidth: .infinity).padding(.vertical, 13)
-                        .background(Color(hex: 0x1C1C1E), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                if ReleaseFlags.appleWallet {
+                    Button {
+                        WalletService.addLoyaltyPass(card, userID: userID) { walletError = $0 }
+                    } label: {
+                        Label("Wallet", systemImage: "wallet.pass.fill")
+                            .font(.golos(15, .bold)).foregroundStyle(.white)
+                            .frame(maxWidth: .infinity).padding(.vertical, 13)
+                            .background(Color(hex: 0x1C1C1E), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    }
+                    .buttonStyle(.plain).disabled(!canScan)
                 }
-                .buttonStyle(.plain).disabled(!canScan)
             }
             if !canScan {
                 Text("Войдите в аккаунт, чтобы копить штампы.")

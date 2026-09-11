@@ -203,6 +203,10 @@ One server behavior is deliberately mirrored even though it looks like a bug —
 
 **Key reuse is a collision, not a retry.** The same key sent for a *different* reward (or a different QR) → `409 key_reused`. Keep the key stable across retries of one attempt and fresh for a new one — `PointsStore`/`PointsViewModel` hold it until the attempt succeeds; the host scanners mint one per decoded QR.
 
+## Release flags (iOS)
+
+`SAN/ReleaseFlags.swift` holds the switches for surfaces that are built but hidden in the shipped app: `searchTab`, `globalBonusWallet`, `referrals`, `promote`, `appleWallet`. Each is a `static let` gating the UI entry points only — the stores, models and backend paths stay compiled and tested. Flip one on only when its prerequisite is real (Firestore-backed rewards for the wallet, payment for promote, a real pass type ID for Wallet, a tested map screen for search). Android has no equivalent yet; the Android app still shows all of these.
+
 ## Conventions
 
 - Comments and doc-strings are frequently in **Russian** — match the surrounding language of the file.

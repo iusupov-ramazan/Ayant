@@ -82,18 +82,6 @@ struct MyQRView: View {
                             .padding(.top, 22)
                         nearbyRail.padding(.top, 12)
                     }
-
-                    NavigationLink { HostScannerView() } label: {
-                        Text("Сканировать QR заведения")
-                            .font(.golos(14.5, .bold))
-                            .foregroundStyle(Color.sanInk)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 15)
-                            .background(Color.sanSurfaceMuted,
-                                        in: RoundedRectangle(cornerRadius: SanRadius.button, style: .continuous))
-                    }
-                    .buttonStyle(.sanPress(0.98))
-                    .padding(.top, 20)
                 }
                 .padding(.horizontal, SanMetrics.screenPadding)
                 .padding(.top, 14)

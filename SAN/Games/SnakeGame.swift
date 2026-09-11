@@ -22,6 +22,9 @@ struct SnakeGameView: View {
     @EnvironmentObject private var bonus: BonusEngine
     @StateObject private var bridge = SnakeBridge()
     @Environment(\.dismiss) private var dismiss
+    /// Сколько бонусов РЕАЛЬНО начислил `BonusEngine` за последнюю партию —
+    /// дневной лимит может урезать до нуля, и врать «+N» нельзя.
+    @State private var awarded = 0
 
     var body: some View {
         NavigationStack {
@@ -49,8 +52,10 @@ struct SnakeGameView: View {
                     }
                 }
             }
-            .onChange(of: bridge.finalScore) { _, score in
-                if score > 0 { bonus.awardGameplay(score) }
+            // Слушаем номер партии, а не счёт: две партии подряд с одинаковым
+            // счётом не меняют `finalScore`, и `onChange` по нему не сработал бы.
+            .onChange(of: bridge.gamesFinished) { _, _ in
+                awarded = bridge.finalScore > 0 ? bonus.awardGameplay(bridge.finalScore) : 0
             }
         }
     }
@@ -70,7 +75,7 @@ struct SnakeGameView: View {
             Color.black.opacity(0.55)
             VStack(spacing: 10) {
                 Text("Игра окончена").font(.title3.bold()).foregroundStyle(.white)
-                Text("Счёт: \(bridge.finalScore) → +\(bridge.finalScore) бонусов")
+                Text("Счёт: \(bridge.finalScore) → +\(awarded) бонусов")
                     .foregroundStyle(.white)
                 Button("Ещё раз") { bridge.restart() }
                     .buttonStyle(.borderedProminent).tint(.sanAccent)
@@ -86,6 +91,9 @@ final class SnakeBridge: ObservableObject {
     @Published var score = 0
     @Published var finalScore = 0
     @Published var isOver = false
+    /// Счётчик завершённых партий — меняется на каждом «game over», даже если
+    /// счёт совпал с прошлым.
+    @Published var gamesFinished = 0
 
     private var scene: SnakeScene?
 
@@ -97,6 +105,7 @@ final class SnakeBridge: ObservableObject {
         s.onGameOver = { [weak self] final in
             self?.finalScore = final
             self?.isOver = true
+            self?.gamesFinished += 1
         }
         scene = s
         return s

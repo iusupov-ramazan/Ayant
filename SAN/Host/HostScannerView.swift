@@ -1,5 +1,6 @@
 import SwiftUI
 import VisionKit
+import AVFoundation
 import AyantDomain
 import AyantFeatures
 
@@ -37,6 +38,13 @@ struct HostScannerView: View {
     @State private var scanKey = ""
     /// Что показать на экране «Начислено» — заполняется из ответа сервера.
     @State private var receipt: EarnReceipt?
+    /// Доступ к камере. Без него окно сканера было бы просто чёрным квадратом —
+    /// сотрудник не понял бы, почему ничего не сканируется.
+    @State private var cameraAuth = AVCaptureDevice.authorizationStatus(for: .video)
+    /// Повтор ПОСЛЕДНЕГО запроса после сетевой ошибки — с тем же `scanKey`:
+    /// сервер вернёт первый результат, а не начислит второй раз. `resetScan()`
+    /// здесь не вызывается намеренно — он минтит новый ключ.
+    @State private var retryAction: (() -> Void)?
 
     private let couponService = AppConfig.makeCouponService()
     private let authService = AppConfig.makeAuthService()
@@ -94,8 +102,18 @@ struct HostScannerView: View {
 
             HostScanReticle {
                 if DataScannerViewController.isSupported && DataScannerViewController.isAvailable {
-                    CodeScannerView(isPaused: processing || result != nil || pendingEarn != nil) {
-                        handle($0)
+                    switch cameraAuth {
+                    case .authorized:
+                        CodeScannerView(isPaused: processing || result != nil || pendingEarn != nil) {
+                            handle($0)
+                        }
+                    case .denied, .restricted:
+                        cameraDenied
+                    case .notDetermined:
+                        // Спрашиваем сразу, как только окно на экране.
+                        Color.clear.task { await requestCamera() }
+                    @unknown default:
+                        cameraDenied
                     }
                 } else {
                     // Симулятор: камеры нет — работает ручной ввод ниже.
@@ -116,6 +134,38 @@ struct HostScannerView: View {
 
             codeEntry.padding(.horizontal, 20).padding(.bottom, 18)
         }
+    }
+
+    /// Доступ к камере запрещён: объясняем и ведём в Настройки. Ручной ввод
+    /// кода ниже продолжает работать.
+    private var cameraDenied: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "camera.fill")
+                .font(.system(size: 28, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.85))
+            Text("Нет доступа к камере")
+                .font(.golos(15, .bold)).foregroundStyle(.white)
+            Text("Разрешите доступ в Настройках, чтобы сканировать QR гостей.")
+                .font(.golos(12.5)).foregroundStyle(.white.opacity(0.75))
+                .multilineTextAlignment(.center)
+            Button {
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
+            } label: {
+                Text("Открыть настройки")
+                    .font(.golos(13.5, .bold)).foregroundStyle(Color.sanAccentDeep)
+                    .padding(.horizontal, 16).padding(.vertical, 10)
+                    .background(Color.white, in: Capsule())
+            }
+            .buttonStyle(.sanPress(0.95))
+        }
+        .padding(20)
+    }
+
+    @MainActor private func requestCamera() async {
+        let granted = await AVCaptureDevice.requestAccess(for: .video)
+        cameraAuth = granted ? .authorized : AVCaptureDevice.authorizationStatus(for: .video)
     }
 
     /// Информационные чипы: тип определяет префикс QR, поэтому это не
@@ -332,9 +382,18 @@ struct HostScannerView: View {
                     Text(sub).font(.golos(14)).foregroundStyle(Color.sanInkSoft)
                         .multilineTextAlignment(.center)
                 }
-                Button { resetScan() } label: { Text("Сканировать ещё") }
-                    .buttonStyle(SanPrimaryButton())
-                    .padding(.top, 4)
+                if let retryAction {
+                    // Сетевая ошибка: повторяем с тем же ключом идемпотентности.
+                    Button { retryAction() } label: { Text("Повторить") }
+                        .buttonStyle(SanPrimaryButton())
+                        .padding(.top, 4)
+                    Button { resetScan() } label: { Text("Сканировать ещё") }
+                        .buttonStyle(SanPillButton())
+                } else {
+                    Button { resetScan() } label: { Text("Сканировать ещё") }
+                        .buttonStyle(SanPrimaryButton())
+                        .padding(.top, 4)
+                }
             }
         }
         .padding(24)
@@ -345,6 +404,7 @@ struct HostScannerView: View {
 
     private func resetScan() {
         result = nil
+        retryAction = nil
         lastCode = ""
         manualCode = ""
         scanKey = ""
@@ -382,6 +442,8 @@ struct HostScannerView: View {
     /// Начисление баллов / штамп / погашение купона через scanCoupon.
     private func submitScan(code: String, billAmount: Int?, bandIndex: Int?, billForReceipt: Int?) {
         processing = true
+        result = nil
+        retryAction = nil
         let key = scanKey.isEmpty ? UUID().uuidString : scanKey
         let vID = venueID
         let modeLabel = currentVenue.flatMap(Self.modeLabel)
@@ -405,7 +467,14 @@ struct HostScannerView: View {
                     }
                 }
             } catch {
-                await MainActor.run { processing = false; result = .error("Ошибка сети. Попробуйте ещё раз.") }
+                await MainActor.run {
+                    processing = false
+                    result = .error("Ошибка сети. Попробуйте ещё раз.")
+                    retryAction = {
+                        submitScan(code: code, billAmount: billAmount, bandIndex: bandIndex,
+                                   billForReceipt: billForReceipt)
+                    }
+                }
             }
         }
     }
@@ -417,11 +486,14 @@ struct HostScannerView: View {
         let userID = parts[1], rewardId = parts[2]
         let pts = parts.count >= 4 ? (Int(parts[3]) ?? 0) : 0    // для money-награды
         processing = true
+        result = nil
+        retryAction = nil
         let vID = venueID
         let key = scanKey.isEmpty ? UUID().uuidString : scanKey
         Task {
             let token = await authService.idToken() ?? ""
             let outcome: ScanResultUI
+            var networkFailed = false
             do {
                 // Ключ идемпотентности на один разобранный QR: если запрос
                 // придётся повторить (таймаут), сервер вернёт первый результат,
@@ -433,8 +505,13 @@ struct HostScannerView: View {
                 outcome = out.ok ? .redeemed(out) : .error(Self.message(for: out.errorCode))
             } catch {
                 outcome = .error("Ошибка сети. Попробуйте ещё раз.")
+                networkFailed = true
             }
-            await MainActor.run { processing = false; result = outcome }
+            await MainActor.run {
+                processing = false
+                result = outcome
+                if networkFailed { retryAction = { submitRedeem(code: code) } }
+            }
         }
     }
 
@@ -456,6 +533,7 @@ struct HostScannerView: View {
         case "coupon_not_found": return "Купон не найден."
         case "wrong_venue":      return "Этот код — для другого заведения."
         case "loyalty_off":      return "Карта лояльности у заведения выключена."
+        case "loyalty_is_points": return "Это заведение начисляет баллы, а не штампы — попросите гостя показать QR «Мой QR»."
         case "already_used":     return "Купон уже был использован."
         case "not_owner":        return "У вас нет прав на это заведение."
         case "venue_not_found":  return "Заведение не найдено."
@@ -463,7 +541,9 @@ struct HostScannerView: View {
         case "missing_params":   return "Пустой код купона."
         // Баллы САН
         case "points_off":       return "Баллы САН у заведения выключены."
-        case "cooldown":         return "Баллы этому гостю уже начислены недавно."
+        // Один код и для штампов, и для баллов — формулировка общая. Сервер
+        // присылает `retryAfterSec`, но клиент его пока не разбирает.
+        case "cooldown":         return "Этому гостю уже начисляли недавно, попробуйте позже."
         case "missing_amount":   return "Введите сумму чека."
         case "bad_band":         return "Выберите диапазон суммы."
         case "no_points":        return "Начислять нечего (0 баллов)."
@@ -473,6 +553,10 @@ struct HostScannerView: View {
         case "redeem_not_allowed": return "Списание баллов недоступно для этого заведения."
         case "below_min":        return "Слишком мало баллов для этой награды."
         case "missing_user":     return "Не удалось определить гостя."
+        case "key_reused":       return "Этот код уже обрабатывался с другим запросом. Отсканируйте QR заново."
+        case "bad_reward":       return "Награда указана неверно. Попросите гостя обновить QR."
+        case "internal":         return "Ошибка на сервере. Попробуйте ещё раз через минуту."
+        case "app_check_failed": return "Приложение не прошло проверку. Обновите его из App Store."
         default:                 return "Не удалось отсканировать код."
         }
     }

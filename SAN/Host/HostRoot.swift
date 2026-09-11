@@ -2,7 +2,7 @@ import SwiftUI
 import AyantDomain
 import AyantFeatures
 
-// MARK: - Корневая навигация хоста (5 вкладок)
+// MARK: - Корневая навигация хоста (6 вкладок)
 
 // HostRootView переехал в `HostShell.swift` — кремовый таб-бар с FAB сканера.
 
