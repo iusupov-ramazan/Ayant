@@ -390,6 +390,43 @@ export const notifyHostOnReview = onDocumentCreated("reviews/{id}", async (event
 });
 
 /* ───────────────────────────────────────────────────────────────────────────
+ * 2c) Владелец ответил на отзыв → push автору отзыва.
+ *     Срабатывает один раз — когда `hostReply` появился (или текст сменился).
+ * ─────────────────────────────────────────────────────────────────────────── */
+export const notifyGuestOnHostReply = onDocumentWritten("reviews/{id}", async (event) => {
+  const before = event.data?.before?.data() || null;
+  const after = event.data?.after?.data() || null;
+  if (!after) return;
+  const replyAfter = String((after.hostReply || {}).text || "").trim();
+  const replyBefore = String(((before || {}).hostReply || {}).text || "").trim();
+  if (!replyAfter || replyAfter === replyBefore) return;
+
+  const authorID = String(after.authorID || "");
+  const venueID = String(after.venueID || "");
+  if (!authorID || !venueID) return;
+
+  const tokensSnap = await db.collection("userTokens").where("uid", "==", authorID).get();
+  const tokens = tokensSnap.docs.map((d) => d.id).filter((t) => t.length > 0);
+  if (tokens.length === 0) return;
+
+  let venueName = "Заведение";
+  try {
+    const v = await db.collection("venues").doc(venueID).get();
+    if (v.exists && v.data()!.name) venueName = String(v.data()!.name);
+  } catch (_) {}
+
+  const body = replyAfter.length > 120 ? replyAfter.slice(0, 117) + "…" : replyAfter;
+  const res = await getMessaging().sendEachForMulticast({
+    tokens,
+    notification: { title: `${venueName} ответили на ваш отзыв`, body },
+    data: { type: "hostReply", reviewID: event.params.id, venueID },
+    apns: { payload: { aps: { sound: "default", badge: 1 } } },
+    android: { notification: { sound: "default" }, priority: "high" },
+  });
+  console.log(`🔔 host-reply push → ${authorID}: ${res.successCount}/${tokens.length}`);
+});
+
+/* ───────────────────────────────────────────────────────────────────────────
  * 3) Погашение купона → серверный авторитетный счётчик (analytics) + анти-абуз.
  *    Приложение пишет redemptions/{userID}_{dealID} (детерминированный id ⇒
  *    повторное погашение не создаёт новый документ). Здесь увеличиваем счётчик.
@@ -1215,9 +1252,65 @@ export const expireVenuePoints = onSchedule("every 24 hours", async () => {
   // Пульс задачи: ночная сверка проверит, что она отработала (см. reconcileVenuePoints).
   await db.collection("ops").doc("heartbeats")
     .set({ expireVenuePoints: new Date(), expireVenuePointsCount: expired }, { merge: true });
-  // TODO(System 1, warn-pass): за ~14 дней до сгорания слать предупреждающий push
-  //   («твои баллы в {venue} скоро сгорят»). Нужен per-user канал доставки
-  //   (userTokens по userID) — вынесено в отдельную задачу, не блокирует Phase 1.
+});
+
+/* ───────────────────────────────────────────────────────────────────────────
+ * 6b) Предупреждение о сгорании: за EXPIRY_WARN_DAYS до порога — push гостю
+ *     «баллы в {venue} сгорят через N дней». Один раз на окно: отметка
+ *     `expiryWarnedAt` на карте; новая активность сдвигает порог, и предупреждение
+ *     сможет уйти снова только для нового окна.
+ * ─────────────────────────────────────────────────────────────────────────── */
+const EXPIRY_WARN_DAYS = 7;
+
+export const warnExpiringPoints = onSchedule("every 24 hours", async () => {
+  const nowMs = Date.now();
+  const venueCache = new Map<string, { months: number; name: string }>();
+  const snap = await db.collection("venuePoints").where("balance", ">", 0).get();
+  let warned = 0;
+
+  for (const doc of snap.docs) {
+    const c = (doc.data() || {}) as VenuePointsDoc & { expiryWarnedAt?: unknown; userID?: string };
+    const venueID = String(c.venueID || "");
+    const userID = String(c.userID || "");
+    if (!venueID || !userID) continue;
+
+    let venue = venueCache.get(venueID);
+    if (!venue) {
+      const v = (await db.collection("venues").doc(venueID).get()).data() || {};
+      venue = {
+        months: Math.max(parseInt(String(v.pointsExpiryMonths), 10) || DEFAULT_EXPIRY_MONTHS, 1),
+        name: String(v.name || "заведение"),
+      };
+      venueCache.set(venueID, venue);
+    }
+
+    const lastMs = toMillis(c.lastActivityAt);
+    if (lastMs === 0) continue;
+    const expiresAt = lastMs + venue.months * 30 * DAY_MS;
+    const daysLeft = Math.ceil((expiresAt - nowMs) / DAY_MS);
+    if (daysLeft <= 0 || daysLeft > EXPIRY_WARN_DAYS) continue;
+    // Уже предупреждали в этом окне (после последней активности) — молчим.
+    if (toMillis(c.expiryWarnedAt) > lastMs) continue;
+
+    const tokensSnap = await db.collection("userTokens").where("uid", "==", userID).get();
+    const tokens = tokensSnap.docs.map((d) => d.id).filter((t) => t.length > 0);
+    await doc.ref.set({ expiryWarnedAt: new Date(nowMs) }, { merge: true });
+    if (tokens.length === 0) continue;
+
+    const balance = parseInt(String(c.balance), 10) || 0;
+    await getMessaging().sendEachForMulticast({
+      tokens,
+      notification: {
+        title: `Баллы в ${venue.name} скоро сгорят`,
+        body: `${balance} баллов пропадут через ${daysLeft} дн. — загляните и потратьте их на награду.`,
+      },
+      data: { type: "pointsExpiring", venueID },
+      apns: { payload: { aps: { sound: "default" } } },
+      android: { notification: { sound: "default" }, priority: "high" },
+    });
+    warned++;
+  }
+  console.log(`⏳ expiry warnings sent: ${warned}`);
 });
 
 /* ───────────────────────────────────────────────────────────────────────────

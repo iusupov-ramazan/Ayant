@@ -40,6 +40,10 @@ public enum NotificationManager {
         center.add(request)
     }
 
+    /// Снимает напоминание насовсем — для сборок, где глобальный кошелёк
+    /// бонусов скрыт: пуш про «+50 бонусов» вёл бы в никуда.
+    public static func disable() { cancel() }
+
     private static func cancel() {
         UNUserNotificationCenter.current()
             .removePendingNotificationRequests(withIdentifiers: [reminderID])

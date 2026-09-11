@@ -120,7 +120,7 @@ struct SANApp: App {
                     location.refresh()
                     store.setCurrentUser(id: session.user?.id, name: session.user?.name, isGuest: session.isGuest)
                     startBonusIfAllowed()
-                    NotificationManager.refresh(reachedGoalToday: bonus.reachedGoalToday)
+                    refreshBonusReminder()
                 default:
                     bonus.pause()
                 }
@@ -158,22 +158,13 @@ struct SANApp: App {
                 hostStore.send(.sync)
             }
             // Штампы пришли листенером: если карта заполнилась, сервер выдал
-            // купон-награду — подтягиваем купоны сразу и говорим об этом гостю,
-            // не дожидаясь следующего запуска.
-            .onChange(of: loyalty.cards) { old, new in
+            // купон-награду — подтягиваем купоны сразу, не дожидаясь запуска.
+            // Сам момент показывает экран «Начислено» из `SignedInRootView`.
+            .onChange(of: loyalty.cards) { _, _ in
                 guard let uid = session.user?.id, !session.isGuest else { return }
-                let completed = new.first { card in
-                    let before = old.first { $0.venueID == card.venueID }?.completedRounds ?? 0
-                    return card.completedRounds > before
-                }
-                if let completed {
-                    store.toastMessage = "🎉 Карта «\(completed.venueName)» заполнена — купон «\(completed.reward)» в «Мои купоны»"
-                }
                 Task { await coupons.sync(userID: uid) }
             }
-            .onChange(of: bonus.reachedGoalToday) { _, reached in
-                NotificationManager.refresh(reachedGoalToday: reached)
-            }
+            .onChange(of: bonus.reachedGoalToday) { _, _ in refreshBonusReminder() }
             .task {
                 AnalyticsLog.log(.appOpen)
                 await CategoryStore.shared.load()   // гибкие категории из бэкенда
@@ -222,6 +213,17 @@ struct SANApp: App {
         store.resetForNewUser()
     }
 
+    /// Локальное напоминание «+50 бонусов за 30 минут» — про глобальный кошелёк,
+    /// который в этой сборке скрыт (`ReleaseFlags.globalBonusWallet`): пуш вёл
+    /// бы в никуда. Пока флаг выключен — напоминание снято.
+    private func refreshBonusReminder() {
+        if ReleaseFlags.globalBonusWallet {
+            NotificationManager.refresh(reachedGoalToday: bonus.reachedGoalToday)
+        } else {
+            NotificationManager.disable()
+        }
+    }
+
     /// Бонус-движок работает только у настоящего аккаунта.
     ///
     /// Гостю бонусы недоступны целиком: экран «Бонусы», игры и обмен наград ему
@@ -255,10 +257,8 @@ struct SANApp: App {
     private func syncBackendCoupons() {
         guard let uid = session.user?.id, !session.isGuest else { return }
         points.send(.observe(userID: uid))   // живой поток; опрос больше не нужен
-        Task {
-            await coupons.sync(userID: uid)
-            await loyalty.sync(userID: uid)
-        }
+        loyalty.observe(userID: uid)         // и штампы — живьём, ради экрана «Начислено»
+        Task { await coupons.sync(userID: uid) }
     }
 }
 
@@ -292,8 +292,47 @@ struct SignedInRootView: View {
     @EnvironmentObject private var host: HostStore
     @EnvironmentObject private var store: AppStore
     @EnvironmentObject private var points: PointsStore
+    @EnvironmentObject private var loyalty: LoyaltyStore
     @AppStorage("san.onboarded") private var onboarded = false
     @AppStorage("san.hostMode") private var hostMode = false
+    /// Заведение, о котором гость решил оставить отзыв с экрана «Начислено».
+    @State private var reviewVenue: Venue?
+    @State private var pendingReviewVenueID: String?
+
+    /// Что показать: баллы или штамп. Одновременно приходит редко; баллы первее.
+    private struct Earned: Identifiable, Equatable {
+        let id: String
+        let venueID: String
+        let venueName: String
+        let content: EarnedContent
+    }
+
+    private var earned: Earned? {
+        guard !(hostMode && host.state.hasAccount) else { return nil }
+        if let e = points.state.pendingEarn {
+            return Earned(id: "pts-" + e.id, venueID: e.venueID, venueName: e.venueName,
+                          content: .points(delta: e.delta, newBalance: e.newBalance))
+        }
+        if let e = loyalty.pendingStamp {
+            return Earned(id: "stamp-" + e.id, venueID: e.venueID, venueName: e.venueName,
+                          content: .stamp(stamps: e.stamps, goal: e.goal,
+                                          rewardIssued: e.rewardIssued, reward: e.reward))
+        }
+        return nil
+    }
+
+    private func dismissEarned() {
+        if points.state.pendingEarn != nil { points.send(.dismissEarn) } else { loyalty.dismissStamp() }
+    }
+
+    /// Отзыв предлагаем, когда заведение в каталоге и отзыва ещё нет.
+    private func reviewAction(for venueID: String) -> (() -> Void)? {
+        guard !store.isGuest, let venue = store.venue(id: venueID), store.myReview(for: venue) == nil else { return nil }
+        return {
+            pendingReviewVenueID = venueID
+            dismissEarned()
+        }
+    }
 
     var body: some View {
         Group {
@@ -308,15 +347,25 @@ struct SignedInRootView: View {
         // «Начислено» — над всем приложением, на какой бы вкладке гость ни был.
         // Событие живёт в состоянии стора и снимается только кнопкой «Отлично»:
         // перерисовка вкладок, смена экрана, новый снимок баланса его не закрывают.
-        .fullScreenCover(item: Binding(
-            get: { hostMode && host.state.hasAccount ? nil : points.state.pendingEarn },
-            set: { if $0 == nil { points.send(.dismissEarn) } })) { event in
-            PointsEarnedView(delta: event.delta,
+        .fullScreenCover(item: Binding(get: { earned }, set: { if $0 == nil { dismissEarned() } })) { event in
+            PointsEarnedView(content: event.content,
                              venueName: event.venueName,
                              venueSubtitle: store.venue(id: event.venueID)?.district ?? store.selectedCity.name,
-                             newBalance: event.newBalance) {
-                points.send(.dismissEarn)
+                             onDone: { dismissEarned() },
+                             onReview: reviewAction(for: event.venueID))
+        }
+        // Лист отзыва открываем после того, как экран «Начислено» закрылся:
+        // два модальных окна одновременно SwiftUI не покажет.
+        .onChange(of: earned?.id) { _, new in
+            guard new == nil, let id = pendingReviewVenueID else { return }
+            pendingReviewVenueID = nil
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(450))
+                reviewVenue = store.venue(id: id)
             }
+        }
+        .sheet(item: $reviewVenue) { venue in
+            WriteReviewView(venue: venue, existing: nil)
         }
     }
 }

@@ -59,6 +59,25 @@ public struct Coupon: Identifiable, Codable, Hashable {
 
 // MARK: - Модель карты лояльности
 
+/// «Сотрудник поставил штамп»: рост уже известной карты в живом потоке.
+/// Показывается экраном «Начислено» и снимается только рукой гостя.
+public struct LoyaltyStampEvent: Identifiable, Equatable, Sendable {
+    public let id: String
+    public let venueID: String
+    public let venueName: String
+    /// Штампов на карте после скана (0 — круг только что собран).
+    public let stamps: Int
+    public let goal: Int
+    public let rewardIssued: Bool
+    public let reward: String
+
+    public init(id: String, venueID: String, venueName: String, stamps: Int, goal: Int,
+                rewardIssued: Bool, reward: String) {
+        self.id = id; self.venueID = venueID; self.venueName = venueName
+        self.stamps = stamps; self.goal = goal; self.rewardIssued = rewardIssued; self.reward = reward
+    }
+}
+
 public struct LoyaltyCard: Identifiable, Codable, Hashable {
     public var id: String { venueID }
     public var venueID: String

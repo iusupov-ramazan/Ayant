@@ -170,3 +170,49 @@ test("notifyHostOnReview молчит, если владелец пишет от
     createdEvent(h, "reviews/r11", { venueID: "v10", authorID: "guest1", rating: 4 }, { id: "r11" }));
   assert.equal(h.messagingCalls.length, 0);
 });
+
+/* ── notifyGuestOnHostReply: ответ владельца → push автору ───────────────── */
+
+test("notifyGuestOnHostReply шлёт push автору, когда появился ответ", async () => {
+  const { writtenEvent } = require("./helpers/harness");
+  const h = makeHarness();
+  h.seed("venues/v9", { name: "Нават", ownerID: "owner1" });
+  h.seed("userTokens/tokG", { uid: "guest1" });
+  const before = { venueID: "v9", authorID: "guest1", rating: 5, text: "Вкусно" };
+  const after = { ...before, hostReply: { text: "Спасибо, ждём снова!" } };
+  await h.mod.notifyGuestOnHostReply.run(writtenEvent(h, "reviews/r9", before, after, { id: "r9" }));
+
+  assert.equal(h.messagingCalls.length, 1);
+  assert.deepEqual(h.messagingCalls[0].tokens, ["tokG"]);
+  assert.equal(h.messagingCalls[0].notification.title, "Нават ответили на ваш отзыв");
+  assert.equal(h.messagingCalls[0].data.type, "hostReply");
+
+  // Правка отзыва без изменения ответа — второго push нет.
+  await h.mod.notifyGuestOnHostReply.run(writtenEvent(h, "reviews/r9", after, { ...after, text: "Очень вкусно" }, { id: "r9" }));
+  assert.equal(h.messagingCalls.length, 1);
+});
+
+/* ── warnExpiringPoints: предупреждение за 7 дней до сгорания ────────────── */
+
+test("warnExpiringPoints предупреждает один раз в окне и молчит вне его", async () => {
+  const h = makeHarness();
+  const DAY = 86400000;
+  h.seed("venues/v9", { name: "Нават", pointsExpiryMonths: 6 });
+  h.seed("userTokens/tokG", { uid: "guest1" });
+  // Порог = 180 дней с последней активности; активность 176 дней назад → 4 дня до сгорания.
+  h.seed("venuePoints/guest1_v9", { userID: "guest1", venueID: "v9", balance: 120,
+                                    lastActivityAt: new Date(Date.now() - 176 * DAY) });
+  // Далеко до порога — не трогаем.
+  h.seed("venuePoints/guest2_v9", { userID: "guest2", venueID: "v9", balance: 50,
+                                    lastActivityAt: new Date(Date.now() - 30 * DAY) });
+  h.seed("userTokens/tokH", { uid: "guest2" });
+
+  await h.mod.warnExpiringPoints.run({});
+  assert.equal(h.messagingCalls.length, 1);
+  assert.deepEqual(h.messagingCalls[0].tokens, ["tokG"]);
+  assert.match(h.messagingCalls[0].notification.body, /120 баллов/);
+  assert.ok(h.read("venuePoints/guest1_v9").expiryWarnedAt, "отметка о предупреждении");
+
+  await h.mod.warnExpiringPoints.run({});
+  assert.equal(h.messagingCalls.length, 1, "повторно в том же окне не шлём");
+});

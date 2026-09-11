@@ -7,12 +7,71 @@ import AyantFeatures
 /// ВАЖНО: ни одно число здесь не считается на клиенте. Экран показывается, когда
 /// snapshot-листенер `venuePoints` принёс новый баланс, и анимирует счётчик
 /// *к* тому значению, которое записал сервер (`scanCoupon`).
+/// Что именно начислили: баллы или штамп. Экран один — язык у обоих один.
+enum EarnedContent: Equatable {
+    case points(delta: Int, newBalance: Int)
+    case stamp(stamps: Int, goal: Int, rewardIssued: Bool, reward: String)
+}
+
 struct PointsEarnedView: View {
-    let delta: Int
+    let earned: EarnedContent
     let venueName: String
     let venueSubtitle: String
-    let newBalance: Int
     var onDone: () -> Void
+    /// «Оставить отзыв» — только когда у гостя ещё нет отзыва об этом заведении.
+    var onReview: (() -> Void)? = nil
+
+    init(delta: Int, venueName: String, venueSubtitle: String, newBalance: Int,
+         onDone: @escaping () -> Void, onReview: (() -> Void)? = nil) {
+        self.init(content: .points(delta: delta, newBalance: newBalance), venueName: venueName,
+                  venueSubtitle: venueSubtitle, onDone: onDone, onReview: onReview)
+    }
+
+    init(content: EarnedContent, venueName: String, venueSubtitle: String,
+         onDone: @escaping () -> Void, onReview: (() -> Void)? = nil) {
+        self.earned = content; self.venueName = venueName; self.venueSubtitle = venueSubtitle
+        self.onDone = onDone; self.onReview = onReview
+    }
+
+    private var delta: Int {
+        switch earned {
+        case .points(let d, _): return d
+        case .stamp: return 1
+        }
+    }
+    private var newBalance: Int {
+        switch earned {
+        case .points(_, let b): return b
+        case .stamp(let s, _, _, _): return s
+        }
+    }
+    private var headline: String {
+        switch earned {
+        case .points: return "Баллы начислены"
+        case .stamp(_, _, let issued, _): return issued ? "Карта заполнена!" : "Штамп получен"
+        }
+    }
+    private var footnote: String {
+        switch earned {
+        case .points: return "Баллы копятся у этого заведения и тратятся у него же."
+        case .stamp(_, let goal, let issued, let reward):
+            return issued ? "Купон «\(reward)» уже в «Мои купоны» — покажите его сотруднику."
+                          : "Ещё \(goal) \(Self.stampsWord(goal)) — и «\(reward)» в подарок."
+        }
+    }
+    private var balanceLabel: String {
+        switch earned {
+        case .points: return "Новый баланс"
+        case .stamp(_, let goal, _, _): return "Штампов из \(goal)"
+        }
+    }
+
+    private static func stampsWord(_ n: Int) -> String {
+        let n10 = n % 10, n100 = n % 100
+        if n10 == 1 && n100 != 11 { return "штамп" }
+        if (2...4).contains(n10) && !(12...14).contains(n100) { return "штампа" }
+        return "штампов"
+    }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var ringsRunning = false
@@ -46,7 +105,7 @@ struct PointsEarnedView: View {
                 .contentTransition(.numericText())
                 .padding(.top, 28)
 
-            Text("Баллы начислены")
+            Text(headline)
                 .sanText(24, .heavy, tracking: -1)
                 .foregroundStyle(Color.sanInk)
                 .padding(.top, 12)
@@ -57,7 +116,7 @@ struct PointsEarnedView: View {
 
             balanceCard.padding(.top, 26)
 
-            Text("Баллы копятся у этого заведения и тратятся у него же.")
+            Text(footnote)
                 .font(.golos(13)).foregroundStyle(Color(hex: 0x9A9188))
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 280)
@@ -69,6 +128,17 @@ struct PointsEarnedView: View {
                 .frame(maxWidth: 300)
                 .padding(.top, 26)
                 .sanRise(5, stagger: 0.09, duration: 0.6)
+
+            // Момент, когда гость доволен, — лучший для отзыва: он только что
+            // побывал в заведении и получил за это награду.
+            if let onReview {
+                Button(action: onReview) {
+                    Label("Оставить отзыв о заведении", systemImage: "star.bubble")
+                }
+                .buttonStyle(SanPillButton(accent: true))
+                .padding(.top, 12)
+                .sanRise(6, stagger: 0.09, duration: 0.6)
+            }
         }
         .padding(30)
     }
@@ -108,7 +178,7 @@ struct PointsEarnedView: View {
 
     private var balanceCard: some View {
         HStack {
-            Text("Новый баланс")
+            Text(balanceLabel)
                 .font(.golos(14, .semibold)).foregroundStyle(Color.sanInkSoft)
             Spacer(minLength: 12)
             Text("\(shownBalance)")

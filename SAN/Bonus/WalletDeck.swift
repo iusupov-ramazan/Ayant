@@ -203,8 +203,13 @@ struct WalletStampCard: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var appeared = false
 
-    /// Сетка 5×2 по макету; если цель другая — рисуем ровно `goal` кружков.
+    /// Ровно `goal` кружков (2…12) в один ряд: карта живёт в карусели рядом с
+    /// картой баллов и обязана быть той же высоты — сетка 5×2 делала её выше
+    /// и она наезжала на то, что под каруселью.
     private var goal: Int { max(card.goal, 1) }
+
+    /// Та же высота, что у `WalletPointsCard`.
+    static let height: CGFloat = 198
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -224,20 +229,24 @@ struct WalletStampCard: View {
                     .fixedSize()
             }
 
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 9), count: 5), spacing: 9) {
+            HStack(spacing: goal > 8 ? 5 : 8) {
                 ForEach(0..<goal, id: \.self) { i in
                     stamp(index: i, filled: i < card.stamps)
                 }
             }
-            .padding(.top, 18)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 16)
+
+            Spacer(minLength: 0)
 
             Text(stampHint)
-                .font(.golos(12.5, .semibold)).foregroundStyle(.white.opacity(0.94))
+                .font(.golos(12, .semibold)).foregroundStyle(.white.opacity(0.94))
+                .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 16)
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: Self.height)
         .background {
             let shape = RoundedRectangle(cornerRadius: SanRadius.hero, style: .continuous)
             shape.fill(LinearGradient.sanStampGradient)
@@ -256,15 +265,16 @@ struct WalletStampCard: View {
                                  : AnyShapeStyle(Color.white.opacity(0.26)))
             if filled {
                 Image(systemName: "checkmark")
-                    .font(.system(size: 12.5, weight: .heavy))
+                    .font(.system(size: goal > 8 ? 9 : 11.5, weight: .heavy))
                     .foregroundStyle(.white)
             } else {
                 Text("\(index + 1)")
-                    .font(.golos(12.5, .heavy))
+                    .font(.golos(goal > 8 ? 9 : 11.5, .heavy))
                     .foregroundStyle(.white.opacity(0.55))
             }
         }
         .aspectRatio(1, contentMode: .fit)
+        .frame(maxWidth: 36)
         // Каждый кружок «выстреливает» с шагом 50 мс (ANIMATIONS.md §4).
         .scaleEffect(appeared ? 1 : 0.6)
         .opacity(appeared ? 1 : 0)
@@ -273,8 +283,9 @@ struct WalletStampCard: View {
 
     private var stampHint: String {
         let left = max(0, goal - card.stamps)
-        if left == 0 { return "Круг собран — покажите карту сотруднику и заберите «\(card.reward)»." }
-        return "Ещё \(left) \(Self.visits(left)) — и «\(card.reward)» в подарок. Штампы ставит сотрудник, сканируя ваш QR."
+        // Коротко — карта фиксированной высоты, под подсказку две строки.
+        if left == 0 { return "Круг собран — купон «\(card.reward)» уже в «Мои купоны»." }
+        return "Ещё \(left) \(Self.visits(left)) — и «\(card.reward)» в подарок."
     }
 
     private static func visits(_ n: Int) -> String {
