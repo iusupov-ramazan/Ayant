@@ -405,6 +405,27 @@ public final class AppStore: ObservableObject {
                                                     dealID: deal.id, venueID: deal.venueID) }
     }
 
+    /// Гость сам отметил купон использованным (экран купона, без сканера).
+    ///
+    /// Раньше это меняло только локальный флаг: заведение видело в аналитике
+    /// ноль погашений, хотя гость показал купон и им воспользовался. Купон
+    /// заведения знает свою акцию — считаем так же, как погашение с экрана
+    /// акции: документ `redemptions/{uid}_{dealID}` → Cloud Function
+    /// `countRedemption` увеличивает счётчик. Бонус-купоны без акции не считаем.
+    public func redeemCoupon(_ coupon: Coupon) {
+        let dealID = coupon.dealID
+        guard !dealID.isEmpty else { return }
+        if let deal = deals.first(where: { $0.id == dealID }) {
+            redeem(deal)
+            return
+        }
+        guard !isGuest, !redeemedDealIDs.contains(dealID) else { return }
+        let venueID = coupon.venueID
+        profile.send(.markRedeemed(dealID: dealID))
+        AnalyticsLog.log(.dealRedeem, ["deal_id": dealID, "venue_id": venueID, "type": "coupon"])
+        Task { try? await repository.logRedemption(userID: currentUserID, dealID: dealID, venueID: venueID) }
+    }
+
     // MARK: - Рефералка
 
     /// Личный код пользователя для приглашений.

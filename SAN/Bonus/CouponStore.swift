@@ -194,6 +194,7 @@ struct GiftShareSheet: View {
 struct CouponDetailView: View {
     let coupon: Coupon
     @EnvironmentObject private var coupons: CouponStore
+    @EnvironmentObject private var store: AppStore
     @State private var showUseConfirm = false
     @State private var copied = false
     @State private var prevBrightness = UIScreen.main.brightness
@@ -221,7 +222,11 @@ struct CouponDetailView: View {
         }
         .onDisappear { UIScreen.main.brightness = prevBrightness }
         .alert("Использовать купон?", isPresented: $showUseConfirm) {
-            Button("Да, применить", role: .destructive) { coupons.markUsed(coupon) }
+            Button("Да, применить", role: .destructive) {
+                coupons.markUsed(coupon)
+                // Иначе заведение не увидит погашение в аналитике.
+                store.redeemCoupon(coupon)
+            }
             Button("Отмена", role: .cancel) {}
         } message: {
             Text("Подтверждай только при сотруднике — купон одноразовый.")
