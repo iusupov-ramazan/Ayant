@@ -16,7 +16,7 @@ import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.WineBar
 import androidx.compose.ui.graphics.vector.ImageVector
-import kg.ayant.app.data.model.DealType
+import kg.ayant.app.domain.model.DealType
 
 /** Resolves a category icon key (from VenueCategory.icon) to a Material icon. */
 fun categoryIcon(key: String): ImageVector = when (key) {

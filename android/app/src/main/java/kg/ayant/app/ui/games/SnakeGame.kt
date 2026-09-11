@@ -45,9 +45,8 @@ import kotlin.math.abs
 private const val GRID = 17
 
 @Composable
-fun SnakeGame(onClose: () -> Unit) {
+fun SnakeGame(bonus: BonusViewModel, onClose: () -> Unit) {
     val c = AyantTheme.colors
-    val bonus: BonusViewModel = viewModel()
 
     var snake by remember { mutableStateOf(listOf(7 to 8, 6 to 8, 5 to 8)) }
     var dir by remember { mutableStateOf(1 to 0) }

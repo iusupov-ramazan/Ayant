@@ -1,5 +1,6 @@
 import SwiftUI
 import SpriteKit
+import AyantFeatures
 
 // MARK: - Общие игровые типы (используются сценой SpriteKit)
 
@@ -57,7 +58,7 @@ struct SnakeGameView: View {
     private var header: some View {
         HStack {
             Label("\(bridge.score)", systemImage: "star.fill")
-                .font(.headline).foregroundStyle(Color.sanAccent)
+                .font(.headline).foregroundStyle(Color.sanAccentText)
             Spacer()
             Text("1 🍎 = 1 бонус · до \(bonus.dailyGameplayCap)/день")
                 .font(.caption).foregroundStyle(.secondary)
@@ -111,6 +112,6 @@ final class SnakeBridge: ObservableObject {
 
 #Preview {
     NavigationStack { SnakeGameView() }
-        .environmentObject(BonusEngine())
+        .environmentObject(AyantStores.bonus())
         .tint(.sanAccent)
 }

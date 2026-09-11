@@ -25,13 +25,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.google.firebase.storage.FirebaseStorage
 import kg.ayant.app.R
 import kg.ayant.app.core.AppConfig
 import kg.ayant.app.ui.theme.AyantTheme
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
-import java.util.UUID
 
 /**
  * Picks a file from the device (image or PDF), uploads it to Firebase Storage and
@@ -57,12 +54,8 @@ fun UploadButton(
         if (uri == null) return@rememberLauncherForActivityResult
         uploading = true; error = null
         scope.launch {
-            val url = runCatching {
-                val ext = if (mimeType.startsWith("image")) "jpg" else "pdf"
-                val ref = FirebaseStorage.getInstance().reference.child("$folder/${UUID.randomUUID()}.$ext")
-                ref.putFile(uri).await()
-                ref.downloadUrl.await().toString()
-            }.getOrElse { error = context.getString(R.string.host_upload_failed); null }
+            val url = AppConfig.makeFileUploadService().upload(uri.toString(), folder, mimeType)
+            if (url == null) error = context.getString(R.string.host_upload_failed)
             uploading = false
             if (url != null) onUploaded(url)
         }
@@ -76,7 +69,7 @@ fun UploadButton(
             CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp), color = c.accent)
             Text("  " + stringResource(R.string.host_uploading), fontSize = 13.sp, color = c.inkSoft)
         } else {
-            Icon(Icons.Filled.UploadFile, null, tint = c.accent, modifier = Modifier.size(16.dp))
+            Icon(Icons.Filled.UploadFile, null, tint = c.accentText, modifier = Modifier.size(16.dp))
             Text("  ${error ?: label}", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = if (error != null) androidx.compose.ui.graphics.Color(0xFFD32F2F) else c.accent)
         }
     }

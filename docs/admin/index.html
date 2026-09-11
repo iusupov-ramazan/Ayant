@@ -374,10 +374,11 @@
       </div>
       <div class="field">
         <label>Карта лояльности</label>
-        <select id="vLoyaltyEnabled">
+        <select id="vLoyaltyEnabled" onchange="updatePointsUI()">
           <option value="false">Выкл</option>
           <option value="true">Вкл ✓</option>
         </select>
+        <small id="vLoyaltyOffNote" style="display:none;color:#c0490f">Не работает: включены баллы САН. Механика лояльности одна на заведение.</small>
       </div>
       <div class="field">
         <label>Штампов до награды</label>
@@ -387,6 +388,76 @@
         <label>Награда лояльности (текст)</label>
         <input id="vLoyaltyReward" placeholder="напр. Бесплатный кофе" />
       </div>
+
+      <!-- ══ Бонусы САН (баллы заведения) ═══════════════════════════════════ -->
+      <div class="field span2" style="border-top:1px solid var(--border,#e5e7eb);padding-top:12px;margin-top:4px">
+        <label style="font-weight:700;font-size:15px">Бонусы САН — баллы заведения</label>
+        <small style="color:var(--muted)">Гость копит баллы за визиты и тратит на награды. 1 балл = 1 сом. Каждое заведение платит за свои награды.</small>
+      </div>
+      <div class="field">
+        <label>Баллы САН</label>
+        <select id="vPointsEnabled" onchange="updatePointsUI()">
+          <option value="false">Выкл</option>
+          <option value="true">Вкл ✓</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Как начисляются</label>
+        <select id="vPointsMode" onchange="updatePointsUI()">
+          <option value="flat">Фикс. за визит</option>
+          <option value="bands">По сумме чека (кнопки)</option>
+          <option value="cashback">Кэшбэк % от чека</option>
+        </select>
+      </div>
+      <div class="field" id="vPointsFlatRow">
+        <label>Баллов за визит</label>
+        <input id="vPointsFlat" type="number" min="1" max="10000" placeholder="10" />
+      </div>
+      <div class="field" id="vCashbackRow">
+        <label>Кэшбэк, % (макс. 20)</label>
+        <input id="vCashbackPercent" type="number" min="1" max="20" step="0.5" placeholder="5" />
+      </div>
+      <div class="field span2" id="vBandsRow">
+        <label>Диапазоны суммы чека → баллы</label>
+        <div id="vBandsList" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+          <input id="vBandMax" type="number" placeholder="до суммы, сом (напр. 500)" style="flex:1;min-width:170px" />
+          <input id="vBandPoints" type="number" placeholder="баллов" style="width:110px" />
+          <button type="button" class="btn btn-secondary btn-sm" onclick="addPointsBand()">+ Диапазон</button>
+        </div>
+        <small style="color:var(--muted)">Персонал жмёт нужную кнопку при сканировании. Верхний диапазон работает как «и больше».</small>
+      </div>
+      <div class="field span2">
+        <label>Награды за баллы</label>
+        <div id="vRewardsList" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+          <select id="vRewardType" style="width:150px">
+            <option value="item">Товар</option>
+            <option value="money">Скидка баллами</option>
+          </select>
+          <input id="vRewardTitle" placeholder="Напр. Бесплатный кофе" style="flex:1;min-width:150px" />
+          <input id="vRewardCost" type="number" placeholder="баллов" style="width:110px" />
+          <button type="button" class="btn btn-secondary btn-sm" onclick="addPointsReward()">+ Награда</button>
+        </div>
+        <small style="color:var(--muted)">Товар — фикс. цена в баллах. Скидка баллами — минимум баллов к списанию (1 балл = 1 сом скидки).</small>
+      </div>
+      <div class="field">
+        <label>Кто гасит награду</label>
+        <select id="vRedeemMode">
+          <option value="staffScan">Персонал сканирует гостя</option>
+          <option value="customerInitiated">Гость гасит сам</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Баллы сгорают через, мес.</label>
+        <input id="vPointsExpiryMonths" type="number" min="1" max="36" placeholder="6" />
+      </div>
+      <div class="field">
+        <label>Кулдаун начисления, мин.</label>
+        <input id="vEarnCooldown" type="number" min="0" max="1440" placeholder="60" />
+        <small style="color:var(--muted)">Не чаще одного начисления баллов одному гостю за это время. <b>0 — без ограничения</b> (баллы на каждый скан). Пусто — 60 мин.</small>
+      </div>
+
       <div class="field">
         <label>Проверенное</label>
         <select id="vVerified">
@@ -460,6 +531,11 @@
       <div class="field span2">
         <label>Описание</label>
         <textarea id="dDetails" placeholder="С 11:00 до 15:00 на все виды мантов."></textarea>
+      </div>
+      <div class="field span2">
+        <label>Условия</label>
+        <textarea id="dTerms" placeholder="Каждый день до 12:00&#10;Один напиток на гостя&#10;Не суммируется с баллами САН"></textarea>
+        <small style="color:var(--muted)">По одному в строке. В приложении гость видит их списком под описанием, когда разворачивает пост.</small>
       </div>
       <div class="field span2">
         <label>Фото — загрузить или вставить ссылку</label>
@@ -686,6 +762,82 @@ window.addVenueBranch = () => {
 window.removeVenueBranch = (id) => {
   currentBranches = currentBranches.filter(b => b.id !== id);
   renderVenueBranches();
+};
+
+// ── Бонусы САН: диапазоны начисления + каталог наград ────────────────────────
+let currentPointsBands = [];    // [{ id, maxAmount, points }]
+let currentPointsRewards = [];  // [{ id, type, title, cost, ratio, active }]
+
+// Показ полей режима начисления (flat / bands / cashback).
+window.updatePointsUI = () => {
+  const mode = document.getElementById('vPointsMode').value;
+  document.getElementById('vPointsFlatRow').style.display = mode === 'flat' ? '' : 'none';
+  document.getElementById('vCashbackRow').style.display   = mode === 'cashback' ? '' : 'none';
+  document.getElementById('vBandsRow').style.display      = mode === 'bands' ? '' : 'none';
+
+  // Механика лояльности ОДНА на заведение (домен: LoyaltyKind, сервер: scanCoupon
+  // Branch A → 409 loyalty_is_points). Раньше обе галки жили независимо, и
+  // заведение могло включить и штампы, и баллы: гость видел два виджета, а по
+  // одному скану не понимал, что ему начислили. Приоритет у баллов — они
+  // привязаны к деньгам. Здесь только подсказка; запрет — на сервере.
+  const pointsOn  = document.getElementById('vPointsEnabled').value === 'true';
+  const stampsOn  = document.getElementById('vLoyaltyEnabled').value === 'true';
+  document.getElementById('vLoyaltyOffNote').style.display = (pointsOn && stampsOn) ? '' : 'none';
+  for (const id of ['vLoyaltyGoal', 'vLoyaltyReward']) {
+    const el = document.getElementById(id);
+    el.disabled = pointsOn;
+    el.style.opacity = pointsOn ? 0.5 : '';
+  }
+};
+
+function renderPointsBands() {
+  const box = document.getElementById('vBandsList');
+  if (!currentPointsBands.length) { box.innerHTML = '<small style="color:var(--muted)">Диапазонов нет</small>'; return; }
+  const sorted = currentPointsBands.slice().sort((a, b) => a.maxAmount - b.maxAmount);
+  box.innerHTML = sorted.map((b, i) => {
+    const label = i === sorted.length - 1 ? `${b.maxAmount}+ сом` : `до ${b.maxAmount} сом`;
+    return `<span class="badge" style="background:#eef;color:#334;display:inline-flex;gap:6px;align-items:center">
+      ${label} → ${b.points} б.
+      <span style="cursor:pointer;color:var(--danger);font-weight:700" onclick="removePointsBand('${b.id}')">×</span></span>`;
+  }).join('');
+}
+window.addPointsBand = () => {
+  const maxAmount = parseInt(document.getElementById('vBandMax').value);
+  const points = parseInt(document.getElementById('vBandPoints').value);
+  if (!(maxAmount > 0) || !(points >= 0)) { toast('Впиши сумму и баллы', 'error'); return; }
+  currentPointsBands.push({ id: 'bd_' + Math.random().toString(36).slice(2, 10), maxAmount, points });
+  document.getElementById('vBandMax').value = '';
+  document.getElementById('vBandPoints').value = '';
+  renderPointsBands();
+};
+window.removePointsBand = (id) => {
+  currentPointsBands = currentPointsBands.filter(b => b.id !== id);
+  renderPointsBands();
+};
+
+function renderPointsRewards() {
+  const box = document.getElementById('vRewardsList');
+  if (!currentPointsRewards.length) { box.innerHTML = '<small style="color:var(--muted)">Наград нет</small>'; return; }
+  box.innerHTML = currentPointsRewards.map(r => {
+    const kind = r.type === 'money' ? `скидка · мин. ${r.cost} б.` : `${r.cost} б.`;
+    return `<span class="badge" style="background:#efe;color:#243;display:inline-flex;gap:6px;align-items:center">
+      ${r.type === 'money' ? '💸' : '🎁'} ${r.title} <small style="color:var(--muted)">${kind}</small>
+      <span style="cursor:pointer;color:var(--danger);font-weight:700" onclick="removePointsReward('${r.id}')">×</span></span>`;
+  }).join('');
+}
+window.addPointsReward = () => {
+  const title = document.getElementById('vRewardTitle').value.trim();
+  const cost = parseInt(document.getElementById('vRewardCost').value);
+  const type = document.getElementById('vRewardType').value;
+  if (!title || !(cost > 0)) { toast('Впиши название и стоимость в баллах', 'error'); return; }
+  currentPointsRewards.push({ id: 'rw_' + Math.random().toString(36).slice(2, 10), type, title, cost, ratio: 1, active: true });
+  document.getElementById('vRewardTitle').value = '';
+  document.getElementById('vRewardCost').value = '';
+  renderPointsRewards();
+};
+window.removePointsReward = (id) => {
+  currentPointsRewards = currentPointsRewards.filter(r => r.id !== id);
+  renderPointsRewards();
 };
 
 // Геокодинг адреса филиала → заполняет поля широты/долготы.
@@ -1127,7 +1279,7 @@ function renderVenues() {
     return `
     <tr>
       <td class="emoji-cell">${v.emoji ?? '🍽'}</td>
-      <td><strong>${v.name}</strong>${v.loyaltyEnabled ? ` <span class="badge" style="background:#fff0e8;color:#c0490f" title="${v.loyaltyGoal ?? 6} визитов → ${v.loyaltyReward ?? ''}">🎟 Лояльность</span>` : ''}<br><small style="color:var(--muted)">${v.address ?? ''}</small></td>
+      <td><strong>${v.name}</strong>${(v.loyaltyEnabled && !v.pointsEnabled) ? ` <span class="badge" style="background:#fff0e8;color:#c0490f" title="${v.loyaltyGoal ?? 6} визитов → ${v.loyaltyReward ?? ''}">🎟 Лояльность</span>` : ''}<br><small style="color:var(--muted)">${v.address ?? ''}</small></td>
       <td><span class="badge badge-${v.category}">${categoryLabel(v.category)}</span></td>
       <td>${v.district ?? ''}</td>
       <td><span class="badge badge-${status}">${statusLabel}</span></td>
@@ -1207,6 +1359,26 @@ window.openVenueModal = (id) => {
   document.getElementById('vLoyaltyEnabled').value = String(v?.loyaltyEnabled ?? false);
   document.getElementById('vLoyaltyGoal').value  = v?.loyaltyGoal ?? 6;
   document.getElementById('vLoyaltyReward').value = v?.loyaltyReward ?? '';
+  // Бонусы САН (баллы заведения).
+  document.getElementById('vPointsEnabled').value      = String(v?.pointsEnabled ?? false);
+  document.getElementById('vPointsMode').value         = v?.pointsMode ?? 'flat';
+  document.getElementById('vPointsFlat').value         = v?.pointsFlat ?? '';
+  document.getElementById('vCashbackPercent').value    = v?.cashbackPercent ?? '';
+  document.getElementById('vRedeemMode').value         = v?.redeemMode ?? 'staffScan';
+  document.getElementById('vPointsExpiryMonths').value = v?.pointsExpiryMonths ?? 6;
+  document.getElementById('vEarnCooldown').value       = v?.earnCooldownMinutes ?? 60;
+  currentPointsBands = Array.isArray(v?.pointsBands)
+    ? v.pointsBands.map(b => ({ id: b.id || 'bd_' + Math.random().toString(36).slice(2, 10),
+        maxAmount: b.maxAmount ?? 0, points: b.points ?? 0 }))
+    : [];
+  renderPointsBands();
+  currentPointsRewards = Array.isArray(v?.pointsRewards)
+    ? v.pointsRewards.map(r => ({ id: r.id || 'rw_' + Math.random().toString(36).slice(2, 10),
+        type: r.type || 'item', title: r.title || '', cost: r.cost ?? 0,
+        ratio: r.ratio ?? 1, active: r.active !== false }))
+    : [];
+  renderPointsRewards();
+  updatePointsUI();
   document.getElementById('vVerified').value     = String(v?.isVerified ?? false);
   document.getElementById('vModeration').value   = v?.status ?? 'approved';
   document.getElementById('vActive').value       = String((v?.isPaused ? false : (v?.active ?? true)));
@@ -1307,6 +1479,12 @@ window.geocodeAddress = async () => {
 
 window.saveVenue = async () => {
   const num = v => { const n = Number(v); return v === '' || isNaN(n) ? null : n; };
+  // Целое из поля с СОХРАНЕНИЕМ явного нуля: `parseInt(x) || fallback` съедает 0,
+  // а для кулдауна ноль осмыслен («выключен»). Зеркалит intOrDefault на сервере.
+  const intOr = (id, fallback) => {
+    const n = parseInt(document.getElementById(id).value, 10);
+    return Number.isFinite(n) ? n : fallback;
+  };
   const data = {
     name:         document.getElementById('vName').value.trim(),
     category:     document.getElementById('vCategory').value,
@@ -1335,6 +1513,19 @@ window.saveVenue = async () => {
     loyaltyEnabled: document.getElementById('vLoyaltyEnabled').value === 'true',
     loyaltyGoal:  Math.min(Math.max(parseInt(document.getElementById('vLoyaltyGoal').value) || 6, 2), 12),
     loyaltyReward: document.getElementById('vLoyaltyReward').value.trim() || 'Награда за лояльность',
+    // Бонусы САН — баллы заведения (гардрейлы дублируют серверные).
+    pointsEnabled: document.getElementById('vPointsEnabled').value === 'true',
+    pointsMode:    document.getElementById('vPointsMode').value,
+    pointsFlat:    Math.min(Math.max(parseInt(document.getElementById('vPointsFlat').value) || 0, 0), 10000),
+    cashbackPercent: Math.min(Math.max(Number(document.getElementById('vCashbackPercent').value) || 0, 0), 20),
+    pointsBands: currentPointsBands.slice().sort((a, b) => a.maxAmount - b.maxAmount)
+                   .map(b => ({ maxAmount: b.maxAmount, points: b.points })),
+    pointsRewards: currentPointsRewards.map(r => ({
+      id: r.id, type: r.type, title: r.title, cost: r.cost, ratio: r.ratio ?? 1, active: r.active !== false })),
+    pointsExpiryMonths: Math.min(Math.max(parseInt(document.getElementById('vPointsExpiryMonths').value) || 6, 1), 36),
+    redeemMode: document.getElementById('vRedeemMode').value,
+    // 0 = кулдаун выключен (начисление на каждый скан); пусто/мусор = дефолтные 60 мин.
+    earnCooldownMinutes: Math.min(Math.max(intOr('vEarnCooldown', 60), 0), 1440),
   };
   if (!data.name) return toast('Укажи название', 'error');
   // Пустые координаты по умолчанию — центр Бишкека.
@@ -1373,6 +1564,7 @@ window.openDealModal = (id) => {
   document.getElementById('dVenueID').value         =
     (venues.find(v => v.id === d?.venueID)?.name) ?? (venues[0]?.name ?? '');
   document.getElementById('dDetails').value         = d?.details ?? '';
+  document.getElementById('dTerms').value           = (d?.terms ?? []).join('\n');
   document.getElementById('dEmoji').value           = d?.emoji ?? '';
   document.getElementById('dOldPrice').value        = d?.oldPrice ?? '';
   document.getElementById('dNewPrice').value        = d?.newPrice ?? '';
@@ -1406,6 +1598,10 @@ window.saveDeal = async () => {
     type:            document.getElementById('dType').value,
     venueID,
     details:         document.getElementById('dDetails').value.trim(),
+    // Массив строк, по строке на пункт (домен: `Deal.terms`). Пустые
+    // строки выбрасываем — пустой буллет в ленте ведёт в никуда.
+    terms:           document.getElementById('dTerms').value
+                       .split('\n').map(t => t.trim()).filter(Boolean),
     emoji:           document.getElementById('dEmoji').value.trim(),
     status:          document.getElementById('dStatus').value,
     imageURL:        document.getElementById('dImageURL').value.trim(),

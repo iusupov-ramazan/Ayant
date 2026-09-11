@@ -55,7 +55,7 @@ private fun HelpScaffold(title: String, onBack: () -> Unit, content: @Composable
 fun AboutScreen(onBack: () -> Unit) {
     val c = AyantTheme.colors
     HelpScaffold(stringResource(R.string.help_about), onBack) {
-        Text("Ayant", fontSize = 28.sp, fontWeight = FontWeight.Black, color = c.accent)
+        Text("Ayant", fontSize = 28.sp, fontWeight = FontWeight.Black, color = c.accentText)
         Text(stringResource(R.string.help_about_body), fontSize = 15.sp, color = c.ink)
         Column(Modifier.fillMaxWidth().ayantCard()) {
             Text(stringResource(R.string.app_version), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = c.ink)

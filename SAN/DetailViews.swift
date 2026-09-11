@@ -1,12 +1,14 @@
 import SwiftUI
 import StoreKit
+import AyantDomain
+import AyantFeatures
 
 // MARK: - Детали предложения
 
 struct DealDetailView: View {
     let deal: Deal
     var isPushed: Bool = false   // true — экран в навигационном стеке (push), без «Готово»
-    @EnvironmentObject private var store: AppStore
+    @EnvironmentObject private var store: AyantFeatures.AppStore
     @EnvironmentObject private var coupons: CouponStore
     @EnvironmentObject private var loyalty: LoyaltyStore
     @Environment(\.dismiss) private var dismiss
@@ -15,12 +17,15 @@ struct DealDetailView: View {
     @AppStorage("san.redeemCount") private var redeemCount = 0
     @State private var showMapOptions = false
     @State private var presentedCoupon: Coupon?
+    @State private var showGuestAlert = false
 
     private var venue: Venue? { store.venue(for: deal) }
 
     var body: some View {
         if isPushed {
-            content
+            // В стеке вкладки прячем таб-бар: у экрана нет своей нижней панели,
+            // а FAB иначе накрывает блок с купоном.
+            content.toolbar(.hidden, for: .tabBar)
         } else {
             NavigationStack {
                 content
@@ -56,16 +61,22 @@ struct DealDetailView: View {
         }
         .navigationTitle(venue?.name ?? "Предложение")
         .navigationBarTitleDisplayMode(.inline)
+        .guestAlert(isPresented: $showGuestAlert, message: GuestGate.saveDeal)
         .onAppear {
             store.log(AnalyticsMetric.dealTaps, for: deal.venueID)
             AnalyticsLog.log(.dealView, ["deal_id": deal.id, "venue_id": deal.venueID])
+            store.logRankingTap(deal)
         }
         .toolbar {
             if !isPushed {
                 ToolbarItem(placement: .topBarLeading) { Button("Готово") { dismiss() } }
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Button { store.toggleFavorite(deal) } label: {
+                // Гостю сохранение не работает — раньше кнопка просто ничего не
+                // делала (стор молча отбрасывал интент), и это читалось как баг.
+                Button {
+                    if store.isGuest { showGuestAlert = true } else { store.toggleFavorite(deal) }
+                } label: {
                     Image(systemName: store.isFavorite(deal) ? "bookmark.fill" : "bookmark")
                 }
             }
@@ -80,7 +91,7 @@ struct DealDetailView: View {
     }
 
     private var hero: some View {
-        ImageCarousel(urls: deal.allImages, gradient: venue?.gradient ?? [.sanAccent, .orange],
+        ImageCarousel(urls: deal.allImages, gradient: venue?.gradientColors ?? [.sanAccent, .orange],
                       emoji: deal.emoji, height: 300)
             .overlay(alignment: .topLeading) {
                 if let percent = deal.discountPercent {
@@ -190,7 +201,7 @@ struct DealDetailView: View {
                         HStack {
                             Label(venue.address, systemImage: "mappin.and.ellipse").font(.subheadline)
                             Spacer()
-                            Image(systemName: "map.fill").foregroundStyle(Color.sanAccent)
+                            Image(systemName: "map.fill").foregroundStyle(Color.sanAccentText)
                         }
                     }
                     .buttonStyle(.plain)
@@ -216,23 +227,28 @@ struct DealDetailView: View {
 
 struct VenueDetailView: View {
     let venue: Venue
-    @EnvironmentObject private var store: AppStore
+    @EnvironmentObject private var store: AyantFeatures.AppStore
+    /// Состояние карточки заведения одним значением (см. VenueDetailStore).
+    @StateObject private var detail = VenueDetailStore()
     @EnvironmentObject private var location: LocationManager
     @EnvironmentObject private var session: SessionStore
     @EnvironmentObject private var loyalty: LoyaltyStore
+    @EnvironmentObject private var points: PointsStore
     @Environment(\.openURL) private var openURL
+    @Environment(\.dismiss) private var dismiss
 
     @State private var activeSheet: VenueSheet?
     @State private var hoursExpanded = false
     @State private var photoViewerIndex: Int?
     @State private var reportingReview: Review?
     @State private var showGuestPrompt = false
+    @State private var guestMessage = GuestGate.saveVenue
     @State private var showMapOptions = false
     @State private var showAllBranches = false
 
-    private var deals: [Deal] { store.deals(for: venue) }
-    private var agg: (rating: Double, count: Int) { store.aggregate(for: venue) }
-    private var venueReviews: [Review] { store.reviews(for: venue) }
+    private var deals: [Deal] { detail.state.deals }
+    private var agg: (rating: Double, count: Int) { (detail.state.aggregate.rating, detail.state.aggregate.count) }
+    private var venueReviews: [Review] { detail.state.reviews }
 
     /// Реальные фото (обложка, объекты, фото из отзывов) + легаси-эмодзи как фолбэк.
     private var galleryPhotos: [String] {
@@ -245,40 +261,54 @@ struct VenueDetailView: View {
         return out
     }
 
+    /// Вкладки листа (SCREENS.md G3). Разделы старой страницы разложены по ним
+    /// целиком — редизайн меняет порядок и подачу, а не состав.
+    private enum VenueTab: Hashable { case deals, reviews, info }
+    @State private var tab: VenueTab = .deals
+    @Namespace private var tabNamespace
+
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                header
-                actionRow
-                if venue.hasTodaySpecial { todaySpecialBanner }
-                if venue.loyaltyEnabled { loyaltyBanner }
-                infoSection
-                if !deals.isEmpty { dealsGrid }
-                if !galleryPhotos.isEmpty { photosGallery }
-                if !venue.items.isEmpty { itemsSection }
-                reviewsSection
+            VStack(alignment: .leading, spacing: 0) {
+                cover
+                sheet
             }
-            .padding(.bottom, 32)
         }
-        .navigationTitle(venue.name)
-        .navigationBarTitleDisplayMode(.inline)
+        .ignoresSafeArea(edges: .top)
+        // Кнопки «назад / в закладки / поделиться» прибиты к верху экрана
+        // ОВЕРЛЕЕМ, а не лежат в обложке внутри скролла: иначе выход с экрана
+        // уезжает вместе с фотографией и до него надо доскроллить обратно.
+        .overlay(alignment: .top) {
+            floatingControls
+                .padding(.horizontal, 18)
+                // Оверлей, в отличие от прежнего места внутри обложки, уважает
+                // безопасную зону — 58pt от верха экрана здесь уже отмерены.
+                .padding(.top, 0)
+        }
+        .background(Color.sanCanvas.ignoresSafeArea())
+        .toolbar(.hidden, for: .navigationBar)
+        // Своя нижняя панель вместо таб-бара — в макете вкладок на этом экране нет.
+        .toolbar(.hidden, for: .tabBar)
+        .safeAreaInset(edge: .bottom, spacing: 0) { stickyBar }
         .onAppear {
-            store.log(AnalyticsMetric.views, for: venue.id)
+            detail.bind(store)
+            detail.send(.open(venueID: venue.id))
             AnalyticsLog.log(.venueView, ["venue_id": venue.id])
         }
-        .alert("Войдите в аккаунт", isPresented: $showGuestPrompt) {
-            Button("Понятно", role: .cancel) {}
-        } message: {
-            Text("Гостям доступен только просмотр. Войдите в профиле, чтобы сохранять и оставлять отзывы.")
-        }
+        // Каталог/отзывы пока принадлежат AppStore — пересобираем срез, когда он менялся.
+        .onChange(of: store.reviews) { _, _ in detail.refresh() }
+        .onChange(of: store.savedVenueIDs) { _, _ in detail.refresh() }
+        .guestAlert(isPresented: $showGuestPrompt, message: guestMessage)
         .sheet(item: $activeSheet) { sheet in
             switch sheet {
             case .deal(let deal): DealDetailView(deal: deal)
             case .writeReview(let itemID):
                 WriteReviewView(venue: venue,
-                                existing: store.myReview(venueID: venue.id, itemID: itemID),
+                                existing: detail.state.myReview(itemID: itemID),
                                 preselectItemID: itemID)
             case .pdf: if let pdf = venue.pdfMenuURL, !pdf.isEmpty { PDFMenuView(urlString: pdf) }
+            case .points: NavigationStack { VenuePointsScreen(venue: venue) }
+            case .qr: MyQRView()
             }
         }
         .fullScreenCover(item: Binding(
@@ -289,46 +319,401 @@ struct VenueDetailView: View {
         }
     }
 
-    // MARK: Шапка
+    // MARK: Обложка (330) + плавающие кнопки
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ZStack(alignment: .bottomLeading) {
-                Group {
-                    let photos = galleryPhotos.filter { $0.hasPrefix("http") }
-                    if photos.count > 1 {
-                        ImageCarousel(urls: photos, gradient: venue.gradient, emoji: venue.emoji, height: 190)
-                    } else {
-                        VenuePhoto(urlString: venue.imageURL, gradient: venue.gradient)
+    private var cover: some View {
+        ZStack(alignment: .top) {
+            Group {
+                let photos = galleryPhotos.filter { $0.hasPrefix("http") }
+                if photos.count > 1 {
+                    ImageCarousel(urls: photos, gradient: venue.gradientColors, emoji: venue.emoji, height: 330)
+                } else if let url = venue.imageURL, !url.isEmpty {
+                    VenuePhoto(urlString: url, gradient: venue.gradientColors)
+                } else {
+                    ZStack {
+                        LinearGradient(colors: venue.gradientColors,
+                                       startPoint: .topLeading, endPoint: .bottomTrailing)
+                        SanRisoHatch(opacity: 0.2, stripe: 1.5, period: 14)
+                        Text(venue.emoji).font(.system(size: 64))
                     }
                 }
-                .frame(height: 190).clipped()
-                VenueAvatar(venue: venue, size: 64)
-                    .overlay(Circle().stroke(Color(.systemBackground), lineWidth: 3))
-                    .offset(x: 16, y: 32)
             }
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 6) {
-                    Text(venue.name).font(.title2.weight(.bold))
-                    if venue.isVerified {
-                        Image(systemName: "checkmark.seal.fill").foregroundStyle(.blue)
-                    }
-                }
-                HStack(spacing: 8) {
-                    Text(venue.category.locKey)
-                        .font(.caption.weight(.medium))
-                        .padding(.horizontal, 10).padding(.vertical, 4)
-                        .background(Color(.systemGray6), in: Capsule())
-                    StarRatingView(rating: agg.rating, count: agg.count)
-                }
-                if venue.savedByCount > 0 {
-                    Label("Сохранили \(venue.savedByCount) человек", systemImage: "bookmark.fill")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
+            .frame(height: 330)
+            .frame(maxWidth: .infinity)
+            .clipped()
+            // Верхний скрим — под плавающими кнопками.
+            .overlay(alignment: .top) {
+                LinearGradient(colors: [Color(hex: 0x17130F).opacity(0.30), .clear],
+                               startPoint: .top, endPoint: .bottom)
+                    .frame(height: 150)
+                    .allowsHitTesting(false)
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 40)
+
         }
+    }
+
+    private var floatingControls: some View {
+        HStack {
+            floatingButton("chevron.left") { dismiss() }
+            Spacer()
+            HStack(spacing: 8) {
+                floatingButton(detail.state.isSaved ? "bookmark.fill" : "bookmark") {
+                    if session.isGuest { guestMessage = GuestGate.saveVenue; showGuestPrompt = true }
+                    else {
+                        if !detail.state.isSaved { SanHaptics.save() }
+                        detail.send(.toggleSave)
+                    }
+                }
+                ShareLink(item: DeepLinkRouter.venueURL(venue.id),
+                          subject: Text(venue.name),
+                          message: Text("\(venue.name), \(venue.address). Нашёл в Ayant!")) {
+                    floatingIcon("square.and.arrow.up")
+                }
+                .buttonStyle(.sanPress(0.90))
+            }
+        }
+    }
+
+    private func floatingButton(_ systemName: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) { floatingIcon(systemName) }
+            .buttonStyle(.sanPress(0.90))
+    }
+
+    private func floatingIcon(_ systemName: String) -> some View {
+        Image(systemName: systemName)
+            .font(.system(size: 16, weight: .semibold))
+            .foregroundStyle(Color.sanInk)
+            .frame(width: 42, height: 42)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+            .background(Color.white.opacity(0.55),
+                        in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+    }
+
+    // MARK: Лист, накрывающий обложку
+
+    private var sheet: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ratingRow
+            Text(venue.name)
+                .sanText(36, .heavy, tracking: -1.9, lineHeight: 0.98)
+                .foregroundStyle(Color.sanInk)
+                .padding(.top, 10)
+            metaLine.padding(.top, 9)
+            chipsRow.padding(.top, 16)
+            if venue.pointsActive { pointsHeroCard.padding(.top, 20) }
+            if venue.hasTodaySpecial { todaySpecialBanner.padding(.top, 16) }
+            segmentedTabs.padding(.top, 22)
+            tabContent.padding(.top, 16)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, SanMetrics.screenPadding)
+        .padding(.top, 22)
+        .padding(.bottom, 30)
+        .background(Color.sanCanvas,
+                    in: UnevenRoundedRectangle(topLeadingRadius: SanRadius.panel,
+                                               topTrailingRadius: SanRadius.panel,
+                                               style: .continuous))
+        .padding(.top, -36)
+    }
+
+    private var ratingRow: some View {
+        HStack(spacing: 10) {
+            HStack(spacing: 5) {
+                Image(systemName: "star.fill")
+                    .font(.system(size: 13)).foregroundStyle(Color(hex: Palette.orange))
+                Text(agg.rating.sanRatingText)
+                    .font(.golos(13, .bold)).foregroundStyle(Color.sanInk)
+            }
+            Text("· \(agg.count) \(Self.reviewsWord(agg.count))")
+                .font(.golos(13, .semibold)).foregroundStyle(Color.sanInkSoft)
+            if venue.isVerified {
+                Image(systemName: "checkmark.seal.fill")
+                    .font(.system(size: 13)).foregroundStyle(Color(hex: 0x4DA3FF))
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var metaLine: some View {
+        HStack(spacing: 0) {
+            Text(venue.category.locKey)
+            Text(verbatim: " · \(venue.district)")
+            if let km = location.distanceKm(to: venue.latitude, venue.longitude) {
+                Text(verbatim: " · \(km.distanceText)")
+            }
+        }
+        .font(.golos(14)).foregroundStyle(Color.sanInkSoft)
+    }
+
+    /// Чипы под названием. Показываем только то, что реально есть в модели —
+    /// «Wi-Fi»/«Веранда» из макета нам взять неоткуда (поля удобств нет).
+    private var chipsRow: some View {
+        HStack(spacing: 7) {
+            HStack(spacing: 6) {
+                Circle().fill(venue.isOpenNow ? Color.sanOpen : Color.sanInkSoft)
+                    .frame(width: 6, height: 6)
+                Text(venue.hoursStatusText)
+            }
+            .font(.golos(12.5, .bold))
+            .foregroundStyle(venue.isOpenNow ? Color.sanOpen : Color.sanInkSoft)
+            .padding(.horizontal, 13).padding(.vertical, 8)
+            .background((venue.isOpenNow ? Color.sanOpen : Color.sanInkSoft).opacity(0.12), in: Capsule())
+
+            if !venue.branches.isEmpty {
+                Text("\(venue.branches.count + 1) адреса")
+                    .font(.golos(12.5, .semibold)).foregroundStyle(Color.sanInkSoft)
+                    .padding(.horizontal, 13).padding(.vertical, 8)
+                    .background(Color.sanSurface, in: Capsule())
+                    .overlay(Capsule().strokeBorder(Color.sanHairline, lineWidth: 0.5))
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    // MARK: Сегментированный переключатель
+
+    private var segmentedTabs: some View {
+        HStack(spacing: 4) {
+            tabButton("Публикации", .deals)
+            tabButton("Отзывы", .reviews)
+            tabButton("Инфо", .info)
+        }
+        .padding(4)
+        .background(Color.sanSurfaceMuted, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private func tabButton(_ title: LocalizedStringKey, _ value: VenueTab) -> some View {
+        let isOn = tab == value
+        return Button {
+            SanHaptics.selection()
+            withAnimation(.sanStandard) { tab = value }
+        } label: {
+            Text(title)
+                .font(.golos(13.5, isOn ? .bold : .semibold))
+                .foregroundStyle(isOn ? Color.sanInk : Color.sanInkSoft)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background {
+                    // Белая «пилюля» переезжает, а не перекрашивается (ANIMATIONS.md §14).
+                    if isOn {
+                        RoundedRectangle(cornerRadius: 13, style: .continuous)
+                            .fill(Color.sanSurface)
+                            .shadow(color: .black.opacity(0.06), radius: 1.5, y: 1)
+                            .matchedGeometryEffect(id: "venueTab", in: tabNamespace)
+                    }
+                }
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder private var tabContent: some View {
+        switch tab {
+        case .deals:
+            if deals.isEmpty {
+                emptyTabNote("Пока нет активных предложений.")
+            } else {
+                publicationsGrid
+            }
+        case .reviews:
+            reviewsSection
+        case .info:
+            VStack(alignment: .leading, spacing: 20) {
+                actionRow
+                infoSection
+                // Штампы показываем, только если баллы выключены: механика одна.
+                if venue.stampsActive { loyaltyBanner }
+                if !galleryPhotos.isEmpty { photosGallery }
+                if !venue.items.isEmpty { itemsSection }
+            }
+        }
+    }
+
+    private func emptyTabNote(_ text: LocalizedStringKey) -> some View {
+        Text(text)
+            .font(.golos(14)).foregroundStyle(Color.sanInkSoft)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(18)
+            .sanCard(padding: 0, radius: SanRadius.card)
+    }
+
+    // MARK: Нижняя панель
+
+    private var stickyBar: some View {
+        HStack(spacing: 10) {
+            Button {
+                // Личный QR привязан к аккаунту: заведению некуда начислять
+                // баллы гостя, поэтому вместо кода — приглашение войти.
+                if session.isGuest {
+                    guestMessage = GuestGate.qr
+                    showGuestPrompt = true
+                } else if venue.pointsActive {
+                    activeSheet = .points
+                } else {
+                    activeSheet = .qr
+                }
+            } label: {
+                Text("Показать QR")
+                    .font(.golos(16, .bold)).foregroundStyle(.white)
+                    .frame(maxWidth: .infinity).padding(.vertical, 16)
+                    .background(LinearGradient.sanAccentGradient,
+                                in: RoundedRectangle(cornerRadius: SanRadius.button, style: .continuous))
+                    .sanShadow(.accentCTA)
+            }
+            .buttonStyle(.sanPress(0.97))
+
+            Button {
+                if session.isGuest { guestMessage = GuestGate.saveVenue; showGuestPrompt = true }
+                else {
+                    if !detail.state.isSaved { SanHaptics.save() }
+                    detail.send(.toggleSave)
+                }
+            } label: {
+                Image(systemName: detail.state.isSaved ? "heart.fill" : "heart")
+                    .font(.system(size: 19, weight: .semibold))
+                    .foregroundStyle(Color.sanAccent)
+                    .frame(width: 56).frame(maxHeight: .infinity)
+                    .background(Color.sanSurface,
+                                in: RoundedRectangle(cornerRadius: SanRadius.button, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: SanRadius.button, style: .continuous)
+                        .strokeBorder(Color.sanHairline, lineWidth: 0.5))
+                    .sanPop(on: detail.state.isSaved)
+            }
+            .buttonStyle(.sanPress(0.93))
+            .frame(height: 54)
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 12).padding(.bottom, 14)
+        .background {
+            ZStack(alignment: .top) {
+                Color.sanCanvas.opacity(0.92).background(.ultraThinMaterial)
+                Rectangle().fill(Color.sanHairline).frame(height: 0.5)
+            }
+            .ignoresSafeArea(edges: .bottom)
+        }
+    }
+
+    // MARK: Предложения списком (SCREENS.md G3 §7)
+
+    // MARK: Публикации — кладка в две колонки
+    //
+    // Вкладка называется «Публикации», а не «Акции», потому что `DealType` давно
+    // не только скидки: там же новинки и объявления. И раскладка теперь как в
+    // Instagram — плитки разной высоты в две колонки: так на экран влезает
+    // вчетверо больше, а витрина заведения читается как витрина, а не как список.
+
+    private var publicationsGrid: some View {
+        SanMasonry(items: deals, relativeHeight: { Self.tileAspect(for: $0).inverse }) { deal in
+            publicationTile(deal)
+        }
+    }
+
+    /// Пропорция плитки. Берётся из id, а не из загруженной картинки: так сетка
+    /// не перекладывается по мере загрузки фотографий и не прыгает под пальцем.
+    private static func tileAspect(for deal: Deal) -> CGFloat {
+        let variants: [CGFloat] = [0.78, 1.0, 1.3]      // ширина / высота
+        let hash = abs(deal.id.hashValue)
+        return variants[hash % variants.count]
+    }
+
+    private func publicationTile(_ deal: Deal) -> some View {
+        Button { activeSheet = .deal(deal) } label: {
+            VStack(alignment: .leading, spacing: 0) {
+                ZStack(alignment: .topLeading) {
+                    VenuePhoto(urlString: deal.allImages.first, gradient: venue.gradientColors)
+                        .frame(maxWidth: .infinity)
+                        .aspectRatio(Self.tileAspect(for: deal), contentMode: .fit)
+                        .clipped()
+                    if let percent = deal.effectiveDiscountPercent {
+                        Text("−\(percent)%")
+                            .font(.golos(12.5, .heavy))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 9).padding(.vertical, 5)
+                            .background(LinearGradient.sanAccentGradient, in: Capsule())
+                            .padding(8)
+                    }
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(deal.title)
+                        .sanText(14, .bold, tracking: -0.25, lineHeight: 1.2)
+                        .foregroundStyle(Color.sanInk)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                    if let new = deal.newPrice {
+                        Text("\(new) сом")
+                            .font(.golos(14, .heavy)).tracking(-0.3)
+                            .foregroundStyle(Color.sanAccentText)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(10)
+            }
+            .background(Color.sanSurface)
+            .clipShape(RoundedRectangle(cornerRadius: SanRadius.card, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: SanRadius.card, style: .continuous)
+                .strokeBorder(Color.sanHairline, lineWidth: 0.5))
+        }
+        .buttonStyle(.sanPress(0.97))
+    }
+
+    private var dealRows: some View {
+        VStack(spacing: 10) {
+            ForEach(Array(deals.enumerated()), id: \.element.id) { index, deal in
+                Button { activeSheet = .deal(deal) } label: {
+                    HStack(spacing: 14) {
+                        RoundedRectangle(cornerRadius: 17, style: .continuous)
+                            .fill(LinearGradient(colors: venue.gradientColors,
+                                                 startPoint: .topLeading, endPoint: .bottomTrailing))
+                            .frame(width: 66, height: 66)
+                            .overlay {
+                                if let url = deal.allImages.first, !url.isEmpty {
+                                    VenuePhoto(urlString: url, gradient: venue.gradientColors)
+                                        .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
+                                } else {
+                                    Text(deal.emoji).font(.system(size: 28))
+                                }
+                            }
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(deal.title)
+                                .sanText(15, .bold, tracking: -0.3, lineHeight: 1.25)
+                                .foregroundStyle(Color.sanInk)
+                                .lineLimit(2)
+                            Text(deal.details)
+                                .font(.golos(12.5)).foregroundStyle(Color.sanInkSoft)
+                                .lineLimit(1)
+                                .padding(.top, 5)
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                if let new = deal.newPrice {
+                                    Text("\(new) сом")
+                                        .font(.golos(17, .heavy)).tracking(-0.4)
+                                        // Акцент как мелкий текст — контрастный вариант.
+                                        .foregroundStyle(Color.sanAccentText)
+                                }
+                                if let old = deal.oldPrice {
+                                    Text("\(old) сом")
+                                        .font(.golos(13)).foregroundStyle(Color(hex: 0x9A9188))
+                                        .strikethrough()
+                                }
+                            }
+                            .padding(.top, 7)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .sanCard(padding: 0, radius: SanRadius.card)
+                }
+                .buttonStyle(.sanPress(0.98))
+                .sanRise(index, stagger: SanTiming.dealRowRise.stagger,
+                         duration: SanTiming.dealRowRise.duration)
+            }
+        }
+    }
+
+    private static func reviewsWord(_ n: Int) -> String {
+        let n10 = n % 10, n100 = n % 100
+        if n10 == 1 && n100 != 11 { return "отзыв" }
+        if (2...4).contains(n10) && !(12...14).contains(n100) { return "отзыва" }
+        return "отзывов"
     }
 
     // MARK: Действия
@@ -344,20 +729,20 @@ struct VenueDetailView: View {
         HStack(spacing: 10) {
             if hasPhone {
                 actionButton("Позвонить", "phone.fill") {
-                    store.log(AnalyticsMetric.calls, for: venue.id)
+                    detail.send(.logContact(.call))
                     if let url = URL(string: "tel:\(venue.phone.filter { !$0.isWhitespace })") { openURL(url) }
                 }
             }
             if hasLocation {
                 actionButton("Маршрут", "location.fill") {
-                    store.log(AnalyticsMetric.maps, for: venue.id)
+                    detail.send(.logContact(.maps))
                     openURL(Directions.url(lat: venue.latitude, lng: venue.longitude))
                 }
             }
-            actionButton(store.isSaved(venue) ? "Сохранено" : "Сохранить",
-                         store.isSaved(venue) ? "bookmark.fill" : "bookmark") {
-                if session.isGuest { showGuestPrompt = true }
-                else { store.toggleSave(venue); store.log(AnalyticsMetric.saves, for: venue.id) }
+            actionButton(detail.state.isSaved ? "Сохранено" : "Сохранить",
+                         detail.state.isSaved ? "bookmark.fill" : "bookmark") {
+                if session.isGuest { guestMessage = GuestGate.saveVenue; showGuestPrompt = true }
+                else { detail.send(.toggleSave) }
             }
             ShareLink(item: DeepLinkRouter.venueURL(venue.id),
                       subject: Text(venue.name),
@@ -380,7 +765,7 @@ struct VenueDetailView: View {
         }
         .frame(maxWidth: .infinity).padding(.vertical, 10)
         .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
-        .foregroundStyle(Color.sanAccent)
+        .foregroundStyle(Color.sanAccentText)
     }
 
     // MARK: Сегодняшний специал
@@ -389,7 +774,7 @@ struct VenueDetailView: View {
         HStack(spacing: 10) {
             Text("⭐️").font(.title2)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Сегодня").font(.caption.weight(.bold)).foregroundStyle(Color.sanAccent)
+                Text("Сегодня").font(.caption.weight(.bold)).foregroundStyle(Color.sanAccentText)
                 Text(venue.todaySpecialText ?? "").font(.subheadline.weight(.medium))
             }
             Spacer()
@@ -451,6 +836,60 @@ struct VenueDetailView: View {
         .padding(.horizontal, 16)
     }
 
+    // MARK: Баллы САН — герой-карточка (SCREENS.md G3 §5)
+
+    private var pointsHeroCard: some View {
+        let balance = points.state.balance(for: venue.id)
+        // Ближайшая доступная награда задаёт цель прогресса.
+        let next = venue.pointsRewards
+            .filter { $0.active && $0.cost > balance }
+            .min { $0.cost < $1.cost }
+        let fraction = next.map { min(1, Double(balance) / Double(max($0.cost, 1))) } ?? 1
+
+        return Button { activeSheet = .points } label: {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Ваши баллы САН")
+                            .font(.golos(12.5, .semibold)).foregroundStyle(.white.opacity(0.9))
+                        Text("\(balance)")
+                            .sanText(42, .heavy, tracking: -2, lineHeight: 1)
+                            .foregroundStyle(.white)
+                            .contentTransition(.numericText())
+                            .animation(.snappy, value: balance)
+                    }
+                    Spacer(minLength: 8)
+                    if let mode = venue.pointsModeLabel {
+                        Text(mode)
+                            .font(.golos(12, .bold)).foregroundStyle(.white)
+                            .padding(.horizontal, 12).padding(.vertical, 7)
+                            .background(.white.opacity(0.2), in: Capsule())
+                            .fixedSize()
+                    }
+                }
+                SanProgressBar(fraction: fraction, height: 8).padding(.top, 16)
+                Text(next.map { "Ещё \($0.cost - balance) \(Self.pointsWord($0.cost - balance)) до «\($0.title)»" }
+                     ?? "Баллы можно потратить на награды заведения")
+                    .font(.golos(12.5, .semibold)).foregroundStyle(.white.opacity(0.94))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 10)
+            }
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(LinearGradient.sanAccentGradient,
+                        in: RoundedRectangle(cornerRadius: SanRadius.hero, style: .continuous))
+            .sanShadow(.hero)
+        }
+        .buttonStyle(.sanPress(0.98))
+    }
+
+    private static func pointsWord(_ n: Int) -> String {
+        let n10 = n % 10, n100 = n % 100
+        if n10 == 1 && n100 != 11 { return "балл" }
+        if (2...4).contains(n10) && !(12...14).contains(n100) { return "балла" }
+        return "баллов"
+    }
+
     // MARK: Инфо
 
     private var infoSection: some View {
@@ -463,7 +902,7 @@ struct VenueDetailView: View {
                     HStack {
                         Label(venue.address, systemImage: "mappin.and.ellipse").font(.subheadline)
                         Spacer()
-                        Image(systemName: "map.fill").foregroundStyle(Color.sanAccent)
+                        Image(systemName: "map.fill").foregroundStyle(Color.sanAccentText)
                     }
                 }
                 .buttonStyle(.plain)
@@ -485,7 +924,7 @@ struct VenueDetailView: View {
                             .font(.subheadline.weight(.medium))
                         Spacer()
                         Image(systemName: showAllBranches ? "chevron.up" : "chevron.down")
-                            .foregroundStyle(Color.sanAccent)
+                            .foregroundStyle(Color.sanAccentText)
                     }
                 }
                 .buttonStyle(.plain)
@@ -495,7 +934,7 @@ struct VenueDetailView: View {
                             HStack {
                                 Label(b.address, systemImage: "mappin.and.ellipse").font(.subheadline)
                                 Spacer()
-                                Image(systemName: "map").foregroundStyle(Color.sanAccent)
+                                Image(systemName: "map").foregroundStyle(Color.sanAccentText)
                             }
                         }
                         .buttonStyle(.plain)
@@ -509,13 +948,13 @@ struct VenueDetailView: View {
             if venue.whatsappURL != nil || venue.instagramURL != nil || venue.telegramURL != nil {
                 HStack(spacing: 12) {
                     if let wa = venue.whatsappURL {
-                        socialIcon("message.fill", .green, wa)
+                        socialIcon("whatsapp", wa)
                     }
                     if let tg = venue.telegramURL {
-                        socialIcon("paperplane.fill", Color(hex: 0x29A9EB), tg)
+                        socialIcon("telegram", tg)
                     }
                     if let ig = venue.instagramURL {
-                        socialIcon("camera.fill", Color(hex: 0xC13584), ig)
+                        socialIcon("instagram", ig)
                     }
                 }
             }
@@ -558,12 +997,18 @@ struct VenueDetailView: View {
         .padding(.horizontal, 16)
     }
 
-    private func socialIcon(_ icon: String, _ color: Color, _ url: URL) -> some View {
+    /// Круглая кнопка соцсети с фирменным логотипом из `Assets.xcassets`.
+    ///
+    /// Логотипы в каталоге — квадраты «в край» со своей фирменной подложкой
+    /// (синий Telegram, зелёный WhatsApp, градиент Instagram), поэтому цвет фона
+    /// здесь не задаётся. `scaledToFit` — картинка вписывается целиком, без
+    /// растяжения по осям.
+    private func socialIcon(_ asset: String, _ url: URL) -> some View {
         Link(destination: url) {
-            Image(systemName: icon)
-                .font(.headline).foregroundStyle(.white)
+            Image(asset)
+                .resizable().scaledToFit()
                 .frame(width: 40, height: 40)
-                .background(color, in: Circle())
+                .clipShape(Circle())
         }
     }
 
@@ -592,7 +1037,7 @@ struct VenueDetailView: View {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
                 ForEach(shownDeals) { deal in
                     Button { activeSheet = .deal(deal) } label: {
-                        DealGridCell(deal: deal, gradient: venue.gradient)
+                        DealGridCell(deal: deal, gradient: venue.gradientColors)
                     }
                     .buttonStyle(.plain)
                 }
@@ -631,7 +1076,7 @@ struct VenueDetailView: View {
                 HStack(spacing: 10) {
                     ForEach(venue.items) { item in
                         Button {
-                            if session.isGuest { showGuestPrompt = true }
+                            if session.isGuest { guestMessage = GuestGate.review; showGuestPrompt = true }
                             else { activeSheet = .writeReview(item.id) }
                         } label: {
                             VStack(spacing: 6) {
@@ -660,7 +1105,7 @@ struct VenueDetailView: View {
                     StarRatingView(rating: agg.rating, size: 12)
                     Text("\(agg.count) отзывов").font(.caption2).foregroundStyle(.secondary)
                 }
-                RatingBreakdownView(breakdown: store.ratingBreakdown(for: venue))
+                RatingBreakdownView(breakdown: detail.state.ratingBreakdown)
             }
             .padding(.horizontal, 16)
 
@@ -670,7 +1115,8 @@ struct VenueDetailView: View {
                     .padding(.horizontal, 16)
             } else {
                 Button {
-                    if session.isGuest { showGuestPrompt = true } else { activeSheet = .writeReview(nil) }
+                    if session.isGuest { guestMessage = GuestGate.review; showGuestPrompt = true }
+                    else { activeSheet = .writeReview(nil) }
                 } label: {
                     Label("Оценить блюдо или услугу", systemImage: "square.and.pencil")
                         .font(.subheadline.weight(.semibold))
@@ -742,7 +1188,7 @@ struct DealGridCell: View {
 /// Все публикации заведения с постраничной подгрузкой (по 12 за раз).
 struct VenueDealsView: View {
     let venue: Venue
-    @EnvironmentObject private var store: AppStore
+    @EnvironmentObject private var store: AyantFeatures.AppStore
     @State private var visibleCount = 12
     @State private var selectedDeal: Deal?
 
@@ -755,7 +1201,7 @@ struct VenueDealsView: View {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
                 ForEach(shown) { deal in
                     Button { selectedDeal = deal } label: {
-                        DealGridCell(deal: deal, gradient: venue.gradient)
+                        DealGridCell(deal: deal, gradient: venue.gradientColors)
                     }
                     .buttonStyle(.plain)
                     .onAppear { loadMoreIfNeeded(deal) }
@@ -790,12 +1236,16 @@ private enum VenueSheet: Identifiable {
     case deal(Deal)
     case writeReview(String?)   // itemID или nil (о заведении в целом)
     case pdf
+    case points                 // «Показать QR» у заведения с баллами САН
+    case qr                     // личный QR, когда баллов у заведения нет
 
     var id: String {
         switch self {
         case .deal(let d): return "deal_\(d.id)"
         case .writeReview(let item): return "writeReview_\(item ?? "venue")"
         case .pdf: return "pdf"
+        case .points: return "points"
+        case .qr: return "qr"
         }
     }
 }
@@ -803,10 +1253,10 @@ private enum VenueSheet: Identifiable {
 #Preview {
     NavigationStack {
         VenueDetailView(venue: MockData.venues[0])
-            .environmentObject(AppStore())
+            .environmentObject(AyantStores.app())
             .environmentObject(LocationManager())
-            .environmentObject(SessionStore())
-            .environmentObject(LoyaltyStore())
+            .environmentObject(AyantStores.session())
+            .environmentObject(AyantStores.loyalty())
     }
     .tint(.sanAccent)
 }

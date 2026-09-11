@@ -1,4 +1,6 @@
 import Foundation
+import AyantDomain
+import AyantData
 
 /// Единая точка переключения между mock-реализацией и Firebase.
 ///
@@ -13,8 +15,9 @@ enum AppConfig {
 
     /// Базовый URL Cloud Functions — одно место вместо разбросанных по коду ссылок.
     /// При смене региона/проекта/бэкенда правится только здесь.
-    static let functionsBaseURL = "https://us-central1-san-25d32.cloudfunctions.net"
-    static func functionURL(_ name: String) -> String { "\(functionsBaseURL)/\(name)" }
+    /// Адрес живёт в слое данных (`AyantBackend`); здесь — привычная точка вызова.
+    static let functionsBaseURL = AyantBackend.functionsBaseURL
+    static func functionURL(_ name: String) -> String { AyantBackend.functionURL(name) }
 
     static func makeAuthService() -> AuthService {
         useFirebase ? FirebaseAuthService() : MockAuthService()
@@ -28,8 +31,20 @@ enum AppConfig {
         useFirebase ? FirebaseHostRepository() : MockHostRepository()
     }
 
+    /// ВРЕМЕННО: показывать в «Аналитике» сгенерированные ряды вместо реальных.
+    ///
+    /// Пока у заведений нет трафика, настоящие счётчики — нули, и экран
+    /// выглядит сломанным. События при этом продолжают писаться в настоящий
+    /// сервис, поэтому выключение флага вернёт накопленные данные, а не пустоту.
+    static let useDemoAnalytics = true
+
     static func makeAnalyticsService() -> AnalyticsService {
-        useFirebase ? FirebaseAnalyticsService() : MockAnalyticsService()
+        let real: AnalyticsService = useFirebase ? FirebaseAnalyticsService() : MockAnalyticsService()
+        return useDemoAnalytics ? DemoAnalyticsService(wrapping: real) : real
+    }
+
+    static func makeRankingEventService() -> RankingEventService {
+        useFirebase ? FirebaseRankingEventService() : MockRankingEventService()
     }
 
     static func makePushService() -> PushService {
@@ -38,5 +53,17 @@ enum AppConfig {
 
     static func makeCouponService() -> CouponService {
         useFirebase ? FirebaseCouponService() : MockCouponService()
+    }
+
+    /// Продуктовая аналитика (DAU/воронки). Вне Firebase — печать в консоль.
+    static func makeProductAnalytics() -> ProductAnalytics {
+        useFirebase ? FirebaseProductAnalytics() : ConsoleProductAnalytics()
+    }
+
+    /// Живой источник карт баллов (snapshot-листенер вместо опроса) + списание.
+    static func makePointsRepository() -> PointsRepository {
+        useFirebase
+            ? FirebasePointsRepository(backend: makeCouponService(), auth: makeAuthService())
+            : MockPointsRepository(cards: MockData.pointsCards)
     }
 }

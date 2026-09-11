@@ -2,6 +2,8 @@ import XCTest
 import SwiftUI
 import CoreLocation
 @testable import SAN
+import AyantDomain
+import AyantFeatures
 
 /// Юнит-тесты алгоритма ранжирования выдачи (AppStore).
 ///
@@ -15,13 +17,21 @@ final class RankingTests: XCTestCase {
 
     /// Собирает AppStore на стаб-репозитории и загружает данные (load()).
     private func makeStore(venues: [Venue], deals: [Deal] = []) async -> AppStore {
+        await makeStoreWithLog(venues: venues, deals: deals).store
+    }
+
+    /// Вариант с доступом к журналу ранжирования (для проверки событий).
+    private func makeStoreWithLog(venues: [Venue], deals: [Deal] = []) async
+        -> (store: AppStore, log: FakeRankingEventService) {
         let repo = RankingStubRepo(venues: venues, deals: deals)
+        let log = FakeRankingEventService()
         let store = AppStore(repository: repo,
-                             analytics: MockAnalyticsService(),
-                             push: MockPushService(),
+                             analytics: FakeAnalyticsService(),
+                             push: FakePushService(),
+                             rankingLog: log,
                              prefs: InMemoryPreferences())
         await store.load()
-        return store
+        return (store, log)
     }
 
     /// Venue в Бишкеке, одобренное, не на паузе. weekHours = закрыто всю неделю,
@@ -34,7 +44,7 @@ final class RankingTests: XCTestCase {
         Venue(
             id: id, name: "Venue \(id)", category: .cafe, district: "Центр",
             address: "ул. Тестовая 1", phone: "+996700000000", emoji: "🍽",
-            gradient: [.sanAccent, .orange], imageURL: nil,
+            gradient: [Palette.accent, Palette.orange], imageURL: nil,
             rating: rating, reviewCount: reviews, isVerified: verified,
             savedByCount: savedBy, citySlug: City.bishkek.id, latitude: lat, longitude: lng,
             todaySpecialText: todaySpecial,
@@ -65,12 +75,52 @@ final class RankingTests: XCTestCase {
     }
 
     func testVenueScoreVerificationAddsFixedBonus() async {
-        // Два одинаковых заведения, отличие только в верификации → разница ровно +3.
+        // Два одинаковых заведения, отличие только в верификации → разница ровно +1.5.
         let plain = venue("plain", rating: 4, reviews: 10)
         let verified = venue("verified", rating: 4, reviews: 10, verified: true)
         let store = await makeStore(venues: [plain, verified])
 
-        XCTAssertEqual(store.venueScore(verified) - store.venueScore(plain), 3.0, accuracy: 0.0001)
+        XCTAssertEqual(store.venueScore(verified) - store.venueScore(plain), 1.5, accuracy: 0.0001)
+    }
+
+    // MARK: Байесов рейтинг — редкие оценки не побеждают числом
+
+    func testBayesianRatingShrinksSparseRatings() {
+        // (v·R + m·C)/(v+m), C=4.0, m=20.
+        XCTAssertEqual(Ranking.bayesianRating(rating: 5, reviewCount: 2),
+                       (2 * 5.0 + 20 * 4.0) / 22.0, accuracy: 1e-9)
+        // 4.6 с 400 отзывами обходит 5.0 с двумя.
+        XCTAssertGreaterThan(Ranking.bayesianRating(rating: 4.6, reviewCount: 400),
+                             Ranking.bayesianRating(rating: 5, reviewCount: 2))
+    }
+
+    func testWellReviewedVenueOutranksThinFiveStar() async {
+        let thin = venue("thin", rating: 5, reviews: 2)
+        let strong = venue("strong", rating: 4.6, reviews: 400)
+        let store = await makeStore(venues: [thin, strong])
+        XCTAssertEqual(store.rankedVenues().map(\.id), ["strong", "thin"])
+    }
+
+    // MARK: dealScore — глубина скидки и «скоро закончится» (чистая функция)
+
+    func testDealScoreRewardsDiscountDepth() {
+        let base = 10.0
+        XCTAssertEqual(Ranking.dealScore(venueScore: base, isFresh: false, daysSinceStart: nil,
+                                         discountPercent: 25, hoursUntilExpiry: nil, timeRelevance: 0.0),
+                       base + 1.5, accuracy: 1e-9)                 // 25/50 → 1.5
+        XCTAssertEqual(Ranking.dealScore(venueScore: base, isFresh: false, daysSinceStart: nil,
+                                         discountPercent: 90, hoursUntilExpiry: nil, timeRelevance: 0.0),
+                       base + 3.0, accuracy: 1e-9)                 // капнуто на 3
+    }
+
+    func testDealScoreNudgesEndingSoon() {
+        let base = 10.0
+        XCTAssertEqual(Ranking.dealScore(venueScore: base, isFresh: false, daysSinceStart: nil,
+                                         discountPercent: nil, hoursUntilExpiry: 0, timeRelevance: 0.0),
+                       base + 1.5, accuracy: 1e-9)                 // истекает сейчас
+        XCTAssertEqual(Ranking.dealScore(venueScore: base, isFresh: false, daysSinceStart: nil,
+                                         discountPercent: nil, hoursUntilExpiry: 100, timeRelevance: 0.0),
+                       base, accuracy: 1e-9)                       // вне окна 48ч
     }
 
     // MARK: dealScore — свежесть даёт буст
@@ -127,6 +177,50 @@ final class RankingTests: XCTestCase {
         // Реклама вставляется перед 4-й акцией (i%5==3) и перед 9-й.
         XCTAssertEqual(adIndexes, [3, 9])
     }
+
+    // MARK: Журнал ранжирования (learning-to-rank)
+
+    func testImpressionLogsSlateWithRankTimeFeatures() async {
+        let v = venue("v", rating: 4, reviews: 10)
+        let deals = (0..<3).map { deal("d\($0)", venueID: "v") }
+        let (store, log) = await makeStoreWithLog(venues: [v], deals: deals)
+
+        store.logFeedImpression(category: nil, userCoord: nil)
+
+        XCTAssertEqual(log.logged.count, 1)
+        let e = log.logged[0]
+        XCTAssertEqual(e.type, .impression)
+        XCTAssertEqual(e.sessionID, store.sessionID)
+        XCTAssertEqual(e.items.count, 3)
+        // Позиции проставлены по порядку; фичи на момент показа сняты.
+        XCTAssertEqual(e.items.map(\.position), [0, 1, 2])
+        XCTAssertEqual(e.items[0].discountPercent, 20)          // из deal(): discountPercent 20
+        XCTAssertGreaterThan(e.items[0].score, 0)
+    }
+
+    func testImpressionDedupesIdenticalRenders() async {
+        let v = venue("v", rating: 4, reviews: 10)
+        let (store, log) = await makeStoreWithLog(venues: [v], deals: [deal("d0", venueID: "v")])
+
+        store.logFeedImpression(category: nil, userCoord: nil)
+        store.logFeedImpression(category: nil, userCoord: nil)   // тот же слейт → без дубля
+
+        XCTAssertEqual(log.logged.count, 1)
+    }
+
+    func testTapAndRedeemAreLogged() async {
+        let v = venue("v", rating: 4, reviews: 10)
+        let d = deal("d0", venueID: "v")
+        let (store, log) = await makeStoreWithLog(venues: [v], deals: [d])
+
+        store.logRankingTap(d)
+        store.redeem(d)
+
+        XCTAssertEqual(log.logged.map(\.type), [.tap, .redeem])
+        XCTAssertEqual(log.logged[0].dealID, "d0")
+        XCTAssertEqual(log.logged[1].dealID, "d0")
+        XCTAssertEqual(log.logged[1].venueID, "v")
+    }
 }
 
 // MARK: - Стаб-репозиторий (венью/акции подставляются; остальное пусто)
@@ -138,7 +232,10 @@ private final class RankingStubRepo: DataRepository {
 
     func fetchVenues() async throws -> [Venue] { venues }
     func fetchDeals() async throws -> [Deal] { deals }
-    func fetchReviews() async throws -> [Review] { [] }   // пусто → aggregate берёт venue.rating/reviewCount
+    // Пусто → агрегат берёт денормализованные venue.rating/reviewCount.
+    func fetchReviews(venueID: String, limit: Int) async throws -> [Review] { [] }
+    func fetchReviews(venueIDs: [String], limit: Int) async throws -> [Review] { [] }
+    func fetchReviews(authorID: String, limit: Int) async throws -> [Review] { [] }
     func saveReview(_ review: Review) async throws {}
     func deleteReview(id: String) async throws {}
     func updateReviewReply(reviewID: String, reply: HostReply?) async throws {}

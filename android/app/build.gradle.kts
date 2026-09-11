@@ -77,6 +77,16 @@ android {
 }
 
 dependencies {
+    // Модели, чистая математика (Ranking, PointsMath) и контракты репозиториев.
+    // Зависимость односторонняя: :domain про :app не знает и знать не может.
+    implementation(project(":domain"))
+    // Реализации доменных контрактов. Firebase-зависимости объявлены ТАМ и сюда
+    // не протекают — обратиться к Firestore из экрана уже не получится.
+    implementation(project(":data"))
+    // ViewModel всех фич. Зависит только от :domain — экранам достаётся состояние
+    // и один вход send(), а не сборка приложения.
+    implementation(project(":feature"))
+
     val composeBom = platform("androidx.compose:compose-bom:2024.09.02")
     implementation(composeBom)
 
@@ -129,19 +139,14 @@ dependencies {
     // Real Guava ListenableFuture (avoids the empty stub CameraX otherwise trips on).
     implementation("com.google.guava:guava:33.3.1-android")
 
-    // --- Firebase (uncomment usage once google-services.json is added) ---
+    // --- Firebase ---
+    // Здесь остаются ТОЛЬКО точки входа фреймворка, которые обязаны жить в
+    // приложении: FirebaseApp.initializeApp (AyantApp) и FirebaseMessagingService,
+    // объявленный в манифесте. Firestore / Auth / Storage объявлены в :data и
+    // сюда не приходят — попытка позвать Firestore из ui/ не скомпилируется.
     implementation(platform("com.google.firebase:firebase-bom:33.3.0"))
-    implementation("com.google.firebase:firebase-auth")
-    implementation("com.google.firebase:firebase-firestore")
-    implementation("com.google.firebase:firebase-storage")
+    implementation("com.google.firebase:firebase-common")
     implementation("com.google.firebase:firebase-messaging")
-    // Await Firebase Tasks from coroutines (FirebaseDataRepository).
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
-
-    // Google Sign-In via Credential Manager
-    implementation("androidx.credentials:credentials:1.3.0")
-    implementation("androidx.credentials:credentials-play-services-auth:1.3.0")
-    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 

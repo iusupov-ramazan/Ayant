@@ -1,63 +1,8 @@
 import SwiftUI
 import PassKit
-
-// MARK: - Модель карты лояльности
-
-struct LoyaltyCard: Identifiable, Codable, Hashable {
-    var id: String { venueID }
-    var venueID: String
-    var venueName: String
-    var stamps: Int = 0            // штампы в текущем круге
-    var completedRounds: Int = 0   // сколько наград уже получено
-    var goal: Int = 6              // штампов до награды (задаёт заведение)
-    var reward: String = "Награда за лояльность"  // что получает гость
-}
-
-// MARK: - Хранилище
-
-@MainActor
-final class LoyaltyStore: ObservableObject {
-    static let defaultGoal = 6   // фолбэк, если заведение не задало
-
-    @Published private(set) var cards: [LoyaltyCard] = []
-    private(set) var userID = ""
-    private let key = "san.loyalty"
-    private let backend: CouponService
-
-    init(backend: CouponService = AppConfig.makeCouponService()) {
-        self.backend = backend
-        load()
-    }
-
-    func card(for venueID: String) -> LoyaltyCard? { cards.first { $0.venueID == venueID } }
-
-    /// Карта для заведения — существующая (с синхронизированными штампами) или
-    /// новая на 0 штампов (чтобы можно было добавить в Wallet до первого штампа).
-    func cardOrNew(venueID: String, venueName: String, goal: Int, reward: String) -> LoyaltyCard {
-        card(for: venueID) ?? LoyaltyCard(venueID: venueID, venueName: venueName,
-                                          goal: max(goal, 2), reward: reward)
-    }
-
-    /// Синк карт лояльности из Firestore. Штампы начисляет сканер заведения
-    /// (Cloud Function по QR карты), клиент их отображает.
-    func sync(userID: String) async {
-        self.userID = userID
-        guard !userID.isEmpty, let fetched = try? await backend.fetchLoyaltyCards(userID: userID) else { return }
-        var map: [String: LoyaltyCard] = [:]
-        for c in cards { map[c.venueID] = c }
-        for c in fetched { map[c.venueID] = c }   // бэкенд — источник правды
-        cards = map.values.sorted { $0.stamps > $1.stamps }
-        save()
-    }
-
-    private func save() {
-        if let d = try? JSONEncoder().encode(cards) { UserDefaults.standard.set(d, forKey: key) }
-    }
-    private func load() {
-        if let d = UserDefaults.standard.data(forKey: key),
-           let c = try? JSONDecoder().decode([LoyaltyCard].self, from: d) { cards = c }
-    }
-}
+import AyantDomain
+import AyantData
+import AyantFeatures
 
 // MARK: - Экран «Карты лояльности»
 
@@ -83,6 +28,7 @@ struct LoyaltyView: View {
         }
         .navigationTitle("Карты лояльности")
         .navigationBarTitleDisplayMode(.inline)
+        .task { loyalty.observe(userID: loyalty.userID) }   // живой поток, опроса нет
     }
 }
 
@@ -230,6 +176,7 @@ struct VenueLoyaltyScreen: View {
         }
         .sanScreenBackground()
         .toolbar(.hidden, for: .navigationBar)
+        .task { loyalty.observe(userID: loyalty.userID) }   // живой поток, опроса нет
     }
 }
 
@@ -250,16 +197,32 @@ enum WalletService {
             .init(name: "reward", value: card.reward),
         ]
         guard let url = comps.url else { return }
-        URLSession.shared.dataTask(with: url) { data, _, err in
-            DispatchQueue.main.async {
-                guard let data, err == nil, let pass = try? PKPass(data: data),
-                      let vc = PKAddPassesViewController(pass: pass), let top = Self.topVC() else {
-                    onError("Apple Wallet скоро — карта ещё настраивается на сервере.")
-                    return
-                }
-                top.present(vc, animated: true)
+        // Эндпоинт требует Firebase ID-токен (карту можно сгенерировать только на
+        // свой userID) — прикладываем Authorization перед запросом.
+        fetchPass(url, addTo: onError, notReady: "Apple Wallet скоро — карта ещё настраивается на сервере.")
+    }
+
+    /// Общий загрузчик .pkpass: тянет ID-токен, шлёт авторизованный запрос и
+    /// показывает системный лист добавления в Wallet. Гость/ошибка → onError.
+    private static func fetchPass(_ url: URL, addTo onError: @escaping (String) -> Void, notReady: String) {
+        Task {
+            guard let token = await AppConfig.makeAuthService().idToken(), !token.isEmpty else {
+                await MainActor.run { onError("Войдите, чтобы добавить в Apple Wallet.") }
+                return
             }
-        }.resume()
+            var req = URLRequest(url: url)
+            req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            URLSession.shared.dataTask(with: req) { data, _, err in
+                DispatchQueue.main.async {
+                    guard let data, err == nil, let pass = try? PKPass(data: data),
+                          let vc = PKAddPassesViewController(pass: pass), let top = Self.topVC() else {
+                        onError(notReady)
+                        return
+                    }
+                    top.present(vc, animated: true)
+                }
+            }.resume()
+        }
     }
 
     static let couponPassEndpoint = AppConfig.functionURL("generateCouponPass")
@@ -273,16 +236,7 @@ enum WalletService {
             .init(name: "venue", value: coupon.venueName),
         ]
         guard let url = comps.url else { return }
-        URLSession.shared.dataTask(with: url) { data, _, err in
-            DispatchQueue.main.async {
-                guard let data, err == nil, let pass = try? PKPass(data: data),
-                      let vc = PKAddPassesViewController(pass: pass), let top = Self.topVC() else {
-                    onError("Apple Wallet скоро — купоны ещё настраиваются на сервере.")
-                    return
-                }
-                top.present(vc, animated: true)
-            }
-        }.resume()
+        fetchPass(url, addTo: onError, notReady: "Apple Wallet скоро — купоны ещё настраиваются на сервере.")
     }
 
     static func topVC() -> UIViewController? {

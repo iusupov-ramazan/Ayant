@@ -107,6 +107,25 @@ service cloud.firestore {
       allow read, update, delete: if false;
     }
 
+    // Журнал ранжирования (learning-to-rank): append-only. Клиент создаёт событие
+    // с фичами на момент показа и исходом (impression/tap/redeem); читает/меняет
+    // только офлайн-экспорт (admin SDK). Схема — RankingEvent.swift/.kt.
+    match /rankingEvents/{id} {
+      allow create: if isSignedIn()
+                    && request.resource.data.type in ['impression', 'tap', 'redeem']
+                    && request.resource.data.sessionID is string
+                    && request.resource.data.userID is string;
+      allow read, update, delete: if false;
+    }
+
+    // Публичный конфиг (напр. config/rankingWeights — веса выдачи, обученные офлайн).
+    // Читают все (лента работает и для гостей). Пишет только админ/скрипт публикации
+    // (ml/publish_ranking_weights.js через admin SDK обходит правила).
+    match /config/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // ── Профили хостов ───────────────────────────────────────────────────
     // Читают аутентифицированные (приложение показывает статус верификации).
     // Пишет хост свой профиль (uid == документ). Статус верификации — строковое
@@ -123,6 +142,15 @@ service cloud.firestore {
                         && (request.resource.data.get('verification', 'none') == resource.data.get('verification', 'none')
                             || request.resource.data.get('verification', 'none') in ['none', 'pending']));
       allow delete: if isAdmin();
+    }
+
+    // ── Служебные документы (ops) ────────────────────────────────────────
+    // Пульсы задач и алерты целостности баллов (reconcileVenuePoints).
+    // Пишет только Cloud Function (admin SDK обходит правила); читает админ —
+    // чтобы расхождения можно было посмотреть в панели, не открывая логи.
+    match /ops/{doc=**} {
+      allow read:  if isAdmin();
+      allow write: if false;
     }
 
     // ── FCM-токены пользователей ─────────────────────────────────────────
@@ -146,10 +174,19 @@ service cloud.firestore {
     }
 
     // ── Серверные бонусы ─────────────────────────────────────────────────
+    // Начисление (create) делает только Cloud Function rewardReferral (admin SDK).
+    // Клиент вправе лишь «забрать» грант — перевести claimed false→true, НЕ трогая
+    // сумму/причину. Раньше update не пинил amount/reason и не запрещал обратный
+    // переход claimed→false: пользователь мог накрутить свой же грант (amount:999999)
+    // или переполучить его. Теперь update — это ровно одноразовое погашение.
     match /bonusGrants/{id} {
       allow read: if isSignedIn() && resource.data.userID == uid();
       allow update: if isSignedIn() && resource.data.userID == uid()
-                    && request.resource.data.userID == resource.data.userID;
+                    && request.resource.data.userID == resource.data.userID
+                    && request.resource.data.amount == resource.data.amount
+                    && request.resource.data.get('reason', '') == resource.data.get('reason', '')
+                    && resource.data.get('claimed', false) == false
+                    && request.resource.data.claimed == true;
       allow create, delete: if false;
     }
 
@@ -182,6 +219,37 @@ service cloud.firestore {
     match /loyaltyCards/{id} {
       allow read:  if isSignedIn() && resource.data.userID == uid();
       allow write: if false;
+      // Ключи идемпотентности скана (scanCoupon). Пишет только Cloud Function;
+      // клиенту незачем ни читать, ни писать — подделка ключа позволила бы
+      // «воспроизвести» чужой штамп.
+      match /scanKeys/{key} {
+        allow read, write: if false;
+      }
+    }
+
+    // ── Баллы САН (per-venue ledger) ─────────────────────────────────────
+    // Кошелёк баллов заведения. Начисление/списание/сгорание — ТОЛЬКО Cloud
+    // Functions (scanCoupon Ветка C / redeemVenuePoints / expireVenuePoints,
+    // admin SDK обходит правила). Клиент только читает свою карту и её историю
+    // (ledger) — счётчики баллов подделать нельзя (это деньги заведения).
+    match /venuePoints/{cardId} {
+      allow read:  if isSignedIn() && resource.data.userID == uid();
+      allow write: if false;
+      match /ledger/{txnId} {
+        allow read: if isSignedIn()
+          && get(/databases/$(database)/documents/venuePoints/$(cardId)).data.userID == uid();
+        allow write: if false;
+      }
+      // Ключи идемпотентности списания (redeemVenuePoints). Пишет только
+      // Cloud Function; клиенту незачем ни читать, ни писать — подделка ключа
+      // позволила бы «воспроизвести» чужое списание.
+      match /redeemKeys/{key} {
+        allow read, write: if false;
+      }
+      // Ключи идемпотентности начисления (scanCoupon, ветка C).
+      match /scanKeys/{key} {
+        allow read, write: if false;
+      }
     }
   }
 }

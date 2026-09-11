@@ -1,5 +1,6 @@
 import XCTest
 @testable import SAN
+import AyantDomain
 
 // Юнит-тесты чистой логики (без Firebase/UI).
 //
@@ -88,7 +89,9 @@ private final class StubRepo: DataRepository {
     var cats: [RemoteCategory] = []
     func fetchVenues() async throws -> [Venue] { [] }
     func fetchDeals() async throws -> [Deal] { [] }
-    func fetchReviews() async throws -> [Review] { [] }
+    func fetchReviews(venueID: String, limit: Int) async throws -> [Review] { [] }
+    func fetchReviews(venueIDs: [String], limit: Int) async throws -> [Review] { [] }
+    func fetchReviews(authorID: String, limit: Int) async throws -> [Review] { [] }
     func saveReview(_ review: Review) async throws {}
     func deleteReview(id: String) async throws {}
     func updateReviewReply(reviewID: String, reply: HostReply?) async throws {}

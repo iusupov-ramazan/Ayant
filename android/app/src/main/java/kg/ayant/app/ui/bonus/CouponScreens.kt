@@ -1,5 +1,6 @@
 package kg.ayant.app.ui.bonus
 
+import androidx.compose.runtime.collectAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -51,18 +52,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kg.ayant.app.R
-import kg.ayant.app.data.model.Coupon
+import kg.ayant.app.domain.model.Coupon
 import kg.ayant.app.ui.components.QrCode
 import kg.ayant.app.ui.theme.AyantTheme
 import kg.ayant.app.ui.vm.CouponViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MyCouponsScreen(onBack: () -> Unit, onCoupon: (String) -> Unit) {
+fun MyCouponsScreen(vm: CouponViewModel, onBack: () -> Unit, onCoupon: (String) -> Unit) {
     val c = AyantTheme.colors
-    val vm: CouponViewModel = viewModel()
-    val available = vm.coupons.filter { !it.used }
-    val used = vm.coupons.filter { it.used }
+    val coupons by vm.coupons.collectAsState()
+    val available = coupons.filter { !it.used }
+    val used = coupons.filter { it.used }
 
     Scaffold(
         containerColor = c.canvas,
@@ -74,7 +75,7 @@ fun MyCouponsScreen(onBack: () -> Unit, onCoupon: (String) -> Unit) {
             )
         },
     ) { padding ->
-        if (vm.coupons.isEmpty()) {
+        if (coupons.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Icon(Icons.Filled.ConfirmationNumber, null, tint = c.accent, modifier = Modifier.size(48.dp))
@@ -139,9 +140,8 @@ private fun StatusPill(used: Boolean) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CouponDetailScreen(couponID: String, onBack: () -> Unit) {
+fun CouponDetailScreen(couponID: String, vm: CouponViewModel, onBack: () -> Unit) {
     val c = AyantTheme.colors
-    val vm: CouponViewModel = viewModel()
     val coupon = vm.coupon(couponID) ?: run {
         Box(Modifier.fillMaxSize().background(c.canvas), contentAlignment = Alignment.Center) { Text(stringResource(R.string.coupon_not_found)) }
         return

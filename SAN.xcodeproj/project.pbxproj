@@ -7,6 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AD10000000000000000000A3 /* AyantDomain in Frameworks */ = {isa = PBXBuildFile; productRef = AD10000000000000000000A2 /* AyantDomain */; };
+		AD10000000000000000000A5 /* AyantDomain in Frameworks */ = {isa = PBXBuildFile; productRef = AD10000000000000000000A4 /* AyantDomain */; };
+		AD20000000000000000000B3 /* AyantData in Frameworks */ = {isa = PBXBuildFile; productRef = AD20000000000000000000B2 /* AyantData */; };
+		AD30000000000000000000C3 /* AyantFeatures in Frameworks */ = {isa = PBXBuildFile; productRef = AD30000000000000000000C2 /* AyantFeatures */; };
+		AD30000000000000000000C5 /* AyantFeatures in Frameworks */ = {isa = PBXBuildFile; productRef = AD30000000000000000000C4 /* AyantFeatures */; };
 		F86186012FF393C900EDA42B /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = F86186002FF393C900EDA42B /* FirebaseAnalytics */; };
 		F86186032FF393C900EDA42B /* FirebaseAnalyticsCore in Frameworks */ = {isa = PBXBuildFile; productRef = F86186022FF393C900EDA42B /* FirebaseAnalyticsCore */; };
 		F8F5C81F2FDE1D6D0094D577 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = F8F5C81E2FDE1D6D0094D577 /* FirebaseAuth */; };
@@ -65,6 +70,9 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AD10000000000000000000A3 /* AyantDomain in Frameworks */,
+				AD20000000000000000000B3 /* AyantData in Frameworks */,
+				AD30000000000000000000C3 /* AyantFeatures in Frameworks */,
 				F8F5C8232FDE1D6D0094D577 /* FirebaseCrashlytics in Frameworks */,
 				F8F5C8252FDE1D6D0094D577 /* FirebaseFirestore in Frameworks */,
 				F8F5C8272FDE1D6D0094D577 /* FirebaseMessaging in Frameworks */,
@@ -82,6 +90,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AD10000000000000000000A5 /* AyantDomain in Frameworks */,
+				AD30000000000000000000C5 /* AyantFeatures in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -134,6 +144,9 @@
 			);
 			name = SAN;
 			packageProductDependencies = (
+				AD10000000000000000000A2 /* AyantDomain */,
+				AD20000000000000000000B2 /* AyantData */,
+				AD30000000000000000000C2 /* AyantFeatures */,
 				F8F5C81E2FDE1D6D0094D577 /* FirebaseAuth */,
 				F8F5C8202FDE1D6D0094D577 /* FirebaseCore */,
 				F8F5C8222FDE1D6D0094D577 /* FirebaseCrashlytics */,
@@ -167,6 +180,8 @@
 			);
 			name = SANTests;
 			packageProductDependencies = (
+				AD10000000000000000000A4 /* AyantDomain */,
+				AD30000000000000000000C4 /* AyantFeatures */,
 			);
 			productName = SANTests;
 			productReference = F81A83A930016E0400F6DFA1 /* SANTests.xctest */;
@@ -203,6 +218,9 @@
 			mainGroup = 1A1000000000000000000001;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				AD10000000000000000000A1 /* XCLocalSwiftPackageReference "AyantDomain" */,
+				AD20000000000000000000B1 /* XCLocalSwiftPackageReference "AyantData" */,
+				AD30000000000000000000C1 /* XCLocalSwiftPackageReference "AyantFeatures" */,
 				F8F5C81D2FDE1D6D0094D577 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 				F8F5C8A32FDE22AF0094D577 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
 			);
@@ -519,6 +537,21 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		AD10000000000000000000A1 /* XCLocalSwiftPackageReference "AyantDomain" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = AyantDomain;
+		};
+		AD20000000000000000000B1 /* XCLocalSwiftPackageReference "AyantData" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = AyantData;
+		};
+		AD30000000000000000000C1 /* XCLocalSwiftPackageReference "AyantFeatures" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = AyantFeatures;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCRemoteSwiftPackageReference section */
 		F8F5C81D2FDE1D6D0094D577 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -539,6 +572,31 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		AD10000000000000000000A2 /* AyantDomain */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AD10000000000000000000A1 /* XCLocalSwiftPackageReference "AyantDomain" */;
+			productName = AyantDomain;
+		};
+		AD10000000000000000000A4 /* AyantDomain */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AD10000000000000000000A1 /* XCLocalSwiftPackageReference "AyantDomain" */;
+			productName = AyantDomain;
+		};
+		AD20000000000000000000B2 /* AyantData */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AD20000000000000000000B1 /* XCLocalSwiftPackageReference "AyantData" */;
+			productName = AyantData;
+		};
+		AD30000000000000000000C2 /* AyantFeatures */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AD30000000000000000000C1 /* XCLocalSwiftPackageReference "AyantFeatures" */;
+			productName = AyantFeatures;
+		};
+		AD30000000000000000000C4 /* AyantFeatures */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AD30000000000000000000C1 /* XCLocalSwiftPackageReference "AyantFeatures" */;
+			productName = AyantFeatures;
+		};
 		F86186002FF393C900EDA42B /* FirebaseAnalytics */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = F8F5C81D2FDE1D6D0094D577 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;

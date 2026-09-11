@@ -1,0 +1,7 @@
+# Скомпилированный TypeScript (собирается из src/ через `npm run build`).
+lib/
+
+# Секреты и локальные артефакты (дублирует корневой .gitignore для надёжности).
+.env
+certs/
+node_modules/

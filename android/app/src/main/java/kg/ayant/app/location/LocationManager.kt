@@ -8,13 +8,14 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
-import kg.ayant.app.data.Ranking
+import kg.ayant.app.domain.GeoDisplay
+import kg.ayant.app.domain.Ranking
 
 /**
  * "While using" location. Publishes only the last position (no history), mirroring
  * LocationManager.swift. If permission isn't granted, distances stay hidden.
  */
-class LocationManager(app: Application) : AndroidViewModel(app) {
+class LocationManager(app: Application) : AndroidViewModel(app), kg.ayant.app.domain.contract.DistanceSource {
 
     private val client = LocationServices.getFusedLocationProviderClient(app.applicationContext)
 
@@ -39,11 +40,18 @@ class LocationManager(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Distance from user to a point, or null if position is unknown. */
-    fun distanceKm(lat: Double, lng: Double): Double? {
+    /**
+     * Distance from user to a point.
+     *
+     * `null` — если позиция неизвестна ИЛИ она бессмысленно далеко от каталога
+     * (см. `GeoDisplay`). Отсекаем здесь, в одном месте: все вызывающие уже
+     * умеют прятать расстояние при `null`.
+     */
+    override fun distanceKm(lat: Double, lng: Double): Double? {
         val meLat = lastLat ?: return null
         val meLng = lastLng ?: return null
-        return haversine(meLat, meLng, lat, lng)
+        val km = haversine(meLat, meLng, lat, lng)
+        return if (GeoDisplay.isMeaningful(km)) km else null
     }
 
     companion object {

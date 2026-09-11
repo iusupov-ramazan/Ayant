@@ -28,7 +28,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kg.ayant.app.R
-import kg.ayant.app.data.model.Venue
+import kg.ayant.app.domain.model.Venue
 import kg.ayant.app.ui.theme.AyantTheme
 import kg.ayant.app.ui.vm.AppViewModel
 
@@ -64,7 +64,7 @@ fun WriteReviewDialog(
                     val sel = venue.items.firstOrNull { it.id == selectedItemID }
                     Text(
                         "${sel?.emoji ?: ""} ${sel?.name ?: stringResource(R.string.action_choose)}",
-                        fontSize = 16.sp, color = c.accent,
+                        fontSize = 16.sp, color = c.accentText,
                         modifier = Modifier.padding(vertical = 6.dp).clickable { itemMenu = true },
                     )
                     DropdownMenu(expanded = itemMenu, onDismissRequest = { itemMenu = false }) {

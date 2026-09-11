@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Apartment
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.ConfirmationNumber
 import androidx.compose.material.icons.filled.Contrast
 import androidx.compose.material.icons.filled.Delete
@@ -34,6 +35,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -62,16 +64,22 @@ import androidx.compose.ui.platform.LocalContext
 fun ProfileScreen(
     app: AppViewModel,
     session: SessionViewModel,
+    coupons: kg.ayant.app.ui.vm.CouponViewModel,
     theme: kg.ayant.app.ui.vm.ThemeViewModel? = null,
     onCoupons: () -> Unit = {},
     onHost: () -> Unit = {},
     onHelp: (String) -> Unit = {},
+    onSaved: () -> Unit = {},
 ) {
     val c = AyantTheme.colors
     val context = LocalContext.current
-    val coupons: kg.ayant.app.ui.vm.CouponViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    // Мои отзывы принадлежат ленте — без подписки список не обновится.
+    val feedState by app.feedState.collectAsState()
+
     val username = session.user?.name ?: stringResource(R.string.profile_guest_name)
     var showDelete by remember { mutableStateOf(false) }
+    var showSignOut by remember { mutableStateOf(false) }
+    var deleteError by remember { mutableStateOf<String?>(null) }
 
     Column(
         Modifier
@@ -102,21 +110,35 @@ fun ProfileScreen(
             }
         }
 
-        // My coupons
-        Row(
-            Modifier.fillMaxWidth().ayantGroupCard().clickable(onClick = onCoupons).padding(horizontal = 14.dp, vertical = 13.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            AyantIconTile(Icons.Filled.ConfirmationNumber, size = 34)
-            Text(stringResource(R.string.title_my_coupons), fontSize = 16.sp, color = c.ink, modifier = Modifier.padding(start = 12.dp))
-            Spacer(Modifier.weight(1f))
-            if (coupons.activeCount > 0) {
-                Text(
-                    "${coupons.activeCount}", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White,
-                    modifier = Modifier.clip(androidx.compose.foundation.shape.CircleShape).background(c.accent).padding(horizontal = 9.dp, vertical = 3.dp),
-                )
+        // My coupons + Saved.
+        // «Сохранённое» перестало быть вкладкой в редизайне (4 вкладки + FAB),
+        // поэтому у него два входа: закладка в шапке ленты и эта строка.
+        Column(Modifier.fillMaxWidth().ayantGroupCard()) {
+            Row(
+                Modifier.fillMaxWidth().clickable(onClick = onCoupons).padding(horizontal = 14.dp, vertical = 13.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                AyantIconTile(Icons.Filled.ConfirmationNumber, size = 34)
+                Text(stringResource(R.string.title_my_coupons), fontSize = 16.sp, color = c.ink, modifier = Modifier.padding(start = 12.dp))
+                Spacer(Modifier.weight(1f))
+                if (coupons.activeCount > 0) {
+                    Text(
+                        "${coupons.activeCount}", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White,
+                        modifier = Modifier.clip(androidx.compose.foundation.shape.CircleShape).background(c.accent).padding(horizontal = 9.dp, vertical = 3.dp),
+                    )
+                }
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = c.inkSoft, modifier = Modifier.padding(start = 8.dp).size(18.dp))
             }
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = c.inkSoft, modifier = Modifier.padding(start = 8.dp).size(18.dp))
+            AyantHairline(leading = 60)
+            Row(
+                Modifier.fillMaxWidth().clickable(onClick = onSaved).padding(horizontal = 14.dp, vertical = 13.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                AyantIconTile(Icons.Filled.Bookmark, size = 34)
+                Text(stringResource(R.string.tab_saved), fontSize = 16.sp, color = c.ink, modifier = Modifier.padding(start = 12.dp))
+                Spacer(Modifier.weight(1f))
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = c.inkSoft, modifier = Modifier.padding(start = 8.dp).size(18.dp))
+            }
         }
 
         // Settings
@@ -140,17 +162,26 @@ fun ProfileScreen(
         ) {
             AyantIconTile(Icons.Filled.Storefront, filled = true, size = 44)
             Column(Modifier.padding(start = 14.dp).weight(1f)) {
-                Text(stringResource(R.string.profile_host_mode), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = c.accent)
+                Text(stringResource(R.string.profile_host_mode), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = c.accentText)
                 Text(if (session.isGuest) stringResource(R.string.profile_host_guest) else stringResource(R.string.profile_host_sub), fontSize = 13.sp, color = c.inkSoft)
             }
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = c.accent, modifier = Modifier.size(18.dp))
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = c.accentText, modifier = Modifier.size(18.dp))
         }
 
         // My reviews
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             AyantSectionHeader(stringResource(R.string.profile_my_reviews))
-            val reviews = app.myReviews()
-            if (reviews.isEmpty()) {
+            // Свои отзывы тоже больше не приезжают со стартом приложения:
+            // раньше они приходили в общей выгрузке всей коллекции.
+            androidx.compose.runtime.LaunchedEffect(app.currentUserID) { app.loadMyReviews() }
+            val reviews = feedState.myReviews(app.currentUserID)
+            if (session.isGuest) {
+                // Гостю «Ты ещё не оставил ни одного отзыва» читается как
+                // приглашение, которое никуда не ведёт: писать отзывы он не может.
+                Box(Modifier.fillMaxWidth().ayantGroupCard().padding(16.dp)) {
+                    Text(kg.ayant.app.ui.auth.GuestGate.REVIEW, fontSize = 15.sp, color = c.inkSoft)
+                }
+            } else if (reviews.isEmpty()) {
                 Box(Modifier.fillMaxWidth().ayantGroupCard().padding(16.dp)) {
                     Text(stringResource(R.string.profile_no_reviews), fontSize = 15.sp, color = c.inkSoft)
                 }
@@ -192,7 +223,7 @@ fun ProfileScreen(
                         AyantIconTile(Icons.Filled.Group, size = 34)
                         Text(stringResource(R.string.profile_share_invite), fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = c.ink, modifier = Modifier.padding(start = 12.dp))
                         Spacer(Modifier.weight(1f))
-                        Icon(Icons.Filled.Share, null, tint = c.accent, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Filled.Share, null, tint = c.accentText, modifier = Modifier.size(18.dp))
                     }
                     Text(stringResource(R.string.profile_referral_desc), fontSize = 13.sp, color = c.inkSoft)
                 }
@@ -213,7 +244,7 @@ fun ProfileScreen(
 
         // Account
         Column(Modifier.fillMaxWidth().ayantGroupCard()) {
-            AccountRow(Icons.AutoMirrored.Filled.Logout, stringResource(R.string.account_sign_out)) { session.signOut() }
+            AccountRow(Icons.AutoMirrored.Filled.Logout, stringResource(R.string.account_sign_out)) { showSignOut = true }
             AyantHairline(leading = 14)
             AccountRow(Icons.Filled.Delete, stringResource(R.string.account_delete)) { showDelete = true }
         }
@@ -221,13 +252,50 @@ fun ProfileScreen(
         Text(stringResource(R.string.app_version), fontSize = 13.sp, color = c.inkSoft, modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
     }
 
+    // Выход тоже спрашиваем: у гостя он безвозвратный — анонимная запись
+    // вместе с её бонусами удаляется, вернуться в неё нельзя.
+    if (showSignOut) {
+        AlertDialog(
+            onDismissRequest = { showSignOut = false },
+            title = { Text(stringResource(R.string.account_sign_out_confirm_title)) },
+            text = {
+                Text(
+                    if (session.isGuest) stringResource(R.string.account_sign_out_body_guest)
+                    else stringResource(R.string.account_sign_out_body)
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { showSignOut = false; session.signOut() }) {
+                    Text(stringResource(R.string.account_sign_out))
+                }
+            },
+            dismissButton = { TextButton(onClick = { showSignOut = false }) { Text(stringResource(R.string.action_cancel)) } },
+        )
+    }
+
     if (showDelete) {
         AlertDialog(
             onDismissRequest = { showDelete = false },
             title = { Text(stringResource(R.string.account_delete_confirm_title)) },
             text = { Text(stringResource(R.string.account_delete_body)) },
-            confirmButton = { TextButton(onClick = { showDelete = false; session.signOut() }) { Text(stringResource(R.string.action_delete), color = Color(0xFFD32F2F)) } },
+            confirmButton = {
+                // Раньше здесь стоял signOut(): пользователь «удалялся» только
+                // с экрана, а запись и данные оставались в Firebase.
+                TextButton(onClick = {
+                    showDelete = false
+                    session.deleteAccount { error -> deleteError = error }
+                }) { Text(stringResource(R.string.action_delete), color = Color(0xFFD32F2F)) }
+            },
             dismissButton = { TextButton(onClick = { showDelete = false }) { Text(stringResource(R.string.action_cancel)) } },
+        )
+    }
+
+    deleteError?.let { error ->
+        AlertDialog(
+            onDismissRequest = { deleteError = null },
+            title = { Text(stringResource(R.string.account_delete_failed)) },
+            text = { Text(error) },
+            confirmButton = { TextButton(onClick = { deleteError = null }) { Text(stringResource(R.string.action_ok)) } },
         )
     }
 }
@@ -255,7 +323,7 @@ private fun LanguageRow() {
         Text(stringResource(R.string.setting_language), fontSize = 16.sp, color = c.ink, modifier = Modifier.padding(start = 12.dp))
         Spacer(Modifier.weight(1f))
         Box {
-            Text(currentTitle, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = c.accent, modifier = Modifier.clickable { open = true })
+            Text(currentTitle, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = c.accentText, modifier = Modifier.clickable { open = true })
             androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
                 listOf("ru" to "Русский", "en" to "English", "ky" to "Кыргызча").forEach { (code, title) ->
                     androidx.compose.material3.DropdownMenuItem(text = { Text(title) }, onClick = {
@@ -272,13 +340,14 @@ private fun LanguageRow() {
 @Composable
 private fun ThemeRow(theme: kg.ayant.app.ui.vm.ThemeViewModel) {
     val c = AyantTheme.colors
+    val themeMode by theme.theme.collectAsState()
     var open by remember { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically) {
         AyantIconTile(Icons.Filled.Contrast, size = 34)
         Text(stringResource(R.string.setting_theme), fontSize = 16.sp, color = c.ink, modifier = Modifier.padding(start = 12.dp))
         Spacer(Modifier.weight(1f))
         Box {
-            Text(theme.theme.title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = c.accent, modifier = Modifier.clickable { open = true })
+            Text(themeMode.title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = c.accentText, modifier = Modifier.clickable { open = true })
             androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
                 kg.ayant.app.ui.vm.AppTheme.entries.forEach { t ->
                     androidx.compose.material3.DropdownMenuItem(text = { Text(t.title) }, onClick = { theme.set(t); open = false })

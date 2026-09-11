@@ -2,7 +2,9 @@ import SwiftUI
 import UIKit
 import UserNotifications
 import FirebaseMessaging
-import FirebaseAuth
+import AyantDomain
+import AyantData
+import AyantFeatures
 
 // MARK: - Маршрут диплинка
 
@@ -57,15 +59,17 @@ final class DeepLinkRouter: ObservableObject {
     func openDeal(_ id: String) { if !id.isEmpty { route = .deal(id) } }
 
     // Ссылки для шаринга — Universal Links (открываются в приложении при установленном app).
-    static func venueURL(_ id: String) -> URL { URL(string: "https://\(domain)/venue/\(id)")! }
-    static func dealURL(_ id: String) -> URL { URL(string: "https://\(domain)/deal/\(id)")! }
-    static func referralURL(_ code: String) -> URL { URL(string: "https://\(domain)/ref/\(code)")! }
-    static func giftURL(_ code: String) -> URL { URL(string: "https://\(domain)/gift/\(code)")! }
+    // Адреса и ключи живут в домене (`DeepLinks`) — их зовут и сторы; здесь
+    // остаются привычные точки вызова.
+    static func venueURL(_ id: String) -> URL { DeepLinks.venueURL(id) }
+    static func dealURL(_ id: String) -> URL { DeepLinks.dealURL(id) }
+    static func referralURL(_ code: String) -> URL { DeepLinks.referralURL(code) }
+    static func giftURL(_ code: String) -> URL { DeepLinks.giftURL(code) }
 
     // MARK: Рефералка
-    static let pendingReferrerKey = "san.referrer.pending"
+    static let pendingReferrerKey = DeepLinks.pendingReferrerKey
 
-    static let pendingGiftKey = "san.gift.pending"
+    static let pendingGiftKey = DeepLinks.pendingGiftKey
     /// Запоминаем код подарка из ссылки. Забираем купон после входа.
     static func setPendingGift(_ code: String) {
         guard !code.isEmpty else { return }
@@ -112,7 +116,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
         guard let token = fcmToken else { return }
         let city = UserDefaults.standard.string(forKey: "san.city") ?? City.bishkek.id
-        push.registerToken(token, city: city, uid: Auth.auth().currentUser?.uid)
+        push.registerToken(token, city: city, uid: AppConfig.makeAuthService().currentUser()?.id)
     }
 
     // Показывать уведомление, когда приложение на переднем плане.
@@ -127,8 +131,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
                                 didReceive response: UNNotificationResponse,
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
         let info = response.notification.request.content.userInfo
-        let dealID = info["dealID"] as? String ?? ""
-        let venueID = info["venueID"] as? String ?? ""
+        let dealID = info[FS.PushPayload.dealID] as? String ?? ""
+        let venueID = info[FS.PushPayload.venueID] as? String ?? ""
         Task { @MainActor in
             if !dealID.isEmpty { DeepLinkRouter.shared.openDeal(dealID) }
             else if !venueID.isEmpty { DeepLinkRouter.shared.openVenue(venueID) }

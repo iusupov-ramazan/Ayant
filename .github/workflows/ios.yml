@@ -3,13 +3,63 @@ name: iOS
 on:
   push:
     branches: [ main ]
-    paths: [ 'SAN/**', 'SANTests/**', 'SAN.xcodeproj/**', '.github/workflows/ios.yml' ]
+    # specs/fixtures — общий фикстур математики баллов, его гоняет AyantDomain.
+    paths: [ 'SAN/**', 'SANTests/**', 'SAN.xcodeproj/**', 'AyantDomain/**', 'AyantData/**', 'AyantFeatures/**', 'specs/fixtures/**', '.github/workflows/ios.yml' ]
   pull_request:
     branches: [ main ]
-    paths: [ 'SAN/**', 'SANTests/**', 'SAN.xcodeproj/**' ]
+    paths: [ 'SAN/**', 'SANTests/**', 'SAN.xcodeproj/**', 'AyantDomain/**', 'AyantData/**', 'AyantFeatures/**', 'specs/fixtures/**', '.github/workflows/ios.yml' ]
 
 jobs:
-  build:
+  # Ядро: чистый Swift-пакет без UIKit/SwiftUI/Firebase. Гоняется на macOS без
+  # симулятора — секунды. Отдельная джоба, потому что падать должно ДО того, как
+  # кто-то ждёт сборку приложения.
+  domain:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.app || true
+
+      # Firebase в пакет не подключён, поэтому его импорт и так не соберётся.
+      # А вот SwiftUI/UIKit — системные фреймворки, компилятор их пропустит:
+      # эту половину границы держит проверка ниже.
+      - name: Domain must not import UI frameworks
+        run: |
+          if grep -rn --include='*.swift' -E '^import (SwiftUI|UIKit|CoreLocation|Combine)' AyantDomain/Sources; then
+            echo "::error::AyantDomain должен зависеть только от Foundation — вынесите это в слой UI/Data."
+            exit 1
+          fi
+
+      - name: Domain tests
+        run: swift test --package-path AyantDomain
+
+      # Слой фич зависит только от домена. Firebase туда не подключён (сборка бы
+      # упала), а вот `import AyantData` собрался бы — если кто-то добавит пакет
+      # в зависимости. Проверяем и манифест, и импорты.
+      - name: Features must not depend on the data layer
+        run: |
+          if grep -v '^\s*//' AyantFeatures/Package.swift | grep -n 'AyantData'; then
+            echo "::error::AyantFeatures должен зависеть только от AyantDomain — реализации подставляет композиционный корень (SAN/AyantStores.swift)."
+            exit 1
+          fi
+          if grep -rn --include='*.swift' -E '^import (AyantData|Firebase|GoogleSignIn)' AyantFeatures/Sources; then
+            echo "::error::Сторы работают с контрактами домена; Firestore/Auth — только в AyantData."
+            exit 1
+          fi
+
+      # Firebase SDK живёт в AyantData. Выше него допустимы ровно две точки
+      # входа фреймворка: конфигурация приложения и делегат FCM.
+      - name: Firebase stays in the data layer
+        run: |
+          offenders=$(grep -rln --include='*.swift' -E '^import (Firebase|GoogleSignIn)' SAN \
+            | grep -v -e 'SAN/SANApp.swift' -e 'SAN/Deeplink/Deeplink.swift' || true)
+          if [ -n "$offenders" ]; then
+            echo "::error::Firebase выше слоя данных: $offenders — заведите контракт в AyantDomain и реализацию в AyantData."
+            exit 1
+          fi
+
+  app:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
@@ -20,19 +70,20 @@ jobs:
       - name: Resolve Swift packages
         run: xcodebuild -resolvePackageDependencies -project SAN.xcodeproj -scheme SAN
 
-      - name: Build
+      # Сборка и прогон разнесены (build-for-testing / test-without-building),
+      # чтобы не компилировать проект дважды: ошибка сборки и упавший тест — разные шаги.
+      - name: Build for testing
         run: |
-          xcodebuild build \
+          xcodebuild build-for-testing \
             -project SAN.xcodeproj \
             -scheme SAN \
             -destination 'platform=iOS Simulator,name=iPhone 15' \
             CODE_SIGNING_ALLOWED=NO | xcpretty || exit ${PIPESTATUS[0]}
 
-      # Раскомментируй, когда добавишь таргет SANTests (см. SANTests/CategoryTests.swift):
-      # - name: Test
-      #   run: |
-      #     xcodebuild test \
-      #       -project SAN.xcodeproj \
-      #       -scheme SAN \
-      #       -destination 'platform=iOS Simulator,name=iPhone 15' \
-      #       CODE_SIGNING_ALLOWED=NO | xcpretty || exit ${PIPESTATUS[0]}
+      - name: Test
+        run: |
+          xcodebuild test-without-building \
+            -project SAN.xcodeproj \
+            -scheme SAN \
+            -destination 'platform=iOS Simulator,name=iPhone 15' \
+            CODE_SIGNING_ALLOWED=NO | xcpretty || exit ${PIPESTATUS[0]}

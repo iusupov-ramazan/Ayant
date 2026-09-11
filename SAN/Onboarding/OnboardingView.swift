@@ -1,4 +1,6 @@
 import SwiftUI
+import AyantDomain
+import AyantFeatures
 
 /// 3-шаговый онбординг (по спецификации). Показывается один раз до ленты.
 /// Выбор города обязателен — без него лента не работает.
@@ -51,13 +53,13 @@ struct OnboardingView: View {
             secondary: "Не сейчас"
         ) {
             location.request()
-            withAnimation { step = 2 }
+            withAnimation { step = 1 }
         } onSkip: {
-            withAnimation { step = 2 }
+            withAnimation { step = 1 }
         }
     }
 
-    // MARK: Шаг 3 — Уведомления
+    // MARK: Шаг 2 — Уведомления
 
     private var notificationStep: some View {
         prePrompt(

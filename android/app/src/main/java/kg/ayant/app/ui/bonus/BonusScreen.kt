@@ -1,5 +1,6 @@
 package kg.ayant.app.ui.bonus
 
+import androidx.compose.runtime.collectAsState
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -20,6 +21,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.CardGiftcard
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Wallet
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -43,7 +45,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kg.ayant.app.R
 import kg.ayant.app.core.shareText
-import kg.ayant.app.data.model.Reward
+import kg.ayant.app.domain.model.Reward
 import kg.ayant.app.ui.theme.AyantIconTile
 import kg.ayant.app.ui.theme.AyantScreenTitle
 import kg.ayant.app.ui.theme.AyantSectionHeader
@@ -56,14 +58,24 @@ import kotlinx.coroutines.delay
 @Composable
 fun BonusScreen(
     app: kg.ayant.app.ui.vm.AppViewModel,
+    bonus: BonusViewModel,
+    coupons: CouponViewModel,
     onCoupons: () -> Unit,
     onLoyalty: () -> Unit,
+    onPoints: () -> Unit,
     onSnake: () -> Unit,
-    onTetris: () -> Unit,
+    onTetris: () -> Unit = {},
+    points: kg.ayant.app.ui.vm.PointsViewModel? = null,
+    loyalty: kg.ayant.app.ui.vm.LoyaltyViewModel? = null,
 ) {
     val c = AyantTheme.colors
-    val bonus: BonusViewModel = viewModel()
-    val coupons: CouponViewModel = viewModel()
+    // ВНИМАНИЕ: общие ViewModel приходят параметром из RootScaffold.
+    // Вызов viewModel() здесь дал бы ЭКЗЕМПЛЯР НА МАРШРУТ (владелец —
+    // NavBackStackEntry), а не общий на приложение: экран остался бы
+    // с пустым/несинхронизированным состоянием.
+    // Читаем состояние, а не свойство VM: счётчик обновится сам при выдаче купона.
+    val activeCoupons by coupons.coupons.collectAsState()
+    val activeCount = activeCoupons.count { !it.used }
 
     LaunchedEffect(Unit) { bonus.start() }
 
@@ -72,29 +84,78 @@ fun BonusScreen(
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp).padding(top = 8.dp, bottom = 28.dp),
             verticalArrangement = Arrangement.spacedBy(22.dp),
         ) {
-            AyantScreenTitle(stringResource(R.string.title_bonuses))
+            // Header row: editorial title + the subordinate global-bonus pill.
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        stringResource(R.string.tab_wallet),
+                        fontSize = 44.sp, fontWeight = FontWeight.Black,
+                        letterSpacing = (-2.5).sp, lineHeight = 41.sp, color = c.ink,
+                    )
+                    Text(
+                        stringResource(R.string.wallet_subtitle),
+                        fontSize = 14.sp, color = c.inkSoft,
+                        modifier = Modifier.padding(top = 9.dp),
+                    )
+                }
+                Column(
+                    Modifier
+                        .clip(CircleShape)
+                        .background(c.surface)
+                        .clickable(onClick = onCoupons)
+                        .padding(horizontal = 14.dp, vertical = 9.dp),
+                    horizontalAlignment = Alignment.End,
+                ) {
+                    Text(
+                        stringResource(R.string.wallet_global_bonus), fontSize = 10.5.sp,
+                        fontWeight = FontWeight.Black, letterSpacing = 0.4.sp,
+                        color = Color(0xFF9A9188),
+                    )
+                    Text(
+                        "${bonus.balance}", fontSize = 16.sp, fontWeight = FontWeight.Black,
+                        letterSpacing = (-0.5).sp, color = c.ink,
+                    )
+                }
+            }
 
-            // Wallet card
-            Column(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(26.dp)).background(c.accentGradient).padding(22.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                Row(verticalAlignment = Alignment.Top) {
-                    Column(Modifier.weight(1f)) {
-                        Text(stringResource(R.string.bonus_balance), fontSize = 15.sp, color = Color.White.copy(alpha = 0.9f))
-                        Text("${bonus.balance}", fontSize = 52.sp, fontWeight = FontWeight.Black, color = Color.White)
-                        Text(plural(bonus.balance), fontSize = 15.sp, color = Color.White.copy(alpha = 0.9f))
-                    }
-                    Box(
-                        Modifier.size(52.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.18f)).clickable(onClick = onCoupons),
-                        contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Filled.Wallet, null, tint = Color.White, modifier = Modifier.size(22.dp)) }
+            // Per-venue points deck.
+            val pointsState = points?.state?.collectAsState()?.value
+            val pointsCards = pointsState?.sortedCards.orEmpty()
+            val venuesByID = remember(app.venues) { app.venues.associateBy { it.id } }
+            if (pointsCards.isNotEmpty()) {
+                WalletDeck(
+                    cards = pointsCards,
+                    venues = venuesByID,
+                    onOpen = { onPoints() },
+                    modifier = Modifier.padding(horizontal = (-16).dp),
+                )
+            } else {
+                Column(Modifier.fillMaxWidth().ayantCard(padding = 20, radius = 26)) {
+                    Text(
+                        stringResource(R.string.wallet_empty_title),
+                        fontSize = 16.sp, fontWeight = FontWeight.Bold, color = c.ink,
+                    )
+                    Text(
+                        stringResource(R.string.wallet_empty_body),
+                        fontSize = 13.sp, color = c.inkSoft,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
                 }
-                // Progress
-                Box(Modifier.fillMaxWidth().height(12.dp).clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.28f))) {
-                    Box(Modifier.fillMaxWidth(bonus.progress.coerceIn(0f, 1f)).height(12.dp).clip(RoundedCornerShape(50)).background(Color.White))
+            }
+
+            // Stamp card — the liveliest loyalty card.
+            val loyaltyCards = loyalty?.cards?.collectAsState()?.value.orEmpty()
+            val stampCard = loyaltyCards.filter { it.stamps > 0 }.maxByOrNull { it.stamps }
+                ?: loyaltyCards.firstOrNull()
+            stampCard?.let {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        stringResource(R.string.wallet_stamp_card).uppercase(),
+                        fontSize = 11.5.sp, fontWeight = FontWeight.Black,
+                        letterSpacing = 1.2.sp, color = Color(0xFF9A9188),
+                    )
+                    WalletStampCard(it)
                 }
-                Text(stringResource(R.string.bonus_until_reward, bonus.remaining), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
             }
 
             // Rewards
@@ -103,12 +164,23 @@ fun BonusScreen(
                     Text(stringResource(R.string.bonus_spend), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = c.ink)
                     Spacer(Modifier.weight(1f))
                     Text(
-                        stringResource(R.string.title_my_coupons) + if (coupons.activeCount > 0) " (${coupons.activeCount})" else "",
-                        fontSize = 14.sp, fontWeight = FontWeight.Bold, color = c.accent,
+                        stringResource(R.string.title_my_coupons) + if (activeCount > 0) " ($activeCount)" else "",
+                        fontSize = 14.sp, fontWeight = FontWeight.Bold, color = c.accentText,
                         modifier = Modifier.clickable(onClick = onCoupons),
                     )
                 }
                 CouponViewModel.catalog.forEach { reward -> RewardRow(reward, bonus, coupons, app) }
+            }
+
+            // Points link (баллы САН)
+            Row(
+                Modifier.fillMaxWidth().ayantCard(padding = 12).clickable(onClick = onPoints),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                AyantIconTile(Icons.Filled.Star, size = 44)
+                Text("Баллы САН", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = c.ink, modifier = Modifier.padding(start = 14.dp))
+                Spacer(Modifier.weight(1f))
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = c.inkSoft, modifier = Modifier.size(18.dp))
             }
 
             // Loyalty link
@@ -122,13 +194,12 @@ fun BonusScreen(
                 Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = c.inkSoft, modifier = Modifier.size(18.dp))
             }
 
-            // Games
+            // Мини-игры. Обе начисляют через общий дневной лимит, поэтому
+            // добавление игры не меняет экономику бонусов.
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 AyantSectionHeader(stringResource(R.string.bonus_games_header))
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    GameTile("🐍", stringResource(R.string.game_snake), stringResource(R.string.game_snake_sub), Modifier.weight(1f), onSnake)
-                    GameTile("🧱", stringResource(R.string.game_tetris), stringResource(R.string.game_tetris_sub), Modifier.weight(1f), onTetris)
-                }
+                GameTile("🐍", stringResource(R.string.game_snake), stringResource(R.string.game_snake_sub), Modifier.fillMaxWidth(), onSnake)
+                GameTile("🧱", stringResource(R.string.game_tetris), stringResource(R.string.game_tetris_sub), Modifier.fillMaxWidth(), onTetris)
             }
         }
 
@@ -174,7 +245,7 @@ private fun RewardRow(reward: Reward, bonus: BonusViewModel, coupons: CouponView
                 DropdownMenuItem(text = { Text(stringResource(R.string.bonus_gift_friend)) }, onClick = {
                     menu = false
                     if (bonus.spend(reward.cost)) {
-                        val code = "GIFT-${java.util.UUID.randomUUID().toString().take(8).uppercase()}"
+                        val code = kg.ayant.app.domain.CodeGen.giftCode()
                         app.createGiftBackend(reward.title, code, app.currentUserName)   // so the link can be claimed
                         context.shareText(context.getString(R.string.bonus_gift_share, reward.title, code), "Ayant")
                     }

@@ -115,7 +115,7 @@ struct SupportView: View {
                     }
                 } label: {
                     HStack(spacing: 12) {
-                        telegramIcon
+                        assetIcon("telegram")
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Telegram-бот").foregroundStyle(.primary)
                             Text("ИИ-помощник — отвечает 24/7")
@@ -137,20 +137,11 @@ struct SupportView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 
-    /// Логотип из ассетов со скруглёнными углами.
+    /// Круглый логотип соцсети из ассетов.
+    /// `scaledToFit` — картинка вписывается целиком, без растяжения по осям.
     private func assetIcon(_ name: String) -> some View {
-        Image(name).resizable().scaledToFill()
+        Image(name).resizable().scaledToFit()
             .frame(width: 26, height: 26)
-            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-    }
-
-    /// Иконка Telegram (нет отдельного ассета) — фирменный синий скруглённый квадрат.
-    private var telegramIcon: some View {
-        Image(systemName: "paperplane.fill")
-            .font(.system(size: 13, weight: .bold))
-            .foregroundStyle(.white)
-            .frame(width: 26, height: 26)
-            .background(Color(hex: 0x29A9EB),
-                        in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .clipShape(Circle())
     }
 }

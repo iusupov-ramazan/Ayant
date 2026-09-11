@@ -1,0 +1,314 @@
+{
+  "$comment": [
+    "ОБЩИЙ ФИКСТУР МАТЕМАТИКИ БАЛЛОВ САН. Один файл — три исполнителя:",
+    "  iOS       SANTests/PointsFixtureTests.swift      → Domain/PointsMath.swift",
+    "  Android   data/PointsFixtureTest.kt              → data/PointsMath.kt",
+    "  Functions functions/test/fixtures.test.js        → реальные scanCoupon / redeemVenuePoints",
+    "",
+    "Сервер (functions/src/index.ts) — источник истины. Клиентский PointsMath только",
+    "предсказывает результат (превью в UI); сервер всё равно пересчитывает всё сам.",
+    "Этот файл существует, чтобы предсказание и расчёт не разъехались молча:",
+    "имена полей ниже — ровно те, что пишет админка в документ venues/{id}.",
+    "",
+    "Правило: НОВЫЙ КЕЙС ДОБАВЛЯЕТСЯ СЮДА, а не в тесты одной платформы."
+  ],
+
+  "version": 1,
+
+  "constants": {
+    "maxPointsPerEarn": 10000,
+    "maxCashbackPercent": 20,
+    "defaultEarnCooldownMinutes": 60,
+    "defaultStampCooldownMinutes": 15,
+    "defaultExpiryMonths": 6
+  },
+
+  "$award": [
+    "Начисление: config = поля баллов из venues/{id}; billAmount/bandIndex — то, что",
+    "вводит персонал при скане AYANT-PTS. expect = {points: N} либо {error: \"код\"}.",
+    "Коды ошибок совпадают с телом ответа сервера 1:1."
+  ],
+  "award": [
+    {
+      "name": "flat: фиксированное начисление за визит",
+      "config": { "pointsEnabled": true, "pointsMode": "flat", "pointsFlat": 5 },
+      "billAmount": null, "bandIndex": null,
+      "expect": { "points": 5 }
+    },
+    {
+      "name": "flat: нулевая настройка → начислять нечего",
+      "config": { "pointsEnabled": true, "pointsMode": "flat", "pointsFlat": 0 },
+      "billAmount": null, "bandIndex": null,
+      "expect": { "error": "no_points" }
+    },
+    {
+      "name": "flat: опечатка в конфиге капается на MAX_POINTS_PER_EARN",
+      "config": { "pointsEnabled": true, "pointsMode": "flat", "pointsFlat": 999999 },
+      "billAmount": null, "bandIndex": null,
+      "expect": { "points": 10000 }
+    },
+    {
+      "name": "flat: сумма чека игнорируется",
+      "config": { "pointsEnabled": true, "pointsMode": "flat", "pointsFlat": 5 },
+      "billAmount": 1000, "bandIndex": null,
+      "expect": { "points": 5 }
+    },
+    {
+      "name": "баллы выключены у заведения",
+      "config": { "pointsEnabled": false, "pointsMode": "flat", "pointsFlat": 5 },
+      "billAmount": null, "bandIndex": null,
+      "expect": { "error": "points_off" }
+    },
+    {
+      "name": "неизвестный режим трактуется как flat",
+      "config": { "pointsEnabled": true, "pointsMode": "weird", "pointsFlat": 7 },
+      "billAmount": null, "bandIndex": null,
+      "expect": { "points": 7 }
+    },
+
+    {
+      "name": "cashback: 10% от 1000",
+      "config": { "pointsEnabled": true, "pointsMode": "cashback", "cashbackPercent": 10 },
+      "billAmount": 1000, "bandIndex": null,
+      "expect": { "points": 100 }
+    },
+    {
+      "name": "cashback: процент капается на 20 (защита от «50%»)",
+      "config": { "pointsEnabled": true, "pointsMode": "cashback", "cashbackPercent": 50 },
+      "billAmount": 1000, "bandIndex": null,
+      "expect": { "points": 200 }
+    },
+    {
+      "name": "cashback: без суммы чека начислить нельзя",
+      "config": { "pointsEnabled": true, "pointsMode": "cashback", "cashbackPercent": 10 },
+      "billAmount": 0, "bandIndex": null,
+      "expect": { "error": "missing_amount" }
+    },
+    {
+      "name": "cashback: сумма не передана вовсе",
+      "config": { "pointsEnabled": true, "pointsMode": "cashback", "cashbackPercent": 10 },
+      "billAmount": null, "bandIndex": null,
+      "expect": { "error": "missing_amount" }
+    },
+    {
+      "name": "cashback: отрицательная сумма приводится к нулю",
+      "config": { "pointsEnabled": true, "pointsMode": "cashback", "cashbackPercent": 10 },
+      "billAmount": -500, "bandIndex": null,
+      "expect": { "error": "missing_amount" }
+    },
+    {
+      "name": "cashback: ровно .5 округляется вверх (50.5 → 51)",
+      "config": { "pointsEnabled": true, "pointsMode": "cashback", "cashbackPercent": 5 },
+      "billAmount": 1010, "bandIndex": null,
+      "expect": { "points": 51 }
+    },
+    {
+      "name": "cashback: 70.35 округляется вниз",
+      "config": { "pointsEnabled": true, "pointsMode": "cashback", "cashbackPercent": 7 },
+      "billAmount": 1005, "bandIndex": null,
+      "expect": { "points": 70 }
+    },
+    {
+      "name": "cashback: 4.5 округляется вверх",
+      "config": { "pointsEnabled": true, "pointsMode": "cashback", "cashbackPercent": 3 },
+      "billAmount": 150, "bandIndex": null,
+      "expect": { "points": 5 }
+    },
+    {
+      "name": "cashback: дробный процент (7.5% от 333 = 24.975 → 25)",
+      "config": { "pointsEnabled": true, "pointsMode": "cashback", "cashbackPercent": 7.5 },
+      "billAmount": 333, "bandIndex": null,
+      "expect": { "points": 25 }
+    },
+    {
+      "name": "cashback: огромный чек капается на MAX_POINTS_PER_EARN",
+      "config": { "pointsEnabled": true, "pointsMode": "cashback", "cashbackPercent": 20 },
+      "billAmount": 1000000, "bandIndex": null,
+      "expect": { "points": 10000 }
+    },
+    {
+      "name": "cashback: 0% → начислять нечего",
+      "config": { "pointsEnabled": true, "pointsMode": "cashback", "cashbackPercent": 0 },
+      "billAmount": 1000, "bandIndex": null,
+      "expect": { "error": "no_points" }
+    },
+    {
+      "name": "cashback: округляется в ноль на маленьком чеке",
+      "config": { "pointsEnabled": true, "pointsMode": "cashback", "cashbackPercent": 1 },
+      "billAmount": 20, "bandIndex": null,
+      "expect": { "error": "no_points" }
+    },
+
+    {
+      "name": "bands: вторая кнопка диапазона",
+      "config": {
+        "pointsEnabled": true, "pointsMode": "bands",
+        "pointsBands": [{ "maxAmount": 500, "points": 3 }, { "maxAmount": 2000, "points": 7 }]
+      },
+      "billAmount": null, "bandIndex": 1,
+      "expect": { "points": 7 }
+    },
+    {
+      "name": "bands: первая кнопка диапазона",
+      "config": {
+        "pointsEnabled": true, "pointsMode": "bands",
+        "pointsBands": [{ "maxAmount": 500, "points": 3 }, { "maxAmount": 2000, "points": 7 }]
+      },
+      "billAmount": null, "bandIndex": 0,
+      "expect": { "points": 3 }
+    },
+    {
+      "name": "bands: индекс за пределами каталога",
+      "config": {
+        "pointsEnabled": true, "pointsMode": "bands",
+        "pointsBands": [{ "maxAmount": 500, "points": 3 }]
+      },
+      "billAmount": null, "bandIndex": 9,
+      "expect": { "error": "bad_band" }
+    },
+    {
+      "name": "bands: отрицательный индекс",
+      "config": {
+        "pointsEnabled": true, "pointsMode": "bands",
+        "pointsBands": [{ "maxAmount": 500, "points": 3 }]
+      },
+      "billAmount": null, "bandIndex": -1,
+      "expect": { "error": "bad_band" }
+    },
+    {
+      "name": "bands: индекс не передан",
+      "config": {
+        "pointsEnabled": true, "pointsMode": "bands",
+        "pointsBands": [{ "maxAmount": 500, "points": 3 }]
+      },
+      "billAmount": null, "bandIndex": null,
+      "expect": { "error": "bad_band" }
+    },
+    {
+      "name": "bands: пустой каталог диапазонов",
+      "config": { "pointsEnabled": true, "pointsMode": "bands", "pointsBands": [] },
+      "billAmount": null, "bandIndex": 0,
+      "expect": { "error": "bad_band" }
+    },
+    {
+      "name": "bands: диапазон с нулём баллов",
+      "config": {
+        "pointsEnabled": true, "pointsMode": "bands",
+        "pointsBands": [{ "maxAmount": 500, "points": 0 }]
+      },
+      "billAmount": null, "bandIndex": 0,
+      "expect": { "error": "no_points" }
+    }
+  ],
+
+  "$cooldown": [
+    "Анти-мультискан. minutesSinceLastEarn = null → баллы этому гостю ещё не начисляли.",
+    "expect.canEarn = можно ли начислить прямо сейчас (сервер иначе отдаёт 429 cooldown).",
+    "earnCooldownMinutes = 0 ОТКЛЮЧАЕТ кулдаун (начисление на каждый скан), как и любое",
+    "отрицательное значение. Дефолтные 60 мин подставляются только когда поле в документе",
+    "заведения отсутствует или содержит мусор — этот случай кейсами не выражается: сюда",
+    "значение приходит уже разобранным (сервер — intOrDefault, клиенты — слой разбора)."
+  ],
+  "cooldown": [
+    { "name": "первое начисление гостю",            "earnCooldownMinutes": 60, "minutesSinceLastEarn": null, "expect": { "canEarn": true } },
+    { "name": "скан сразу после начисления",        "earnCooldownMinutes": 60, "minutesSinceLastEarn": 0,    "expect": { "canEarn": false } },
+    { "name": "внутри окна",                        "earnCooldownMinutes": 60, "minutesSinceLastEarn": 10,   "expect": { "canEarn": false } },
+    { "name": "за минуту до конца окна",            "earnCooldownMinutes": 60, "minutesSinceLastEarn": 59,   "expect": { "canEarn": false } },
+    { "name": "ровно на границе окна",              "earnCooldownMinutes": 60, "minutesSinceLastEarn": 60,   "expect": { "canEarn": true } },
+    { "name": "после окна",                         "earnCooldownMinutes": 60, "minutesSinceLastEarn": 61,   "expect": { "canEarn": true } },
+    { "name": "ноль отключает: скан сразу следом",  "earnCooldownMinutes": 0,  "minutesSinceLastEarn": 0,    "expect": { "canEarn": true } },
+    { "name": "ноль отключает: внутри прежних 60",  "earnCooldownMinutes": 0,  "minutesSinceLastEarn": 10,   "expect": { "canEarn": true } },
+    { "name": "ноль отключает: гостю ещё не начисляли", "earnCooldownMinutes": 0, "minutesSinceLastEarn": null, "expect": { "canEarn": true } },
+    { "name": "отрицательное отключает кулдаун",    "earnCooldownMinutes": -5, "minutesSinceLastEarn": 0,    "expect": { "canEarn": true } },
+    { "name": "короткий кулдаун блокирует",         "earnCooldownMinutes": 15, "minutesSinceLastEarn": 5,    "expect": { "canEarn": false } },
+    { "name": "короткий кулдаун пропускает",        "earnCooldownMinutes": 15, "minutesSinceLastEarn": 20,   "expect": { "canEarn": true } }
+  ],
+
+  "$redeem": [
+    "Списание. rewards = каталог venue.pointsRewards, rewardId = что выбрали.",
+    "type item  — фиксированная цена cost в баллах.",
+    "type money — скидка баллами: cost = МИНИМУМ к списанию, списывается pointsToSpend,",
+    "             somOff = сом скидки = round(списано × ratio).",
+    "expect = {cost, newBalance, somOff} либо {error: \"код\"} (+ minRedeem для below_min)."
+  ],
+  "redeem": [
+    {
+      "name": "item: обычное списание",
+      "rewards": [{ "id": "r1", "type": "item", "title": "Кофе в подарок", "cost": 100, "ratio": 1, "active": true }],
+      "rewardId": "r1", "pointsToSpend": 0, "balance": 150,
+      "expect": { "cost": 100, "newBalance": 50, "somOff": null }
+    },
+    {
+      "name": "item: баланс ровно в цену награды",
+      "rewards": [{ "id": "r1", "type": "item", "title": "Кофе в подарок", "cost": 100, "ratio": 1, "active": true }],
+      "rewardId": "r1", "pointsToSpend": 0, "balance": 100,
+      "expect": { "cost": 100, "newBalance": 0, "somOff": null }
+    },
+    {
+      "name": "item: баллов не хватает на единицу",
+      "rewards": [{ "id": "r1", "type": "item", "title": "Кофе в подарок", "cost": 100, "ratio": 1, "active": true }],
+      "rewardId": "r1", "pointsToSpend": 0, "balance": 99,
+      "expect": { "error": "insufficient" }
+    },
+    {
+      "name": "item: нулевая цена — награда сломана",
+      "rewards": [{ "id": "r1", "type": "item", "title": "Бесплатно?", "cost": 0, "ratio": 1, "active": true }],
+      "rewardId": "r1", "pointsToSpend": 0, "balance": 500,
+      "expect": { "error": "bad_reward" }
+    },
+    {
+      "name": "item: награда снята с публикации",
+      "rewards": [{ "id": "r1", "type": "item", "title": "Кофе в подарок", "cost": 100, "ratio": 1, "active": false }],
+      "rewardId": "r1", "pointsToSpend": 0, "balance": 500,
+      "expect": { "error": "reward_not_found" }
+    },
+    {
+      "name": "неизвестный id награды",
+      "rewards": [{ "id": "r1", "type": "item", "title": "Кофе в подарок", "cost": 100, "ratio": 1, "active": true }],
+      "rewardId": "nope", "pointsToSpend": 0, "balance": 500,
+      "expect": { "error": "reward_not_found" }
+    },
+    {
+      "name": "money: меньше минимума к списанию",
+      "rewards": [{ "id": "m1", "type": "money", "title": "Скидка баллами", "cost": 50, "ratio": 1, "active": true }],
+      "rewardId": "m1", "pointsToSpend": 40, "balance": 500,
+      "expect": { "error": "below_min", "minRedeem": 50 }
+    },
+    {
+      "name": "money: ровно минимум",
+      "rewards": [{ "id": "m1", "type": "money", "title": "Скидка баллами", "cost": 50, "ratio": 1, "active": true }],
+      "rewardId": "m1", "pointsToSpend": 50, "balance": 500,
+      "expect": { "cost": 50, "newBalance": 450, "somOff": 50 }
+    },
+    {
+      "name": "money: курс 0.5 сом за балл",
+      "rewards": [{ "id": "m1", "type": "money", "title": "Скидка баллами", "cost": 50, "ratio": 0.5, "active": true }],
+      "rewardId": "m1", "pointsToSpend": 200, "balance": 500,
+      "expect": { "cost": 200, "newBalance": 300, "somOff": 100 }
+    },
+    {
+      "name": "money: списать больше баланса нельзя",
+      "rewards": [{ "id": "m1", "type": "money", "title": "Скидка баллами", "cost": 50, "ratio": 1, "active": true }],
+      "rewardId": "m1", "pointsToSpend": 600, "balance": 500,
+      "expect": { "error": "insufficient" }
+    },
+    {
+      "name": "money: нулевой минимум трактуется как 1",
+      "rewards": [{ "id": "m1", "type": "money", "title": "Скидка баллами", "cost": 0, "ratio": 1, "active": true }],
+      "rewardId": "m1", "pointsToSpend": 0, "balance": 100,
+      "expect": { "error": "below_min", "minRedeem": 1 }
+    },
+    {
+      "name": "money: нулевой курс трактуется как 1",
+      "rewards": [{ "id": "m1", "type": "money", "title": "Скидка баллами", "cost": 10, "ratio": 0, "active": true }],
+      "rewardId": "m1", "pointsToSpend": 10, "balance": 10,
+      "expect": { "cost": 10, "newBalance": 0, "somOff": 10 }
+    },
+    {
+      "name": "money: сомы округляются вверх на .5 (3 × 2.5 = 7.5 → 8)",
+      "rewards": [{ "id": "m1", "type": "money", "title": "Скидка баллами", "cost": 1, "ratio": 2.5, "active": true }],
+      "rewardId": "m1", "pointsToSpend": 3, "balance": 10,
+      "expect": { "cost": 3, "newBalance": 7, "somOff": 8 }
+    }
+  ]
+}

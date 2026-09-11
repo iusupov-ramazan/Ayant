@@ -1,38 +1,78 @@
 import SwiftUI
+import AyantDomain
+import AyantFeatures
 
 /// Вкладка «Бонусы» (рефреш): акцент на кошельке и наградах, игры — ниже и тише.
 /// Обёртка URL+название для .sheet(item:).
 struct ShareURL: Identifiable { let id = UUID(); let url: URL; let title: String }
 
+/// «Бонусы» (SCREENS.md G6) — один дом для всех трёх валют лояльности:
+/// колода карт «Баллы САН», карта штампов и глобальные бонусы (нарочно
+/// подчинённые: их почти невозможно накопить, и это by design).
 struct BonusHubView: View {
     @EnvironmentObject private var bonus: BonusEngine
     @EnvironmentObject private var coupons: CouponStore
     @EnvironmentObject private var store: AppStore
+    @EnvironmentObject private var points: PointsStore
+    @EnvironmentObject private var loyalty: LoyaltyStore
+    @EnvironmentObject private var session: SessionStore
 
+    @State private var showGuestAlert = false
     @State private var showSnake = false
     @State private var showTetris = false
     @State private var justClaimed: Coupon?
     @State private var pendingReward: Reward?
     @State private var pendingGift: Reward?
     @State private var giftShare: ShareURL?
+    @State private var openedCard: VenuePointsCard?
+
+    /// Заведения по id — картам нужны градиент, категория и конфиг наград.
+    private var venuesByID: [String: Venue] {
+        Dictionary(store.venues.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+    }
+
+    private var pointsCards: [VenuePointsCard] { points.state.sortedCards }
+    /// Самая «живая» карта штампов — та, где штампов больше.
+    private var stampCard: LoyaltyCard? {
+        loyalty.cards.filter { $0.stamps > 0 }.max { $0.stamps < $1.stamps } ?? loyalty.cards.first
+    }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
-                    SanScreenTitle("Бонусы")
-                    walletCard
+                    headerRow
+                    if !pointsCards.isEmpty {
+                        WalletDeck(cards: pointsCards, venues: venuesByID) { openedCard = $0 }
+                            .padding(.horizontal, -SanMetrics.screenPadding)
+                    } else {
+                        emptyPointsCard
+                    }
+                    if let stampCard {
+                        section("Карта лояльности") {
+                            WalletStampCard(card: stampCard)
+                        }
+                    }
                     rewardsSection
-                    loyaltyLink
                     gamesSection
                 }
-                .padding(.horizontal, 16)
+                .padding(.horizontal, SanMetrics.screenPadding)
                 .padding(.top, 8)
                 .padding(.bottom, 28)
+                .sanScreenEnter()
             }
             .sanScreenBackground()
+            .sanStatusBarCap()
             .toolbar(.hidden, for: .navigationBar)
+            .navigationDestination(item: $openedCard) { card in
+                if let venue = venuesByID[card.venueID] {
+                    VenuePointsScreen(venue: venue)
+                } else {
+                    VenuePointsListView()
+                }
+            }
             .overlay(alignment: .top) { rewardToast }
+            .guestAlert(isPresented: $showGuestAlert, message: GuestGate.game)
             .alert("Купон получен 🎉", isPresented: Binding(
                 get: { justClaimed != nil }, set: { if !$0 { justClaimed = nil } })) {
                 Button("Отлично") {}
@@ -67,125 +107,142 @@ struct BonusHubView: View {
         }
     }
 
-    // MARK: Кошелёк
+    // MARK: Шапка
 
-    private var walletCard: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Твой баланс")
-                        .font(.golos(15, .medium)).foregroundStyle(.white.opacity(0.9))
-                    Text("\(bonus.balance)")
-                        .font(.golos(52, .heavy)).foregroundStyle(.white)
-                        .minimumScaleFactor(0.6).lineLimit(1)
-                    Text(Self.plural(bonus.balance))
-                        .font(.golos(15, .medium)).foregroundStyle(.white.opacity(0.9))
-                }
-                Spacer()
-                NavigationLink { MyCouponsView() } label: {
-                    Image(systemName: "wallet.pass.fill")
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 52, height: 52)
-                        .background(.white.opacity(0.18), in: Circle())
-                }
-                .buttonStyle(.plain)
+    private var headerRow: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Бонусы")
+                    .sanEditorialTitle(44)
+                    .foregroundStyle(Color.sanInk)
+                Text("Баллы САН в каждом заведении")
+                    .font(.golos(14)).foregroundStyle(Color.sanInkSoft)
+                    .padding(.top, 9)
             }
-            progressBar
+            Spacer(minLength: 8)
+            // Глобальный кошелёк BonusEngine — визуально подчинённый: он
+            // зарабатывается почти в ноль и не должен спорить с баллами САН.
+            NavigationLink { MyCouponsView() } label: {
+                VStack(alignment: .trailing, spacing: 1) {
+                    Text("БОНУСЫ")
+                        .font(.golos(10.5, .heavy)).tracking(0.4)
+                        .foregroundStyle(Color(hex: 0x9A9188))
+                    Text("\(bonus.balance)")
+                        .font(.golos(16, .heavy)).tracking(-0.5)
+                        .foregroundStyle(Color.sanInk)
+                        .contentTransition(.numericText())
+                        .animation(.snappy, value: bonus.balance)
+                }
+                .padding(.horizontal, 14).padding(.vertical, 9)
+                .background(Color.sanSurface, in: Capsule())
+                .overlay(Capsule().strokeBorder(Color.sanHairline, lineWidth: 0.5))
+            }
+            .buttonStyle(.sanPress(0.94))
         }
-        .padding(22)
-        .background(
-            LinearGradient.sanAccentGradient,
-            in: RoundedRectangle(cornerRadius: 26, style: .continuous))
-        .shadow(color: Color.sanAccent.opacity(0.28), radius: 22, y: 12)
     }
 
-    private var progressBar: some View {
+    private var emptyPointsCard: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Полоска без наложенного текста — заполнение и подпись не перекрываются.
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(.white.opacity(0.28))
-                    Capsule().fill(.white)
-                        .frame(width: max(10, geo.size.width * CGFloat(min(bonus.progress, 1))))
-                }
-            }
-            .frame(height: 12)
-            .animation(.easeInOut, value: bonus.progress)
-            // Подпись — отдельной строкой, всегда белая на оранжевой карточке.
-            Text("ещё \(bonus.remaining) до награды")
-                .font(.golos(13, .bold)).foregroundStyle(.white)
+            Text("Здесь появятся ваши баллы")
+                .font(.golos(16, .bold)).foregroundStyle(Color.sanInk)
+            Text("Показывайте свой QR на кассе в заведениях с баллами САН — карта заведения появится в кошельке после первого начисления.")
+                .font(.golos(13)).foregroundStyle(Color.sanInkSoft)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(20)
+        .sanCard(padding: 0, radius: SanRadius.hero)
+    }
+
+    private func section<Content: View>(_ title: LocalizedStringKey,
+                                        @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .textCase(.uppercase)
+                .sanEyebrowText()
+                .foregroundStyle(Color(hex: 0x9A9188))
+            content()
         }
     }
 
     // MARK: Потратить бонусы
 
     private var rewardsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 13) {
             HStack {
-                Text("Потратить бонусы").font(.golos(20, .bold)).foregroundStyle(Color.sanInk)
+                Text("Награды")
+                    .textCase(.uppercase)
+                    .sanEyebrowText()
+                    .foregroundStyle(Color(hex: 0x9A9188))
                 Spacer()
                 NavigationLink { MyCouponsView() } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "creditcard.fill")
-                        Text("Мои купоны\(coupons.activeCount > 0 ? " (\(coupons.activeCount))" : "")")
-                    }
-                    .font(.golos(14, .bold)).foregroundStyle(Color.sanAccent)
+                    Text(coupons.activeCount > 0 ? "Мои купоны · \(coupons.activeCount)" : "Мои купоны")
+                        .font(.golos(12.5, .bold))
+                        // Акцент мелким текстом — только контрастный вариант.
+                        .foregroundStyle(Color.sanAccentText)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.sanPress(0.94))
             }
-            ForEach(CouponStore.catalog) { reward in
-                rewardRow(reward)
+            ForEach(Array(CouponStore.catalog.enumerated()), id: \.element.id) { index, reward in
+                rewardRow(reward).sanRise(index, stagger: 0.07, duration: 0.5)
             }
+            // Ссылки на полные списки остаются — колода показывает не все карты.
+            HStack(spacing: 10) {
+                listLink("Все баллы", "star.circle.fill") { VenuePointsListView() }
+                listLink("Все карты", "creditcard.fill") { LoyaltyView() }
+            }
+            .padding(.top, 2)
         }
     }
 
+    private func listLink<Destination: View>(_ title: LocalizedStringKey, _ icon: String,
+                                             @ViewBuilder destination: () -> Destination) -> some View {
+        NavigationLink(destination: destination()) {
+            HStack(spacing: 8) {
+                Image(systemName: icon).font(.system(size: 13, weight: .semibold))
+                Text(title).font(.golos(13.5, .bold))
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(Color.sanInk)
+            .padding(.horizontal, 14).padding(.vertical, 12)
+            .frame(maxWidth: .infinity)
+            .background(Color.sanSurfaceMuted, in: RoundedRectangle(cornerRadius: SanRadius.tile, style: .continuous))
+        }
+        .buttonStyle(.sanPress(0.97))
+    }
+
     private func rewardRow(_ reward: Reward) -> some View {
-        HStack(spacing: 14) {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.sanAccent.opacity(0.10))
-                .frame(width: 54, height: 54)
-                .overlay(Text(reward.emoji).font(.system(size: 24)))
-            VStack(alignment: .leading, spacing: 2) {
-                Text(L(reward.title)).font(.golos(16, .bold)).foregroundStyle(Color.sanInk)
+        let affordable = bonus.balance >= reward.cost
+        return HStack(spacing: 14) {
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .fill(LinearGradient.sanAccentGradient)
+                .frame(width: 46, height: 46)
+                .overlay(Image(systemName: "star.fill")
+                    .font(.system(size: 19, weight: .semibold)).foregroundStyle(.white))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(L(reward.title)).font(.golos(14.5, .bold)).tracking(-0.2)
+                    .foregroundStyle(Color.sanInk)
                     .fixedSize(horizontal: false, vertical: true)
-                Text(Self.subtitle(reward)).font(.golos(13, .medium)).foregroundStyle(Color.sanInkSoft)
-                    .fixedSize(horizontal: false, vertical: true)
+                Text("\(reward.cost) бонусов").font(.golos(12.5)).foregroundStyle(Color.sanInkSoft)
             }
             Spacer(minLength: 8)
             Menu {
                 Button { pendingReward = reward } label: { Label("Обменять себе", systemImage: "ticket") }
                 Button { pendingGift = reward } label: { Label("Подарить другу", systemImage: "gift") }
             } label: {
-                Text("\(reward.cost)")
-                    .font(.golos(15, .bold)).foregroundStyle(.white)
-                    .padding(.horizontal, 16).padding(.vertical, 9)
-                    .background(bonus.balance >= reward.cost
-                                ? AnyShapeStyle(LinearGradient.sanAccentGradient)
-                                : AnyShapeStyle(Color.sanInkSoft.opacity(0.5)),
-                                in: Capsule())
+                Text(affordable ? "Обменять" : "Не хватает")
+                    .font(.golos(13, .bold))
+                    .foregroundStyle(affordable ? Color.white : Color(hex: 0x9A9188))
+                    .padding(.horizontal, 15).padding(.vertical, 10)
+                    .background(affordable ? AnyShapeStyle(LinearGradient.sanAccentGradient)
+                                           : AnyShapeStyle(Color.sanSurfaceMuted),
+                                in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
-            .disabled(bonus.balance < reward.cost)
+            .disabled(!affordable)
         }
-        .padding(12)
-        .sanCard(padding: 0)
-    }
-
-    // MARK: Карты лояльности
-
-    private var loyaltyLink: some View {
-        NavigationLink { LoyaltyView() } label: {
-            HStack(spacing: 14) {
-                SanIconTile(systemName: "creditcard.fill")
-                Text("Карты лояльности").font(.golos(16, .semibold)).foregroundStyle(Color.sanInk)
-                Spacer()
-                Image(systemName: "chevron.right").font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Color.sanInkSoft)
-            }
-            .padding(12)
-            .sanCard(padding: 0)
-        }
-        .buttonStyle(.plain)
+        .padding(15)
+        .opacity(affordable ? 1 : 0.55)
+        .sanCard(padding: 0, radius: SanRadius.card)
     }
 
     // MARK: Игры (тише, ниже)
@@ -196,21 +253,22 @@ struct BonusHubView: View {
                 SanSectionHeader("Играй и копи бонусы")
                 SanHairline().frame(maxWidth: .infinity)
             }
-            HStack(spacing: 12) {
-                Button { showSnake = true } label: {
-                    gameTile(emoji: "🐍", title: "Змейка", subtitle: "+1 / яблоко",
-                             gradient: [Color(hex: 0x1FBF75), Color(hex: 0x0E9E86)])
-                }
-                .buttonStyle(.plain)
-                .fullScreenCover(isPresented: $showSnake) { SnakeGameView() }
-
-                Button { showTetris = true } label: {
-                    gameTile(emoji: "🧱", title: "Тетрис", subtitle: "+5 / линия",
-                             gradient: [Color(hex: 0x8A5CF6), Color(hex: 0x6D3BE0)])
-                }
-                .buttonStyle(.plain)
-                .fullScreenCover(isPresented: $showTetris) { TetrisGameView() }
+            // Игры начисляют бонусы в кошелёк аккаунта, поэтому гостю закрыты —
+            // иначе он «зарабатывает» в запись, которая исчезнет вместе с выходом.
+            Button { if session.isGuest { showGuestAlert = true } else { showSnake = true } } label: {
+                gameTile(emoji: "🐍", title: "Змейка", subtitle: "+1 / яблоко",
+                         gradient: [Color(hex: 0x1FBF75), Color(hex: 0x0E9E86)])
             }
+            .buttonStyle(.plain)
+            .fullScreenCover(isPresented: $showSnake) { SnakeGameView() }
+
+            Button { if session.isGuest { showGuestAlert = true } else { showTetris = true } } label: {
+                gameTile(emoji: "🧱", title: "Тетрис",
+                         subtitle: "+\(Tetris.bonusPerLine) / линия",
+                         gradient: [Color(hex: 0x7C6BE8), Color(hex: 0xB39CF0)])
+            }
+            .buttonStyle(.plain)
+            .fullScreenCover(isPresented: $showTetris) { TetrisGameView() }
         }
         .padding(.top, 4)
     }
@@ -253,30 +311,14 @@ struct BonusHubView: View {
         }
     }
 
-    // MARK: Помощники
-
-    private static func subtitle(_ r: Reward) -> String {
-        switch r.id {
-        case "disc10":  return "Действует в любом заведении Ayant"
-        case "coffee":  return "У партнёров сети"
-        case "dessert": return "У партнёров сети"
-        case "vip":     return "Ранний доступ к новинкам"
-        default:        return "\(r.cost) бонусов"
-        }
-    }
-
-    private static func plural(_ n: Int) -> String {
-        let n10 = n % 10, n100 = n % 100
-        if n10 == 1 && n100 != 11 { return "бонус" }
-        if (2...4).contains(n10) && !(12...14).contains(n100) { return "бонуса" }
-        return "бонусов"
-    }
 }
 
 #Preview {
     BonusHubView()
-        .environmentObject(BonusEngine())
-        .environmentObject(CouponStore())
-        .environmentObject(AppStore())
+        .environmentObject(AyantStores.bonus())
+        .environmentObject(AyantStores.coupons())
+        .environmentObject(AyantStores.app())
+        .environmentObject(AyantStores.points())
+        .environmentObject(AyantStores.loyalty())
         .tint(.sanAccent)
 }

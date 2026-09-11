@@ -30,7 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.SubcomposeAsyncImage
 import kg.ayant.app.core.storefrontIcon
-import kg.ayant.app.data.model.Deal
+import kg.ayant.app.domain.model.Deal
 import kg.ayant.app.ui.theme.AyantTheme
 import kg.ayant.app.ui.theme.color
 
@@ -248,7 +248,7 @@ fun PriceLabel(deal: Deal, modifier: Modifier = Modifier) {
             )
         }
         deal.newPrice?.let {
-            Text("$it сом", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = AyantTheme.colors.accent)
+            Text("$it сом", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = AyantTheme.colors.accentText)
         }
     }
 }

@@ -14,6 +14,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -25,28 +26,27 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import kg.ayant.app.ui.theme.AyantTheme
 import kg.ayant.app.ui.vm.AppViewModel
+import kg.ayant.app.domain.HostIntent
 import kg.ayant.app.ui.vm.HostViewModel
 import kg.ayant.app.ui.vm.SessionViewModel
 
-private data class HTab(val route: String, val labelRes: Int, val icon: ImageVector)
-
-private val hostTabs = listOf(
-    HTab("h_venues", kg.ayant.app.R.string.htab_venues, Icons.Filled.Storefront),
-    HTab("h_promote", kg.ayant.app.R.string.htab_promote, Icons.Filled.Campaign),
-    HTab("h_analytics", kg.ayant.app.R.string.htab_analytics, Icons.Filled.BarChart),
-    HTab("h_reviews", kg.ayant.app.R.string.htab_reviews, Icons.Filled.RateReview),
-    HTab("h_profile", kg.ayant.app.R.string.htab_profile, Icons.Filled.Person),
-)
+// Вкладки живут в `HostTab` (HostShell.kt): Заведения · Лояльность · [Сканер] ·
+// Аналитика · Отзывы. «Продвижение» отдало слот и открывается из быстрых
+// действий на «Заведениях»; «Профиль» — с аватара в шапке.
+private val hostTabRoutes = HostTab.entries.map { it.route }
 
 @Composable
 fun HostRoot(app: AppViewModel, session: SessionViewModel, onExit: () -> Unit) {
-    val host: HostViewModel = viewModel()
+    val host: HostViewModel = viewModel(factory = kg.ayant.app.core.ayantFactory())
+    val hostState by host.state.collectAsState()
+    // Отзывы принадлежат ленте — подписываемся, иначе счётчик неотвеченных застынет.
+    val feedState by app.feedState.collectAsState()
     LaunchedEffect(session.user?.id) {
         host.bind(app)
-        host.configure(session.user?.id)
+        host.send(HostIntent.Configure(session.user?.id))
     }
 
-    if (!host.hasAccount) {
+    if (!hostState.hasAccount) {
         HostOnboarding(host, onCancel = onExit)
         return
     }
@@ -54,45 +54,46 @@ fun HostRoot(app: AppViewModel, session: SessionViewModel, onExit: () -> Unit) {
     val nav = rememberNavController()
     val backStack by nav.currentBackStackEntryAsState()
     val route = backStack?.destination?.route
-    val showBar = route in hostTabs.map { it.route }
-    val pendingReviews = app.reviews(forVenueIDs = host.ownedVenueIDs).count { it.hostReply == null }
+    val showBar = route in hostTabRoutes
+    val pendingReviews = feedState.reviews(forVenueIDs = hostState.ownedVenueIDs).count { it.hostReply == null }
+
+    // Отзывы по заведениям владельца грузятся здесь — и бейдж, и инбокс читают
+    // один кэш. Ключ перезапускает загрузку, когда список заведений приедет
+    // (при первом рендере он ещё пуст).
+    androidx.compose.runtime.LaunchedEffect(hostState.ownedVenueIDs) {
+        app.loadReviews(forVenueIDs = hostState.ownedVenueIDs)
+    }
 
     Scaffold(
         containerColor = AyantTheme.colors.canvas,
         bottomBar = {
             if (showBar) {
-                NavigationBar(containerColor = AyantTheme.colors.surface) {
-                    hostTabs.forEach { tab ->
-                        val label = androidx.compose.ui.res.stringResource(tab.labelRes)
-                        NavigationBarItem(
-                            selected = route == tab.route,
-                            onClick = {
-                                nav.navigate(tab.route) {
-                                    popUpTo(nav.graph.findStartDestination().id) { saveState = true }
-                                    launchSingleTop = true; restoreState = true
-                                }
-                            },
-                            icon = {
-                                if (tab.route == "h_reviews" && pendingReviews > 0) {
-                                    androidx.compose.material3.BadgedBox(badge = { androidx.compose.material3.Badge { Text("$pendingReviews") } }) {
-                                        Icon(tab.icon, label)
-                                    }
-                                } else {
-                                    Icon(tab.icon, label)
-                                }
-                            },
-                            label = { Text(label, maxLines = 1) },
-                        )
-                    }
-                }
+                HostTabBar(
+                    currentRoute = route,
+                    pendingReviews = pendingReviews,
+                    onSelect = { tab ->
+                        nav.navigate(tab.route) {
+                            popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true; restoreState = true
+                        }
+                    },
+                )
             }
         },
     ) { padding ->
         NavHost(nav, startDestination = "h_venues", modifier = Modifier.padding(padding)) {
             composable("h_venues") {
-                HostVenuesScreen(host, app, onVenue = { nav.navigate("h_venue/$it") }, onExitHost = onExit)
+                // «Лояльность» и «Продвижение» больше не колбэки этого экрана:
+                // первая — соседняя вкладка, второе живёт в действиях заведения.
+                HostVenuesScreen(host, app,
+                    onVenue = { nav.navigate("h_venue/$it") },
+                    onExitHost = onExit,
+                    onProfile = { nav.navigate("h_profile") })
             }
+            composable("h_loyalty") { HostLoyaltyScreen(host) }
             composable("h_promote") { HostPromoteScreen(host) }
+            // Сканер — вкладка, а не пуш: возвращаться некуда.
+            composable("h_scan") { HostScannerScreen(host, onBack = null) }
             composable("h_analytics") { HostAnalyticsScreen(host) }
             composable("h_reviews") { HostReviewsScreen(host, app) }
             composable("h_profile") { HostProfileScreen(host, session, onExitHost = onExit) }
