@@ -98,6 +98,9 @@ public enum HostIntent: Equatable {
     case addItem(venueID: String, name: String, emoji: String, kind: String, imageURL: String)
     case deleteItem(venueID: String, itemID: String)
     case boostVenue(id: String, until: Date)
+    /// Конфиг баллов САН заведения из редактора «Лояльность». Значения режутся
+    /// до серверных ограничений в `HostForms.applyPoints`.
+    case savePointsConfig(venueID: String, fields: HostForms.PointsFields)
 
     // Акции
     case saveDeal(existing: HostDealDTO?, fields: HostForms.DealFields)

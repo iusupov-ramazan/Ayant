@@ -593,6 +593,9 @@ enum ScanResultUI {
         switch self {
         case .success(let o):
             if o.points { return o.awarded > 0 ? "+\(o.awarded) баллов ✓" : "Готово ✓" }
+            // Штамп: крупно — что начислено ЗА ЭТОТ скан. Прежний заголовок
+            // с итогом («2 из 6») после первого скана читался как двойной штамп.
+            if o.loyalty && !o.rewardIssued { return "+1 штамп ✓" }
             return o.title.isEmpty ? "Купон погашен ✓" : "«\(o.title)» ✓"
         case .redeemed(let r):
             return r.rewardTitle.isEmpty ? "Награда выдана ✓" : "«\(r.rewardTitle)» ✓"
@@ -605,7 +608,9 @@ enum ScanResultUI {
             if o.points { return "Начислено \(o.awarded). Баланс гостя: \(o.balance) баллов." }
             guard o.loyalty else { return "Купон погашен." }
             if o.rewardIssued { return "🎉 Карта заполнена! Сегодня награда: «\(o.rewardTitle)» — выдайте гостю." }
-            return "Штамп начислен: \(o.stamps) из \(o.goal)."
+            // Итог — второй строкой: «2 из 6» — это всего на карте, не за скан.
+            let total = "Всего на карте: \(o.stamps) из \(o.goal)."
+            return o.title.isEmpty ? total : "Купон «\(o.title)» погашен. \(total)"
         case .redeemed(let r):
             if let som = r.somOff { return "Списано \(r.redeemed) баллов (−\(som) сом). Остаток: \(r.balance)." }
             return "Списано \(r.redeemed) баллов. Остаток: \(r.balance). Выдайте награду гостю."

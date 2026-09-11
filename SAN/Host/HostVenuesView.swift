@@ -73,6 +73,10 @@ struct HostVenuesView: View {
                     sandHeader
                         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headerHeight = $0 }
                     Section {
+                        // Провал записи на сервер раньше жил только в консоли:
+                        // заведение выглядело сохранённым, а существовало лишь
+                        // в кэше телефона. Теперь это видно на самом экране.
+                        if case .failed(let err) = host.state.sync { syncFailureBanner(err) }
                         // Без заведений — только пустое состояние: сетка с одной
                         // плиткой «+» под ним дублировала бы призыв.
                         if host.state.venues.isEmpty { emptyState } else { grid }
@@ -241,6 +245,38 @@ struct HostVenuesView: View {
     /// горизонтального движения не было видно, и на экране это не читалось как
     /// прокрутка. Обе сетки теперь всегда в дереве; высота ряда — по более
     /// высокой из них, поэтому под короткой остаётся пустое место.
+    /// Плашка «не синхронизировалось» — в стиле `SanNoteCard`, с кнопкой повтора.
+    private func syncFailureBanner(_ error: AppError) -> some View {
+        let text: LocalizedStringKey
+        switch error {
+        case .permissionDenied:
+            text = "Сервер отклонил сохранение: у аккаунта нет прав на это заведение. Данные видны только на этом устройстве."
+        case .network:
+            text = "Нет связи с сервером. Изменения сохранены на устройстве и отправятся при следующем обновлении."
+        default:
+            text = "Не удалось синхронизировать с сервером."
+        }
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Color(hex: 0xC24A12))
+                Text(text)
+                    .font(.golos(13)).foregroundStyle(Color(hex: 0xC24A12))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Button("Повторить") { host.send(.sync) }
+                .buttonStyle(SanPillButton(accent: true))
+                .disabled(host.state.sync.isSyncing)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(Color(hex: 0xFFF3EC),
+                    in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .padding(.horizontal, SanMetrics.screenPadding)
+        .padding(.top, 12)
+    }
+
     private var grid: some View {
         ScrollView(.horizontal) {
             HStack(alignment: .top, spacing: 0) {

@@ -150,6 +150,12 @@ struct SANApp: App {
                 store.setCurrentUser(id: new, name: session.user?.name, isGuest: session.isGuest)
                 resetLocalWallets()
                 syncBackendCoupons()
+                // Кабинет хоста тоже привязан к uid: без переключения он
+                // оставался на кэше прошлого аккаунта (гость, вошедший в
+                // существующий аккаунт, видел бы чужой или пустой кабинет
+                // до перезапуска).
+                hostStore.send(.configure(ownerID: new))
+                hostStore.send(.sync)
             }
             .onChange(of: bonus.reachedGoalToday) { _, reached in
                 NotificationManager.refresh(reachedGoalToday: reached)

@@ -147,6 +147,107 @@ public enum HostForms {
         return dto
     }
 
+    // MARK: Баллы САН
+
+    /// Поля редактора баллов САН (вкладка «Лояльность»). Отдельная структура:
+    /// заведение правится целиком через `VenueFields`, а конфиг баллов — своей
+    /// формой, чтобы обычное сохранение заведения его не задевало.
+    public struct PointsFields: Equatable {
+        public var pointsEnabled: Bool
+        public var pointsMode: String            // "flat" | "bands" | "cashback"
+        public var pointsFlat: Int
+        public var pointsBands: [PointsBand]
+        public var cashbackPercent: Double
+        public var pointsRewards: [PointsReward]
+        public var pointsExpiryMonths: Int
+        public var redeemMode: String            // "staffScan" | "customerInitiated"
+        public var earnCooldownMinutes: Int
+
+        public init(pointsEnabled: Bool, pointsMode: String, pointsFlat: Int,
+                    pointsBands: [PointsBand], cashbackPercent: Double,
+                    pointsRewards: [PointsReward], pointsExpiryMonths: Int,
+                    redeemMode: String, earnCooldownMinutes: Int) {
+            self.pointsEnabled = pointsEnabled; self.pointsMode = pointsMode
+            self.pointsFlat = pointsFlat; self.pointsBands = pointsBands
+            self.cashbackPercent = cashbackPercent; self.pointsRewards = pointsRewards
+            self.pointsExpiryMonths = pointsExpiryMonths; self.redeemMode = redeemMode
+            self.earnCooldownMinutes = earnCooldownMinutes
+        }
+    }
+
+    /// Поля редактора баллов из существующего заведения — см. `fields(from:)`.
+    public static func pointsFields(from dto: HostVenueDTO) -> PointsFields {
+        PointsFields(pointsEnabled: dto.pointsEnabled, pointsMode: dto.pointsMode,
+                     pointsFlat: dto.pointsFlat, pointsBands: dto.pointsBands,
+                     cashbackPercent: dto.cashbackPercent, pointsRewards: dto.pointsRewards,
+                     pointsExpiryMonths: dto.pointsExpiryMonths, redeemMode: dto.redeemMode,
+                     earnCooldownMinutes: dto.earnCooldownMinutes)
+    }
+
+    /// Допустимые значения конфига баллов — те же ограничения, что у сервера
+    /// (`functions/src/index.ts`) и админ-панели. Клиент режет их до записи,
+    /// чтобы «50% кэшбэка» не уехали в Firestore и не сработал ночной алерт.
+    public enum PointsLimits {
+        public static let modes = ["flat", "bands", "cashback"]
+        public static let redeemModes = ["staffScan", "customerInitiated"]
+        public static let maxPoints = PointsMath.maxPointsPerEarn          // 10 000
+        public static let maxCashbackPercent = PointsMath.maxCashbackPercent // 20
+        public static let expiryMonths = 1...24
+        /// 0 — без паузы (начисление на каждом скане), см. CLAUDE.md.
+        public static let cooldownMinutes = 0...1440
+    }
+
+    /// Накладывает конфиг баллов на DTO заведения, приводя значения к серверным
+    /// ограничениям. Всё остальное в DTO (id, статус модерации, карта штампов,
+    /// контакты…) не трогается — это правка одной группы полей, а не заведения.
+    ///
+    /// Правила:
+    ///  • неизвестный режим → `flat`, неизвестный способ списания → `staffScan`;
+    ///  • `pointsFlat`, баллы диапазонов — 0…10 000; кэшбэк — 0…20 %;
+    ///  • диапазоны сортируются по `maxAmount`, дубли по сумме отбрасываются
+    ///    (остаётся первый) — сервер выбирает диапазон по индексу, порядок важен;
+    ///  • названия наград тримятся, безымянные награды удаляются, стоимость ≥ 1,
+    ///    для «money» коэффициент ≥ 1 (иначе балл стоил бы дешевле сома);
+    ///  • срок сгорания 1…24 мес, пауза 0…1440 мин.
+    public static func applyPoints(to dto: HostVenueDTO, fields: PointsFields) -> HostVenueDTO {
+        var out = dto
+        out.pointsEnabled = fields.pointsEnabled
+        out.pointsMode = PointsLimits.modes.contains(fields.pointsMode) ? fields.pointsMode : "flat"
+        out.redeemMode = PointsLimits.redeemModes.contains(fields.redeemMode) ? fields.redeemMode : "staffScan"
+        out.pointsFlat = clamp(fields.pointsFlat, 0...PointsLimits.maxPoints)
+        out.cashbackPercent = fields.cashbackPercent.isFinite
+            ? min(max(fields.cashbackPercent, 0), PointsLimits.maxCashbackPercent)
+            : 0
+        out.pointsExpiryMonths = clamp(fields.pointsExpiryMonths, PointsLimits.expiryMonths)
+        out.earnCooldownMinutes = clamp(fields.earnCooldownMinutes, PointsLimits.cooldownMinutes)
+
+        // Диапазоны: стабильная сортировка + дедупликация по верхней границе.
+        var seenAmounts = Set<Int>()
+        out.pointsBands = fields.pointsBands
+            .map { PointsBand(maxAmount: max($0.maxAmount, 0),
+                              points: clamp($0.points, 0...PointsLimits.maxPoints)) }
+            .filter { seenAmounts.insert($0.maxAmount).inserted }
+            .sorted { $0.maxAmount < $1.maxAmount }
+
+        out.pointsRewards = fields.pointsRewards.compactMap { r in
+            let title = trim(r.title)
+            guard !title.isEmpty else { return nil }
+            var reward = r
+            reward.title = title
+            reward.type = r.type == "money" ? "money" : "item"
+            reward.cost = max(r.cost, 1)
+            if reward.type == "money" {
+                reward.ratio = r.ratio.isFinite ? max(r.ratio, 1) : 1
+            }
+            return reward
+        }
+        return out
+    }
+
+    private static func clamp(_ value: Int, _ range: ClosedRange<Int>) -> Int {
+        min(max(value, range.lowerBound), range.upperBound)
+    }
+
     /// Акция из формы. При правке сохраняется `id` и исходный `startDate`.
     public static func deal(existing: HostDealDTO?,
                             fields: DealFields,

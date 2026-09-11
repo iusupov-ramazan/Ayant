@@ -24,10 +24,13 @@ struct HomeFeedView: View {
 
     private var items: [FeedItem] { feedStore.items(category: category) }
     private var feed: [Deal] { feedStore.deals(category: category) }
-    /// Заведения для ряда «Заведения»: ранжированный каталог по категории
-    /// (одобренные, не на паузе), первые `venueRailLimit` — ряд, а не список.
+    /// Ранжированный каталог по категории (одобренные, не на паузе). Целиком
+    /// его показывает `AllVenuesView`; на главной — только счётчик в шапке
+    /// ряда и первые `venueRailLimit` плиток.
+    private var categoryVenues: [Venue] { feedStore.venues(category: category) }
+    /// Заведения для ряда «Заведения»: первые `venueRailLimit` — ряд, а не список.
     private var railVenues: [Venue] {
-        Array(feedStore.venues(category: category).prefix(Self.venueRailLimit))
+        Array(categoryVenues.prefix(Self.venueRailLimit))
     }
     private static let venueRailLimit = 12
 
@@ -74,6 +77,8 @@ struct HomeFeedView: View {
             .navigationDestination(for: FeedRoute.self) { route in
                 switch route {
                 case .saved: SavedView()
+                // Список открывается на том же фильтре, что выбран на главной.
+                case .allVenues: AllVenuesView(initialCategory: category)
                 }
             }
             // Смена категории возвращает ленту в начало.
@@ -399,11 +404,29 @@ struct HomeFeedView: View {
 
     private var venueRail: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Заведения")
-                .textCase(.uppercase)
-                .sanEyebrowText()
-                .foregroundStyle(Color.sanInkSoft)
-                .padding(.horizontal, SanMetrics.screenPadding)
+            HStack(alignment: .firstTextBaseline) {
+                Text("Заведения")
+                    .textCase(.uppercase)
+                    .sanEyebrowText()
+                    .foregroundStyle(Color.sanInkSoft)
+                Spacer(minLength: 8)
+                // «Все · N» — N считается по всему каталогу категории, а не по
+                // дюжине плиток ряда: число обещает, сколько ждёт в списке.
+                Button { path.append(FeedRoute.allVenues) } label: {
+                    HStack(spacing: 3) {
+                        Text("Все · \(categoryVenues.count)")
+                            .font(.golos(12.5, .bold)).tracking(-0.2)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10, weight: .bold))
+                    }
+                    .foregroundStyle(Color.sanAccentText)
+                    .padding(.vertical, 4)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.sanPress(0.93))
+                .accessibilityLabel("Все заведения")
+            }
+            .padding(.horizontal, SanMetrics.screenPadding)
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: 10) {
                     ForEach(railVenues) { venue in
@@ -417,6 +440,12 @@ struct HomeFeedView: View {
                         }
                         .buttonStyle(.sanPress(0.97))
                     }
+                    // Хвост ряда ведёт туда же, куда «Все · N» в шапке: человек,
+                    // долиставший до конца, не должен возвращаться к заголовку.
+                    Button { path.append(FeedRoute.allVenues) } label: {
+                        FeedVenueMoreTile(count: categoryVenues.count)
+                    }
+                    .buttonStyle(.sanPress(0.97))
                 }
                 .padding(.horizontal, SanMetrics.screenPadding)
             }
@@ -514,67 +543,141 @@ struct HomeFeedView: View {
 /// Маршруты ленты, у которых нет собственной модели (в отличие от `Venue`/`Deal`).
 enum FeedRoute: Hashable {
     case saved
+    /// Полный список заведений города (`AllVenuesView`) — «Все · N» в шапке
+    /// ряда «Заведения» и последняя плитка «Все заведения →».
+    case allVenues
 }
 
-/// Плитка заведения в ряду «Заведения» на главной: обложка, название,
-/// категория, рейтинг и расстояние. Нарочно лёгкая — в `LazyHStack` их дюжина.
+/// Плитка заведения в ряду «Заведения» на главной — постер: фото во всю
+/// карточку, тёмная подложка снизу, поверх — название, категория и район.
+/// Сверху пилюли «Открыто» и рейтинг, справа у текста — расстояние.
+/// Нарочно лёгкая — в `LazyHStack` их дюжина: без материалов и размытий,
+/// только плоские полупрозрачные подложки.
 struct FeedVenueTile: View {
     let venue: Venue
     let rating: Double
     var distanceKm: Double?
 
+    /// Размер постера; такой же у хвостовой плитки «Все заведения →».
+    static let size = CGSize(width: 176, height: 212)
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        ZStack(alignment: .bottomLeading) {
             VenuePhoto(urlString: venue.imageURL, gradient: venue.gradientColors)
-                .frame(height: 96)
-                .frame(maxWidth: .infinity)
+                .frame(width: Self.size.width, height: Self.size.height)
                 .clipped()
-                .overlay(alignment: .topTrailing) {
-                    if venue.isOpenNow {
-                        Circle().fill(Color(hex: 0x2FA24C))
-                            .frame(width: 8, height: 8)
-                            .overlay(Circle().strokeBorder(.white, lineWidth: 1.5))
-                            .padding(8)
-                            .accessibilityLabel("Открыто")
-                    }
-                }
+
+            // Подложка под текст: снизу вверх, до середины — прозрачная, чтобы
+            // фото не «тускнело» целиком.
+            LinearGradient(stops: [.init(color: .black.opacity(0), location: 0.38),
+                                   .init(color: .black.opacity(0.42), location: 0.66),
+                                   .init(color: .black.opacity(0.80), location: 1)],
+                           startPoint: .top, endPoint: .bottom)
+
             VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 4) {
-                    Text(venue.name)
-                        .font(.golos(13.5, .bold)).tracking(-0.25)
-                        .foregroundStyle(Color.sanInk).lineLimit(1)
-                    if venue.isVerified {
-                        Image(systemName: "checkmark.seal.fill")
-                            .font(.system(size: 10.5))
-                            .foregroundStyle(Color(hex: 0x4DA3FF))
-                    }
-                }
-                Text(venue.category.locKey)
-                    .font(.golos(11.5)).foregroundStyle(Color.sanInkSoft).lineLimit(1)
-                HStack(spacing: 6) {
-                    if rating > 0 {
-                        HStack(spacing: 3) {
-                            Image(systemName: "star.fill").font(.system(size: 9.5))
-                                .foregroundStyle(Color(hex: Palette.orange))
-                            Text(rating.sanRatingText)
-                        }
-                    }
+                nameLine
+                    .font(.golos(15, .bold)).tracking(-0.3)
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(alignment: .center, spacing: 6) {
+                    (Text(venue.category.locKey) + Text(verbatim: " · \(venue.district)"))
+                        .font(.golos(11.5, .medium))
+                        .foregroundStyle(.white.opacity(0.85))
+                        .lineLimit(1)
                     if let distanceKm {
+                        Spacer(minLength: 4)
                         Text(distanceKm.distanceText)
+                            .font(.golos(10.5, .bold))
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                            .padding(.horizontal, 7).padding(.vertical, 3)
+                            .background(Color.white.opacity(0.20), in: Capsule())
+                            .fixedSize()
                     }
                 }
-                .font(.golos(11.5, .semibold)).foregroundStyle(Color.sanInkSoft)
-                .lineLimit(1)
+            }
+            .padding(12)
+            .frame(width: Self.size.width, alignment: .leading)
+        }
+        .frame(width: Self.size.width, height: Self.size.height)
+        .overlay(alignment: .top) {
+            HStack(alignment: .top) {
+                if venue.isOpenNow {
+                    pill {
+                        Circle().fill(Color.sanOpen).frame(width: 6, height: 6)
+                        Text("Открыто")
+                    }
+                }
+                Spacer(minLength: 6)
+                if rating > 0 {
+                    pill {
+                        Image(systemName: "star.fill").font(.system(size: 9, weight: .bold))
+                        Text(rating.sanRatingText)
+                    }
+                }
             }
             .padding(10)
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(width: 156)
-        .background(Color.sanSurface)
         .clipShape(RoundedRectangle(cornerRadius: SanRadius.card, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: SanRadius.card, style: .continuous)
             .strokeBorder(Color.sanHairline, lineWidth: 0.5))
-        .contentShape(Rectangle())
+        .sanShadow(.card)
+        .contentShape(RoundedRectangle(cornerRadius: SanRadius.card, style: .continuous))
+        .accessibilityElement(children: .combine)
+    }
+
+    /// Название с печатью верификации ВНУТРИ текста: так печать переносится
+    /// вместе с последним словом, а не висит отдельной колонкой при двух строках.
+    private var nameLine: Text {
+        guard venue.isVerified else { return Text(venue.name) }
+        return Text(venue.name)
+            + Text(verbatim: " ")
+            + Text(Image(systemName: "checkmark.seal.fill")).foregroundStyle(Color(hex: 0x4DA3FF))
+    }
+
+    /// «Матовая» пилюля без `Material`: плоская тёмная подложка — дешевле в
+    /// ряду и одинаково читается на любом фото.
+    private func pill<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        HStack(spacing: 4) { content() }
+            .font(.golos(11, .bold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 8).padding(.vertical, 5)
+            .background(Color.black.opacity(0.38), in: Capsule())
+            .overlay(Capsule().strokeBorder(.white.opacity(0.18), lineWidth: 0.5))
+    }
+}
+
+/// Хвостовая плитка ряда «Заведения»: того же размера, что постер, ведёт в
+/// полный список (`AllVenuesView`).
+struct FeedVenueMoreTile: View {
+    let count: Int
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "arrow.right")
+                .font(.system(size: 26, weight: .bold))
+                .foregroundStyle(Color.sanInk)
+                .frame(width: 56, height: 56)
+                .background(Color.sanSurface, in: Circle())
+                .overlay(Circle().strokeBorder(Color.sanHairline, lineWidth: 0.5))
+            VStack(spacing: 3) {
+                Text("Все заведения")
+                    .font(.golos(14, .bold)).tracking(-0.25)
+                    .foregroundStyle(Color.sanInk)
+                Text("\(count)")
+                    .font(.golos(12, .semibold))
+                    .foregroundStyle(Color.sanInkSoft)
+            }
+        }
+        .frame(width: FeedVenueTile.size.width, height: FeedVenueTile.size.height)
+        .background(Color.sanSurfaceMuted)
+        .clipShape(RoundedRectangle(cornerRadius: SanRadius.card, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: SanRadius.card, style: .continuous)
+            .strokeBorder(Color.sanHairline, lineWidth: 0.5))
+        .contentShape(RoundedRectangle(cornerRadius: SanRadius.card, style: .continuous))
+        .accessibilityLabel("Все заведения, \(count)")
     }
 }
 

@@ -20,7 +20,15 @@ public final class HostStore: ObservableObject {
         static let venues = "san.host.venues"
         static let deals = "san.host.deals"
         static let campaigns = "san.host.campaigns"
+        /// id заведений/акций, которые сервер хотя бы раз отдал этому владельцу.
+        /// По ним `sync()` отличает «удалено на сервере» от «так и не доехало».
+        static let knownVenues = "san.host.knownVenues"
+        static let knownDeals = "san.host.knownDeals"
     }
+
+    /// Что сервер уже знает (см. `Key.knownVenues`). Пусто у свежего кэша.
+    private var knownVenueIDs: Set<String> = []
+    private var knownDealIDs: Set<String> = []
 
     // Внутренние алиасы: тело стора работает с полями состояния как раньше.
     private var profile: HostProfile? {
@@ -43,9 +51,9 @@ public final class HostStore: ObservableObject {
         self.repo = repo
         self.clock = clock
         profile = decode(Key.profile)
-        venueDTOs = decode(Key.venues) ?? []
-        dealDTOs = decode(Key.deals) ?? []
-        campaigns = decode(Key.campaigns) ?? []
+        venueDTOs = decodeList(Key.venues)
+        dealDTOs = decodeList(Key.deals)
+        campaigns = decodeList(Key.campaigns)
     }
 
     /// Единственный вход. Читать — через `state`.
@@ -72,6 +80,8 @@ public final class HostStore: ObservableObject {
         case .deleteItem(let venueID, let itemID):
             deleteItem(venueID: venueID, itemID: itemID)
         case .boostVenue(let id, let until):  boostVenue(id: id, until: until)
+        case .savePointsConfig(let venueID, let fields):
+            savePointsConfig(venueID: venueID, fields: fields)
 
         case .saveDeal(let existing, let fields):
             saveDealForm(existing: existing, fields: fields)
@@ -111,18 +121,20 @@ public final class HostStore: ObservableObject {
     /// Перечитывает заведения/предложения/профиль текущего владельца из кэша.
     private func reloadFromCache() {
         profile = decode(key(Key.profile))
-        venueDTOs = decode(key(Key.venues)) ?? []
-        dealDTOs = decode(key(Key.deals)) ?? []
-        campaigns = decode(key(Key.campaigns)) ?? []
+        venueDTOs = decodeList(key(Key.venues))
+        dealDTOs = decodeList(key(Key.deals))
+        campaigns = decodeList(key(Key.campaigns))
+        knownVenueIDs = Set(decodeList(key(Key.knownVenues)) as [String])
+        knownDealIDs = Set(decodeList(key(Key.knownDeals)) as [String])
 
         // Миграция: у авторизованного пользователя ещё нет своего кэша, но есть
         // легаси-глобальный (созданный до привязки к аккаунту) — усыновляем его
         // один раз, до-сохраняем в Firestore под ownerID и чистим глобальные ключи,
         // чтобы данные не утекли в другой аккаунт.
         if !ownerID.isEmpty, venueDTOs.isEmpty, dealDTOs.isEmpty,
-           let legacyV: [HostVenueDTO] = decode(Key.venues), !legacyV.isEmpty {
+           case let legacyV = decodeList(Key.venues) as [HostVenueDTO], !legacyV.isEmpty {
             venueDTOs = legacyV
-            dealDTOs = decode(Key.deals) ?? []
+            dealDTOs = decodeList(Key.deals)
             if profile == nil { profile = decode(Key.profile) }
             persistVenues(); persistDeals(); persistProfile(remote: true)
             for v in venueDTOs { remoteSaveVenue(v) }
@@ -137,7 +149,16 @@ public final class HostStore: ObservableObject {
 
     /// Подтягивает заведения/предложения владельца из Firestore.
     /// Локальный кэш остаётся фолбэком при ошибке/офлайне.
-    private func sync() async {
+    ///
+    /// Локальная копия, которой нет на сервере, бывает двух видов, и раньше
+    /// стор их не различал (просто оставлял обе на экране):
+    ///  • сервер её уже отдавал (`known*`) → удалена админом или с другого
+    ///    устройства → убираем и у себя, сервер — источник истины;
+    ///  • сервер её никогда не видел → запись не дошла (офлайн, правила,
+    ///    проглоченная ошибка) → дозаливаем. Так заведение, созданное без
+    ///    сети, всё-таки попадает в Firestore, а не живёт вечно только в
+    ///    кэше одного телефона — и не пропадает вместе с ним.
+    public func sync() async {
         guard !ownerID.isEmpty else { return }
         state.sync = .syncing
         defer { if state.sync.isSyncing { state.sync = .idle } }
@@ -145,11 +166,20 @@ public final class HostStore: ObservableObject {
             async let v = repo.fetchOwnedVenues(ownerID: ownerID)
             async let d = repo.fetchOwnedDeals(ownerID: ownerID)
             let (remoteV, remoteD) = try await (v, d)
-            venueDTOs = Self.merge(remote: remoteV, local: venueDTOs, by: \.name)
-            dealDTOs = Self.merge(remote: remoteD, local: dealDTOs, by: \.title)
+            let remoteVenueIDs = Set(remoteV.map(\.id))
+            let remoteDealIDs = Set(remoteD.map(\.id))
+            let unsentV = venueDTOs.filter { !remoteVenueIDs.contains($0.id) && !knownVenueIDs.contains($0.id) }
+            let unsentD = dealDTOs.filter { !remoteDealIDs.contains($0.id) && !knownDealIDs.contains($0.id) }
+            venueDTOs = Self.merge(remote: remoteV, local: unsentV, by: \.name)
+            dealDTOs = Self.merge(remote: remoteD, local: unsentD, by: \.title)
+            knownVenueIDs = remoteVenueIDs
+            knownDealIDs = remoteDealIDs
             persist(key(Key.venues), venueDTOs)
             persist(key(Key.deals), dealDTOs)
+            persistKnown()
             pushToAppStore()
+            for dto in unsentV { remoteSaveVenue(dto) }
+            for dto in unsentD { remoteSaveDeal(dto) }
             // Профиль (включая статус верификации, выставленный админом).
             if let remoteProfile = try await repo.fetchProfile(ownerID: ownerID) {
                 profile = remoteProfile
@@ -180,16 +210,65 @@ public final class HostStore: ObservableObject {
         }
     }
 
+    /// Запись на сервер. Раньше — `try?` в никуда: заведение, которое сервер
+    /// отверг или которое не дошло без сети, показывалось как сохранённое, а
+    /// жило только в кэше устройства. Теперь провал виден в `state.sync`, а
+    /// `sync()` дозаливает всё, чего сервер не знает.
     private func remoteSaveVenue(_ dto: HostVenueDTO) {
         guard !ownerID.isEmpty else { return }
-        Task { try? await repo.saveVenue(dto, ownerID: ownerID) }
+        let owner = ownerID
+        Task {
+            do {
+                try await repo.saveVenue(dto, ownerID: owner)
+                knownVenueIDs.insert(dto.id); persistKnown()
+            } catch { reportRemoteFailure(error) }
+        }
     }
     private func remoteSaveDeal(_ dto: HostDealDTO) {
         guard !ownerID.isEmpty else { return }
-        Task { try? await repo.saveDeal(dto, ownerID: ownerID) }
+        let owner = ownerID
+        Task {
+            do {
+                try await repo.saveDeal(dto, ownerID: owner)
+                knownDealIDs.insert(dto.id); persistKnown()
+            } catch { reportRemoteFailure(error) }
+        }
     }
-    private func remoteDeleteVenue(_ id: String) { Task { try? await repo.deleteVenue(id: id) } }
-    private func remoteDeleteDeal(_ id: String) { Task { try? await repo.deleteDeal(id: id) } }
+    private func remoteDeleteVenue(_ id: String) {
+        knownVenueIDs.remove(id); persistKnown()
+        Task { do { try await repo.deleteVenue(id: id) } catch { reportRemoteFailure(error) } }
+    }
+    private func remoteDeleteDeal(_ id: String) {
+        knownDealIDs.remove(id); persistKnown()
+        Task { do { try await repo.deleteDeal(id: id) } catch { reportRemoteFailure(error) } }
+    }
+
+    private func reportRemoteFailure(_ error: Error) {
+        state.sync = .failed(Self.appError(from: error))
+        print("⚠️ host remote write failed: \(error.localizedDescription)")
+    }
+
+    /// Ошибка SDK → доменная. Firestore не импортируем (слой фич), поэтому
+    /// по домену/коду `NSError`: 7 — permission denied, 14 — unavailable.
+    private static func appError(from error: Error) -> AppError {
+        if let app = error as? AppError { return app }
+        let ns = error as NSError
+        if ns.domain == NSURLErrorDomain { return .network }
+        if ns.domain == "FIRFirestoreErrorDomain" {
+            switch ns.code {
+            case 7: return .permissionDenied
+            case 14, 4: return .network
+            case 16: return .unauthenticated
+            default: return .unknown
+            }
+        }
+        return .unknown
+    }
+
+    private func persistKnown() {
+        persist(key(Key.knownVenues), Array(knownVenueIDs))
+        persist(key(Key.knownDeals), Array(knownDealIDs))
+    }
 
     // MARK: Конверсии
 
@@ -285,6 +364,16 @@ public final class HostStore: ObservableObject {
             persistVenues()
             remoteSaveVenue(venueDTOs[i])
         }
+    }
+
+    /// Конфиг баллов САН из редактора «Лояльность». Ограничения (кэшбэк ≤ 20 %,
+    /// пауза 0…1440 мин и т. д.) накладывает чистый `HostForms.applyPoints`;
+    /// здесь — только запись. Остальные поля заведения не трогаются.
+    private func savePointsConfig(venueID: String, fields: HostForms.PointsFields) {
+        guard let i = venueDTOs.firstIndex(where: { $0.id == venueID }) else { return }
+        venueDTOs[i] = HostForms.applyPoints(to: venueDTOs[i], fields: fields)
+        persistVenues()
+        remoteSaveVenue(venueDTOs[i])
     }
 
     private func deleteVenue(id: String) {
@@ -417,5 +506,23 @@ public final class HostStore: ObservableObject {
     private func decode<T: Decodable>(_ key: String) -> T? {
         guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
         return try? JSONDecoder().decode(T.self, from: data)
+    }
+
+    /// Список из кэша, поэлементно: один битый элемент не обнуляет весь список.
+    /// Раньше `decode([T].self)` был «всё или ничего» — одна запись старой схемы
+    /// стирала с экрана весь кабинет.
+    private func decodeList<T: Decodable>(_ key: String) -> [T] {
+        guard let data = UserDefaults.standard.data(forKey: key),
+              let boxes = try? JSONDecoder().decode([Lossy<T>].self, from: data) else { return [] }
+        return boxes.compactMap(\.value)
+    }
+}
+
+/// Обёртка для поэлементного декодирования: элемент, который не разобрался,
+/// становится `nil` вместо ошибки всего массива.
+private struct Lossy<T: Decodable>: Decodable {
+    let value: T?
+    init(from decoder: Decoder) throws {
+        value = try? T(from: decoder)
     }
 }

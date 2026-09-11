@@ -451,9 +451,13 @@ extension HostProfile {
 extension HostVenueDTO {
     /// Документ для коллекции venues (хост-заведение).
     ///
-    /// Конфиг баллов САН здесь НЕ пишется намеренно: его ведёт админ-панель, а
-    /// `merge: true` сохраняет отсутствующие поля — иначе сохранение из
-    /// хост-приложения затёрло бы настройки бонусов.
+    /// Конфиг баллов САН (`points*`, `cashbackPercent`, `redeemMode`,
+    /// `earnCooldownMinutes`) теперь ведёт сам хост с вкладки «Лояльность»
+    /// (`HostIntent.savePointsConfig` → `HostForms.applyPoints`); админ-панель
+    /// правит те же поля тем же именам. Раньше они здесь намеренно
+    /// отсутствовали, чтобы сохранение из приложения не затирало конфиг из
+    /// админки. Запись по-прежнему идёт с `merge: true`: поля, которых DTO не
+    /// знает (рейтинг, счётчики сохранений, служебные), остаются нетронутыми.
     func firestoreData(ownerID: String) -> [String: Any] {
         [
             FS.VenueDoc.name: name,
@@ -489,6 +493,16 @@ extension HostVenueDTO {
             FS.VenueDoc.loyaltyGoal: loyaltyGoal,
             FS.VenueDoc.loyaltyReward: loyaltyReward,
             FS.VenueDoc.couponsEnabled: couponsEnabled,
+            // Баллы САН — тот же контракт полей, что читает `scanCoupon` и админ-панель.
+            FS.VenueDoc.pointsEnabled: pointsEnabled,
+            FS.VenueDoc.pointsMode: pointsMode,
+            FS.VenueDoc.pointsFlat: pointsFlat,
+            FS.VenueDoc.pointsBands: pointsBands.map(\.firestoreMap),
+            FS.VenueDoc.cashbackPercent: cashbackPercent,
+            FS.VenueDoc.pointsRewards: pointsRewards.map(\.firestoreMap),
+            FS.VenueDoc.pointsExpiryMonths: pointsExpiryMonths,
+            FS.VenueDoc.redeemMode: redeemMode,
+            FS.VenueDoc.earnCooldownMinutes: earnCooldownMinutes,
         ]
     }
 
@@ -529,7 +543,7 @@ extension HostVenueDTO {
             loyaltyGoal: f.loyaltyGoal,
             loyaltyReward: f.loyaltyReward,
             couponsEnabled: f.couponsEnabled,
-            // Конфиг баллов САН читаем (для сканера), но обратно не пишем — см. firestoreData.
+            // Конфиг баллов САН: читается для сканера и правится хостом — см. firestoreData.
             pointsEnabled: f.pointsEnabled,
             pointsMode: f.pointsMode,
             pointsFlat: f.pointsFlat,

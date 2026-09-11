@@ -98,7 +98,7 @@ public struct HostVenueDTO: Codable, Identifiable, Equatable {
     public var loyaltyGoal: Int = 6                                 // штампов до награды
     public var loyaltyReward: String = "Награда за лояльность"      // текст награды
     public var couponsEnabled: Bool = true                          // принимать купоны (по умолчанию да)
-    // --- Бонусы САН (баллы); конфиг задаётся в админ-панели, читается для сканера ---
+    // --- Бонусы САН (баллы); правит хост в приложении (HostForms.applyPoints) и админ-панель ---
     public var pointsEnabled: Bool = false
     public var pointsMode: String = "flat"                          // "flat" | "bands" | "cashback"
     public var pointsFlat: Int = 0
@@ -141,6 +141,57 @@ public struct HostVenueDTO: Codable, Identifiable, Equatable {
         self.cashbackPercent = cashbackPercent; self.pointsRewards = pointsRewards
         self.pointsExpiryMonths = pointsExpiryMonths; self.redeemMode = redeemMode
         self.earnCooldownMinutes = earnCooldownMinutes
+    }
+
+    /// Терпимый к схеме декодер кэша.
+    ///
+    /// Синтезированный `Decodable` игнорирует значения по умолчанию: ключ,
+    /// которого нет в JSON, — ошибка, а не дефолт. Кэш кабинета пишется на
+    /// диск одной версией приложения и читается следующей, и каждое новое поле
+    /// (`branches`, `pointsBands`, …) превращало старый кэш в «не декодируется»
+    /// → `nil` → пустой кабинет. Заведение, которое к тому же не успело
+    /// доехать до Firestore, при этом исчезало насовсем. Обязательны только
+    /// `id` и `name`; всё остальное — с теми же дефолтами, что у `init`.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        categoryRaw = try c.decodeIfPresent(String.self, forKey: .categoryRaw) ?? VenueCategory.cafe.rawValue
+        district = try c.decodeIfPresent(String.self, forKey: .district) ?? ""
+        address = try c.decodeIfPresent(String.self, forKey: .address) ?? ""
+        phone = try c.decodeIfPresent(String.self, forKey: .phone) ?? ""
+        emoji = try c.decodeIfPresent(String.self, forKey: .emoji) ?? "🏪"
+        latitude = try c.decodeIfPresent(Double.self, forKey: .latitude) ?? City.bishkek.latitude
+        longitude = try c.decodeIfPresent(Double.self, forKey: .longitude) ?? City.bishkek.longitude
+        openHour = try c.decodeIfPresent(Int.self, forKey: .openHour) ?? 9
+        closeHour = try c.decodeIfPresent(Int.self, forKey: .closeHour) ?? 22
+        todaySpecial = try c.decodeIfPresent(String.self, forKey: .todaySpecial)
+        isPaused = try c.decodeIfPresent(Bool.self, forKey: .isPaused) ?? false
+        isVerified = try c.decodeIfPresent(Bool.self, forKey: .isVerified) ?? false
+        status = try c.decodeIfPresent(String.self, forKey: .status) ?? ModerationStatus.pending.rawValue
+        items = try c.decodeIfPresent([VenueItem].self, forKey: .items) ?? []
+        imageURL = try c.decodeIfPresent(String.self, forKey: .imageURL) ?? ""
+        let hours = try c.decodeIfPresent([DayHours].self, forKey: .weekHours) ?? []
+        weekHours = hours.count == 7 ? hours : Venue.defaultWeek()
+        pdfMenuURL = try c.decodeIfPresent(String.self, forKey: .pdfMenuURL) ?? ""
+        whatsapp = try c.decodeIfPresent(String.self, forKey: .whatsapp) ?? ""
+        instagram = try c.decodeIfPresent(String.self, forKey: .instagram) ?? ""
+        telegram = try c.decodeIfPresent(String.self, forKey: .telegram) ?? ""
+        branches = try c.decodeIfPresent([Branch].self, forKey: .branches) ?? []
+        boostedUntil = try c.decodeIfPresent(Date.self, forKey: .boostedUntil)
+        loyaltyEnabled = try c.decodeIfPresent(Bool.self, forKey: .loyaltyEnabled) ?? false
+        loyaltyGoal = try c.decodeIfPresent(Int.self, forKey: .loyaltyGoal) ?? 6
+        loyaltyReward = try c.decodeIfPresent(String.self, forKey: .loyaltyReward) ?? "Награда за лояльность"
+        couponsEnabled = try c.decodeIfPresent(Bool.self, forKey: .couponsEnabled) ?? true
+        pointsEnabled = try c.decodeIfPresent(Bool.self, forKey: .pointsEnabled) ?? false
+        pointsMode = try c.decodeIfPresent(String.self, forKey: .pointsMode) ?? "flat"
+        pointsFlat = try c.decodeIfPresent(Int.self, forKey: .pointsFlat) ?? 0
+        pointsBands = try c.decodeIfPresent([PointsBand].self, forKey: .pointsBands) ?? []
+        cashbackPercent = try c.decodeIfPresent(Double.self, forKey: .cashbackPercent) ?? 0
+        pointsRewards = try c.decodeIfPresent([PointsReward].self, forKey: .pointsRewards) ?? []
+        pointsExpiryMonths = try c.decodeIfPresent(Int.self, forKey: .pointsExpiryMonths) ?? 6
+        redeemMode = try c.decodeIfPresent(String.self, forKey: .redeemMode) ?? "staffScan"
+        earnCooldownMinutes = try c.decodeIfPresent(Int.self, forKey: .earnCooldownMinutes) ?? 60
     }
 
     public var category: VenueCategory { VenueCategory(rawValue: categoryRaw) ?? .cafe }
@@ -197,6 +248,26 @@ public struct HostDealDTO: Codable, Identifiable, Equatable {
         self.newPrice = newPrice; self.discountPercent = discountPercent
         self.startDate = startDate; self.endDate = endDate; self.statusRaw = statusRaw
         self.imageURL = imageURL; self.imageURLs = imageURLs; self.terms = terms
+    }
+
+    /// Терпимый к схеме декодер кэша — см. `HostVenueDTO.init(from:)`.
+    /// Обязательны `id`, `venueID`, `title` и `startDate` (были с первой версии).
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        venueID = try c.decode(String.self, forKey: .venueID)
+        title = try c.decode(String.self, forKey: .title)
+        startDate = try c.decode(Date.self, forKey: .startDate)
+        typeRaw = try c.decodeIfPresent(String.self, forKey: .typeRaw) ?? DealType.discount.rawValue
+        details = try c.decodeIfPresent(String.self, forKey: .details) ?? ""
+        emoji = try c.decodeIfPresent(String.self, forKey: .emoji) ?? "🔥"
+        newPrice = try c.decodeIfPresent(Int.self, forKey: .newPrice)
+        discountPercent = try c.decodeIfPresent(Int.self, forKey: .discountPercent)
+        endDate = try c.decodeIfPresent(Date.self, forKey: .endDate)
+        statusRaw = try c.decodeIfPresent(String.self, forKey: .statusRaw) ?? DealStatus.active.rawValue
+        imageURL = try c.decodeIfPresent(String.self, forKey: .imageURL) ?? ""
+        imageURLs = try c.decodeIfPresent([String].self, forKey: .imageURLs) ?? []
+        terms = try c.decodeIfPresent([String].self, forKey: .terms) ?? []
     }
 
     public var type: DealType { DealType(rawValue: typeRaw) ?? .discount }

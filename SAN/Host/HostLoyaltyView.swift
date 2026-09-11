@@ -4,28 +4,39 @@ import AyantFeatures
 
 /// «Лояльность» — экран настройки лояльности заведения (SCREENS.md H6).
 ///
-/// Здесь только то, что есть на самом деле: карта штампов, которую владелец
-/// правит сам, и конфиг баллов САН, который он видит. Прежние «ROI-герой» с
-/// выдуманными «2,4×» и калькулятор, который ничего не сохранял, убраны —
-/// цифры, за которыми не стоит данных, подрывают доверие ко всему экрану.
+/// Здесь только то, что есть на самом деле: карта штампов и конфиг баллов
+/// САН. Прежние «ROI-герой» с выдуманными «2,4×» и калькулятор, который ничего
+/// не сохранял, убраны — цифры, за которыми не стоит данных, подрывают доверие
+/// ко всему экрану.
 ///
-/// ВАЖНО: конфиг баллов на хост-стороне **только для чтения** — им владеет
-/// админ-панель, и путь сохранения хоста его не пишет (см. CLAUDE.md).
-/// Поэтому режимы/награды/правила здесь показываются, но не редактируются:
-/// сделать их записываемыми — это изменение Firestore-правил и `HostForms`,
-/// а не UI-решение.
+/// Конфиг баллов теперь правит сам владелец: режим, награды и правила
+/// собираются в черновик (`PointsDraft`), одна кнопка «Сохранить» отправляет
+/// `HostIntent.savePointsConfig`, а серверные ограничения (кэшбэк ≤ 20 %,
+/// пауза 0…1440 мин и т. д.) накладывает чистый `HostForms.applyPoints`.
+/// Админ-панель правит те же поля Firestore — кто сохранил последним, тот и прав.
 struct HostLoyaltyView: View {
     @EnvironmentObject private var host: HostStore
 
     @State private var selectedVenueID: String?
-    /// Черновик текста награды, пока пользователь печатает. Сохраняется по
-    /// Return, по паузе в наборе (`rewardCommit`) и при смене заведения.
+    /// Черновик текста награды карты штампов, пока пользователь печатает.
+    /// Сохраняется по Return, по паузе в наборе (`rewardCommit`) и при смене заведения.
     @State private var rewardDraft: String?
     @State private var rewardCommit: Task<Void, Never>?
+
+    /// Черновик конфига баллов и снимок, с которого он начат: «есть правки» —
+    /// это `draft != baseline`, без отдельных флагов.
+    @State private var draft = PointsDraft()
+    @State private var baseline = PointsDraft()
+    /// Заведение, на которое хотят переключиться при несохранённых правках.
+    @State private var pendingSwitchID: String?
+    @State private var savedFlash = false
+    @State private var savedFlashTask: Task<Void, Never>?
 
     private var venue: HostVenueDTO? {
         host.state.venues.first { $0.id == selectedVenueID } ?? host.state.venues.first
     }
+
+    private var isDirty: Bool { draft != baseline }
 
     var body: some View {
         NavigationStack {
@@ -33,43 +44,95 @@ struct HostLoyaltyView: View {
                 VStack(alignment: .leading, spacing: 22) {
                     header
                     stampCardSection
-                    modesSection
-                    rewardsSection
-                    rulesSection
-                    guestPreview
-                    footer
+                    if venue != nil {
+                        pointsMasterSection
+                        if draft.enabled {
+                            modesSection
+                            rewardsSection
+                            rulesSection
+                            guestPreview
+                        }
+                    }
                 }
                 .padding(.horizontal, SanMetrics.screenPadding)
                 .padding(.top, 12)
                 .padding(.bottom, 28)
                 .sanScreenEnter()
             }
+            .safeAreaInset(edge: .bottom) {
+                if venue != nil { saveFooter }
+            }
             .sanScreenBackground()
             .sanStatusBarCap()
             .toolbar(.hidden, for: .navigationBar)
             .onAppear {
                 if selectedVenueID == nil { selectedVenueID = host.state.venues.first?.id }
+                loadDraft()
             }
+            .onChange(of: venue?.id) { _, _ in loadDraft() }
+            // Синк с сервера обновил заведение, пока правок нет — подхватываем,
+            // но недописанный черновик не затираем.
+            .onChange(of: host.state.venues) { _, _ in if !isDirty { loadDraft() } }
             .onDisappear { flushRewardDraft() }
+            .confirmationDialog("Несохранённые изменения",
+                                isPresented: Binding(get: { pendingSwitchID != nil },
+                                                     set: { if !$0 { pendingSwitchID = nil } }),
+                                titleVisibility: .visible) {
+                Button("Перейти без сохранения", role: .destructive) {
+                    if let id = pendingSwitchID { switchVenue(to: id) }
+                    pendingSwitchID = nil
+                }
+                Button("Остаться", role: .cancel) { pendingSwitchID = nil }
+            } message: {
+                Text("Настройки баллов этого заведения не сохранены. Перейти к другому заведению?")
+            }
         }
     }
 
-    // MARK: Карта штампов — ЕДИНСТВЕННОЕ, что владелец правит сам
-    //
-    // Конфиг баллов САН принадлежит админ-панели, поэтому выше всё только
-    // показывается. А карта штампов (`loyaltyEnabled/Goal/Reward`) — поля
-    // самого заведения, их пишет обычное сохранение заведения. Раньше их можно
-    // было тронуть лишь через форму заведения, и вкладка «Лояльность» выходила
-    // экраном-читалкой.
+    // MARK: Черновик баллов
+
+    private func loadDraft() {
+        let d = venue.map { PointsDraft($0) } ?? PointsDraft()
+        draft = d
+        baseline = d
+    }
+
+    private func switchVenue(to id: String) {
+        SanHaptics.selection()
+        // Черновик награды карты штампов принадлежит прошлому заведению:
+        // дописываем его туда и начинаем с чистого поля.
+        flushRewardDraft()
+        selectedVenueID = id
+        rewardDraft = nil
+    }
+
+    private func savePoints() {
+        guard let v = venue else { return }
+        SanHaptics.save()
+        host.send(.savePointsConfig(venueID: v.id, fields: draft.fields))
+        // Стор уже применил ограничения — показываем то, что реально сохранилось.
+        loadDraft()
+        savedFlashTask?.cancel()
+        withAnimation(.sanStandard) { savedFlash = true }
+        savedFlashTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            withAnimation(.sanStandard) { savedFlash = false }
+        }
+    }
+
+    // MARK: Карта штампов
 
     private var stampCardSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             eyebrow("Карта штампов")
-            if let v = venue, v.pointsEnabled {
+            if let v = venue, draft.enabled {
                 // Механика одна на заведение: пока включены баллы САН, штампы не
                 // начисляются (сервер отвечает `loyalty_is_points`). Показываем
                 // это здесь, а не даём щёлкать тумблером впустую.
-                SanNoteCard(text: "У заведения включены баллы САН — карта штампов не начисляется. Механика лояльности одна: либо баллы, либо штампы.")
+                SanNoteCard(text: v.pointsEnabled
+                    ? "У заведения включены баллы САН — карта штампов не начисляется. Механика лояльности одна: либо баллы, либо штампы."
+                    : "После сохранения баллов САН карта штампов перестанет начисляться. Механика лояльности одна: либо баллы, либо штампы.")
             } else if let v = venue {
                 VStack(spacing: 0) {
                     SanGradientToggle(title: "Программа лояльности",
@@ -172,12 +235,10 @@ struct HostLoyaltyView: View {
                 ForEach(host.state.venues) { v in
                     let isOn = v.id == venue?.id
                     Button {
-                        SanHaptics.selection()
-                        // Черновик награды принадлежит прошлому заведению:
-                        // дописываем его туда и начинаем с чистого поля.
-                        flushRewardDraft()
-                        selectedVenueID = v.id
-                        rewardDraft = nil
+                        guard !isOn else { return }
+                        // Несохранённые правки баллов не переносим молча на
+                        // другое заведение — спрашиваем.
+                        if isDirty { pendingSwitchID = v.id } else { switchVenue(to: v.id) }
                     } label: {
                         Text(v.name)
                             .font(.golos(13, .bold))
@@ -196,48 +257,101 @@ struct HostLoyaltyView: View {
         .scrollClipDisabled()
     }
 
+    // MARK: Баллы САН — главный тумблер
+
+    private var pointsMasterSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            eyebrow("Баллы САН")
+            VStack(spacing: 0) {
+                SanGradientToggle(title: "Начислять баллы САН",
+                                  subtitle: "Гость копит баллы у вас и тратит их на ваши награды",
+                                  isOn: $draft.enabled)
+                    .padding(.horizontal, 16).padding(.vertical, 13)
+            }
+            .sanGroupCard(radius: SanRadius.card)
+            Text("Механика лояльности одна на заведение: пока включены баллы, штампы не начисляются.")
+                .font(.golos(11.5)).foregroundStyle(Color.sanInkSoft)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
     // MARK: Как начисляем
 
     private var modesSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             eyebrow("Как начисляем")
-            HStack(spacing: 8) {
-                modeCard("Фикс", "Столько же за любой визит", mode: "flat")
-                modeCard("Диапазоны", "По сумме чека", mode: "bands")
-                modeCard("Кэшбэк", "% от чека баллами", mode: "cashback")
-            }
-            Text("Режим задаётся в админ-панели — здесь он только показан.")
-                .font(.golos(11.5)).foregroundStyle(Color.sanInkSoft)
-        }
-    }
-
-    private func modeCard(_ title: LocalizedStringKey, _ sub: LocalizedStringKey, mode: String) -> some View {
-        let isOn = (venue?.pointsMode ?? "flat") == mode
-        return VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.golos(13.5, .heavy))
-                .foregroundStyle(isOn ? Color.white : Color.sanInk)
-            Text(sub)
-                .font(.golos(11))
-                .foregroundStyle(isOn ? Color.white.opacity(0.88) : Color.sanInkSoft)
+            SanSegmented(items: HostForms.PointsLimits.modes,
+                         title: Self.modeTitle, selection: $draft.mode)
+            Text(Self.modeHint(draft.mode))
+                .font(.golos(12)).foregroundStyle(Color.sanInkSoft)
                 .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(13)
-        .background {
-            let shape = RoundedRectangle(cornerRadius: 18, style: .continuous)
-            if isOn {
-                shape.fill(LinearGradient.sanAccentGradient)
-                    .shadow(color: Color.sanAccent.opacity(0.28), radius: 12, y: 10)
-            } else {
-                shape.fill(Color.sanSurface)
-                    .overlay(shape.strokeBorder(Color.sanHairline, lineWidth: 0.5))
+            SanFieldCard {
+                switch draft.mode {
+                case "cashback":
+                    SanFieldRow(label: "Кэшбэк, %", hint: "До 20% от суммы чека возвращается баллами") {
+                        SanFieldInput(placeholder: "5", text: $draft.cashback, keyboard: .decimalPad)
+                    }
+                case "bands":
+                    bandsEditor
+                default:
+                    SanFieldRow(label: "Баллов за визит", hint: "Одинаково за любой чек, до 10 000") {
+                        SanFieldInput(placeholder: "50", text: $draft.flat, keyboard: .numberPad)
+                    }
+                }
             }
         }
     }
 
-    private var cooldownMinutes: Int {
-        PointsMath.effectiveCooldownMinutes(venue?.earnCooldownMinutes ?? PointsMath.defaultEarnCooldownMinutes)
+    private static func modeTitle(_ mode: String) -> String {
+        switch mode {
+        case "bands": return "Диапазоны"
+        case "cashback": return "Кэшбэк"
+        default: return "Фикс"
+        }
+    }
+
+    private static func modeHint(_ mode: String) -> LocalizedStringKey {
+        switch mode {
+        case "bands": return "Баллы зависят от суммы чека: сотрудник выбирает диапазон при скане."
+        case "cashback": return "Процент от чека возвращается баллами: сотрудник вводит сумму при скане."
+        default: return "Одинаковое число баллов за любой визит — сумму чека вводить не нужно."
+        }
+    }
+
+    // MARK: Диапазоны
+
+    @ViewBuilder private var bandsEditor: some View {
+        ForEach($draft.bands) { $band in
+            bandRow($band)
+            SanHairline(leading: 16)
+        }
+        if draft.bands.isEmpty {
+            Text("Пока ни одного диапазона — гость ничего не получит.")
+                .font(.golos(12.5)).foregroundStyle(Color.sanInkSoft)
+                .padding(.horizontal, 16).padding(.top, 13)
+        }
+        addRowButton("Добавить диапазон") {
+            draft.bands.append(.init(id: Self.newID("pb"), maxAmount: "", points: ""))
+        }
+        Text("Диапазоны идут по возрастанию суммы; чек больше последней границы попадает в последний диапазон.")
+            .font(.golos(11.5)).foregroundStyle(Color.sanInkSoft)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 16).padding(.bottom, 13)
+    }
+
+    private func bandRow(_ band: Binding<PointsDraft.BandRow>) -> some View {
+        HStack(spacing: 8) {
+            caption("до")
+            SanFieldInput(placeholder: "500", text: band.maxAmount, keyboard: .numberPad)
+                .frame(width: 72)
+            caption("сом →")
+            SanFieldInput(placeholder: "10", text: band.points, keyboard: .numberPad)
+                .frame(width: 64)
+            caption("баллов")
+            Spacer(minLength: 4)
+            removeButton { draft.bands.removeAll { $0.id == band.wrappedValue.id } }
+        }
+        .padding(.horizontal, 16).padding(.vertical, 12)
     }
 
     // MARK: Награды
@@ -245,43 +359,79 @@ struct HostLoyaltyView: View {
     private var rewardsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             eyebrow("Награды")
-            let rewards = venue?.pointsRewards ?? []
-            if rewards.isEmpty {
-                Text("Награды пока не заведены — их настраивает админ-панель.")
+            if draft.rewards.isEmpty {
+                Text("Добавьте хотя бы одну награду — иначе гостю не на что тратить баллы.")
                     .font(.golos(13)).foregroundStyle(Color.sanInkSoft)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(16)
                     .sanCard(padding: 0, radius: SanRadius.card)
-            } else {
-                ForEach(Array(rewards.enumerated()), id: \.element.id) { index, r in
-                    rewardRow(r).sanRise(index, stagger: 0.07, duration: 0.5)
-                }
             }
+            ForEach($draft.rewards) { $reward in
+                rewardCard($reward)
+            }
+            Button {
+                SanHaptics.selection()
+                withAnimation(.sanStandard) {
+                    draft.rewards.append(.init(id: Self.newID("rw"), title: "", type: "item",
+                                               cost: "", ratio: "1", active: true))
+                }
+            } label: {
+                Label("Добавить награду", systemImage: "plus")
+            }
+            .buttonStyle(SanPillButton(accent: true))
         }
     }
 
-    private func rewardRow(_ r: PointsReward) -> some View {
-        HStack(spacing: 14) {
-            RoundedRectangle(cornerRadius: 15, style: .continuous)
-                .fill(LinearGradient.sanAccentGradient)
-                .frame(width: 44, height: 44)
-                .overlay(Image(systemName: "star.fill")
-                    .font(.system(size: 18, weight: .semibold)).foregroundStyle(.white))
-            VStack(alignment: .leading, spacing: 3) {
-                Text(r.title).font(.golos(14.5, .bold)).foregroundStyle(Color.sanInk)
-                Text("\(r.cost) баллов · \(r.type == "money" ? "скидка" : "товар")")
-                    .font(.golos(12)).foregroundStyle(Color.sanInkSoft)
+    private func rewardCard(_ reward: Binding<PointsDraft.RewardRow>) -> some View {
+        let isMoney = reward.wrappedValue.type == "money"
+        return SanFieldCard {
+            SanFieldRow(label: "Название") {
+                SanFieldInput(placeholder: "Капучино в подарок", text: reward.title)
             }
-            Spacer(minLength: 8)
-            // Состояние награды — read-only: писать его может только админ-панель.
-            Text(r.active ? "Активна" : "Выключена")
-                .font(.golos(12, .bold))
-                .foregroundStyle(r.active ? Color.sanOpen : Color.sanInkSoft)
-                .padding(.horizontal, 11).padding(.vertical, 6)
-                .background((r.active ? Color.sanOpen : Color.sanInkSoft).opacity(0.12), in: Capsule())
+            SanHairline(leading: 16)
+            SanFieldRow(label: "Тип",
+                        hint: isMoney ? "Гость списывает баллы как скидку с чека"
+                                      : "Конкретный товар или услуга за фиксированную цену в баллах") {
+                SanSegmented(items: ["item", "money"],
+                             title: { $0 == "money" ? "Скидка сомами" : "Товар" },
+                             selection: reward.type)
+            }
+            SanHairline(leading: 16)
+            SanFieldRow(label: isMoney ? "Минимум баллов к списанию" : "Стоимость, баллов") {
+                SanFieldInput(placeholder: "100", text: reward.cost, keyboard: .numberPad)
+            }
+            if isMoney {
+                SanHairline(leading: 16)
+                SanFieldRow(label: "Курс", hint: "Не меньше 1 сома за балл") {
+                    HStack(spacing: 8) {
+                        caption("1 балл =")
+                        SanFieldInput(placeholder: "1", text: reward.ratio, keyboard: .decimalPad)
+                            .frame(width: 64)
+                        caption("сом")
+                        Spacer(minLength: 0)
+                    }
+                }
+            }
+            SanHairline(leading: 16)
+            SanGradientToggle(title: "Активна",
+                              subtitle: "Выключенная награда не видна гостю",
+                              isOn: reward.active)
+                .padding(.horizontal, 16).padding(.vertical, 13)
+            SanHairline(leading: 16)
+            Button(role: .destructive) {
+                SanHaptics.selection()
+                withAnimation(.sanStandard) {
+                    draft.rewards.removeAll { $0.id == reward.wrappedValue.id }
+                }
+            } label: {
+                Label("Удалить награду", systemImage: "trash")
+                    .font(.golos(14, .semibold))
+                    .foregroundStyle(Color(hex: 0xE8556B))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16).padding(.vertical, 13)
+            }
+            .buttonStyle(.plain)
         }
-        .padding(15)
-        .sanCard(padding: 0, radius: SanRadius.card)
     }
 
     // MARK: Правила
@@ -289,42 +439,25 @@ struct HostLoyaltyView: View {
     private var rulesSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             eyebrow("Правила")
-            VStack(spacing: 0) {
-                ruleRow("Пауза между начислениями", "защищает от повторного скана одного чека",
-                        "\(cooldownMinutes) мин")
+            SanFieldCard {
+                SanFieldRow(label: "Пауза между начислениями, мин",
+                            hint: "Защита от повторного скана одного чека. 0 — без паузы, начислять на каждом скане; максимум 1440.") {
+                    SanFieldInput(placeholder: "60", text: $draft.cooldownMinutes, keyboard: .numberPad)
+                }
                 SanHairline(leading: 16)
-                ruleRow("Срок сгорания", "с последней активности гостя",
-                        "\(expiryMonths) мес")
+                SanFieldRow(label: "Срок сгорания, мес",
+                            hint: "С последней активности гостя, от 1 до 24") {
+                    SanFieldInput(placeholder: "6", text: $draft.expiryMonths, keyboard: .numberPad)
+                }
                 SanHairline(leading: 16)
-                ruleRow("Кто списывает", "сотрудник сканирует QR награды",
-                        (venue?.redeemMode ?? "staffScan") == "staffScan" ? "Сотрудник" : "Гость")
+                SanGradientToggle(title: "Гость списывает сам в приложении",
+                                  subtitle: "Выключено — награду сканирует сотрудник по QR гостя",
+                                  isOn: Binding(
+                                    get: { draft.redeemMode == "customerInitiated" },
+                                    set: { draft.redeemMode = $0 ? "customerInitiated" : "staffScan" }))
+                    .padding(.horizontal, 16).padding(.vertical, 13)
             }
-            .sanGroupCard(radius: SanRadius.card)
         }
-    }
-
-    private var expiryMonths: Int {
-        // 0 здесь не значение, а «не настроено» — пол в 1 месяц (см. CLAUDE.md).
-        let raw = venue?.pointsExpiryMonths ?? 0
-        return raw > 0 ? raw : 6
-    }
-
-    private func ruleRow(_ title: LocalizedStringKey, _ hint: LocalizedStringKey,
-                         _ value: String) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title).font(.golos(14.5, .semibold)).foregroundStyle(Color.sanInk)
-                Text(hint)
-                    .font(.golos(11.5)).foregroundStyle(Color.sanInkSoft)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer(minLength: 8)
-            Text(value)
-                .font(.golos(14.5, .heavy))
-                .foregroundStyle(Color.sanAccentTextStrong)
-                .lineLimit(1).fixedSize()
-        }
-        .padding(.horizontal, 16).padding(.vertical, 14)
     }
 
     // MARK: Что видит гость
@@ -343,39 +476,168 @@ struct HostLoyaltyView: View {
                 .padding(6)
                 .background(Color.sanSurfaceMuted,
                             in: RoundedRectangle(cornerRadius: 30, style: .continuous))
-            Text("Так карта выглядит у гостя")
+            Text("Так карта выглядит у гостя — с учётом несохранённых правок")
                 .font(.golos(11.5)).foregroundStyle(Color.sanInkSoft)
         }
     }
 
-    /// Доменное заведение для превью — конфиг баллов текущего заведения как есть.
+    /// Доменное заведение для превью — черновик, уже приведённый к серверным
+    /// ограничениям, чтобы гость видел то же, что сохранится.
     private var previewVenue: Venue? {
         guard let dto = venue else { return nil }
-        var v = Venue(id: dto.id, name: dto.name, category: .cafe, district: "",
-                      address: "", phone: "", emoji: "⭐️",
-                      gradient: Venue.defaultGradient)
+        var v = HostForms.applyPoints(to: dto, fields: draft.fields).asVenue
         v.pointsEnabled = true
-        v.pointsMode = dto.pointsMode
-        v.pointsFlat = dto.pointsFlat
-        v.cashbackPercent = dto.cashbackPercent
-        v.pointsRewards = dto.pointsRewards
         return v
     }
 
-    // MARK: Подвал
+    // MARK: Подвал — сохранение
 
-    private var footer: some View {
-        Text("Настройки баллов меняются через менеджера Ayant")
-            .font(.golos(12.5)).foregroundStyle(Color.sanInkSoft)
-            .frame(maxWidth: .infinity)
+    private var saveFooter: some View {
+        SanStickyFooter {
+            Button("Сохранить") { savePoints() }
+                .buttonStyle(SanPrimaryButton())
+                .disabled(!isDirty)
+                .opacity(isDirty ? 1 : 0.6)
+            Group {
+                if savedFlash {
+                    Label("Сохранено", systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(Color.sanOpen)
+                } else if isDirty {
+                    Text("Новые правила применяются к следующим сканам сразу после сохранения.")
+                        .foregroundStyle(Color(hex: 0x9A9188))
+                } else {
+                    Text("Изменений нет.")
+                        .foregroundStyle(Color(hex: 0x9A9188))
+                }
+            }
+            .font(.golos(11.5, .semibold))
             .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+        }
     }
+
+    // MARK: Мелочи
 
     private func eyebrow(_ text: LocalizedStringKey) -> some View {
         Text(text)
             .textCase(.uppercase)
             .sanEyebrowText()
             .foregroundStyle(Color.sanInkSoft)
+    }
+
+    private func caption(_ text: LocalizedStringKey) -> some View {
+        Text(text).font(.golos(13)).foregroundStyle(Color.sanInkSoft).fixedSize()
+    }
+
+    private func removeButton(_ action: @escaping () -> Void) -> some View {
+        Button {
+            SanHaptics.selection()
+            withAnimation(.sanStandard) { action() }
+        } label: {
+            Image(systemName: "minus.circle.fill")
+                .font(.system(size: 20))
+                .foregroundStyle(Color(hex: 0xE8556B))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Удалить")
+    }
+
+    private func addRowButton(_ title: LocalizedStringKey, _ action: @escaping () -> Void) -> some View {
+        Button {
+            SanHaptics.selection()
+            withAnimation(.sanStandard) { action() }
+        } label: {
+            Label(title, systemImage: "plus.circle.fill")
+                .font(.golos(14, .semibold))
+                .foregroundStyle(Color.sanAccentText)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16).padding(.vertical, 13)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private static func newID(_ prefix: String) -> String {
+        "\(prefix)_\(UUID().uuidString.prefix(8))"
+    }
+}
+
+// MARK: - Черновик конфига баллов
+
+/// Форма баллов в том виде, в каком её держат текстовые поля: числа — строками,
+/// чтобы пустое поле и «в процессе набора» не превращались в 0 на каждом
+/// символе. В `PointsFields` конвертируется один раз, при сохранении.
+private struct PointsDraft: Equatable {
+    struct BandRow: Identifiable, Equatable {
+        let id: String
+        var maxAmount: String
+        var points: String
+    }
+    struct RewardRow: Identifiable, Equatable {
+        let id: String
+        var title: String
+        var type: String      // "item" | "money"
+        var cost: String
+        var ratio: String
+        var active: Bool
+    }
+
+    var enabled = false
+    var mode = "flat"
+    var flat = ""
+    var cashback = ""
+    var bands: [BandRow] = []
+    var rewards: [RewardRow] = []
+    var expiryMonths = ""
+    var cooldownMinutes = ""
+    var redeemMode = "staffScan"
+
+    init() {}
+
+    init(_ dto: HostVenueDTO) {
+        let f = HostForms.pointsFields(from: dto)
+        enabled = f.pointsEnabled
+        mode = f.pointsMode
+        flat = f.pointsFlat > 0 ? String(f.pointsFlat) : ""
+        cashback = f.cashbackPercent > 0 ? f.cashbackPercent.sanPercentText : ""
+        bands = f.pointsBands.enumerated().map { i, b in
+            BandRow(id: "pb_\(i)", maxAmount: String(b.maxAmount), points: String(b.points))
+        }
+        rewards = f.pointsRewards.map { r in
+            RewardRow(id: r.id, title: r.title, type: r.type, cost: String(r.cost),
+                      ratio: r.ratio.sanPercentText, active: r.active)
+        }
+        expiryMonths = String(f.pointsExpiryMonths)
+        cooldownMinutes = String(f.earnCooldownMinutes)
+        redeemMode = f.redeemMode
+    }
+
+    /// Поля формы для стора. Пустое/нечитаемое число — 0 (или 1 для курса);
+    /// дальше `HostForms.applyPoints` доводит до допустимых границ.
+    var fields: HostForms.PointsFields {
+        HostForms.PointsFields(
+            pointsEnabled: enabled,
+            pointsMode: mode,
+            pointsFlat: Self.int(flat),
+            pointsBands: bands.map { PointsBand(maxAmount: Self.int($0.maxAmount),
+                                                points: Self.int($0.points)) },
+            cashbackPercent: Self.double(cashback),
+            pointsRewards: rewards.map { r in
+                PointsReward(id: r.id, type: r.type, title: r.title,
+                             cost: Self.int(r.cost),
+                             ratio: Self.double(r.ratio, fallback: 1), active: r.active)
+            },
+            pointsExpiryMonths: Self.int(expiryMonths),
+            redeemMode: redeemMode,
+            earnCooldownMinutes: Self.int(cooldownMinutes))
+    }
+
+    private static func int(_ s: String) -> Int {
+        Int(s.trimmingCharacters(in: .whitespaces)) ?? 0
+    }
+
+    /// Десятичная запятая — норма на русской клавиатуре.
+    private static func double(_ s: String, fallback: Double = 0) -> Double {
+        Double(s.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: ".")) ?? fallback
     }
 }
 

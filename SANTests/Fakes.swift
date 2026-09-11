@@ -112,3 +112,34 @@ final class FakePushService: PushService {
     private(set) var unregisteredTopics: [String] = []
     func unregisterDevice(topics: [String]) async { unregisteredTopics = topics }
 }
+
+/// Кабинет хоста: помнит, что ему сохранили, и отдаёт то, что «лежит на сервере».
+/// `saveError` имитирует отказ Firestore (правила, сеть) на записи.
+@MainActor
+final class FakeHostRepository: HostRepository {
+    var remoteVenues: [HostVenueDTO] = []
+    var remoteDeals: [HostDealDTO] = []
+    var remoteProfile: HostProfile?
+    var savedVenues: [HostVenueDTO] = []
+    var savedDeals: [HostDealDTO] = []
+    var deletedVenueIDs: [String] = []
+    var deletedDealIDs: [String] = []
+    var saveError: Error?
+
+    func saveVenue(_ dto: HostVenueDTO, ownerID: String) async throws {
+        if let saveError { throw saveError }
+        savedVenues.append(dto)
+    }
+    func deleteVenue(id: String) async throws { deletedVenueIDs.append(id) }
+    func saveDeal(_ dto: HostDealDTO, ownerID: String) async throws {
+        if let saveError { throw saveError }
+        savedDeals.append(dto)
+    }
+    func deleteDeal(id: String) async throws { deletedDealIDs.append(id) }
+    func fetchOwnedVenues(ownerID: String) async throws -> [HostVenueDTO] { remoteVenues }
+    func fetchOwnedDeals(ownerID: String) async throws -> [HostDealDTO] { remoteDeals }
+    func saveProfile(_ profile: HostProfile, ownerID: String) async throws { remoteProfile = profile }
+    func fetchProfile(ownerID: String) async throws -> HostProfile? { remoteProfile }
+    func queuePushCampaign(headline: String, body: String, city: String,
+                           category: String?, venueID: String, dealID: String?, ownerID: String) async throws {}
+}
