@@ -18,19 +18,6 @@ struct MyQRView: View {
 
     @State private var sweep = false
     @State private var shimmer = false
-    /// Балансы на момент открытия экрана — база, с которой сравниваем приход.
-    @State private var baseline: [String: Int] = [:]
-    @State private var earned: EarnedEvent?
-
-    /// Что принёс snapshot-листенер, пока экран открыт.
-    struct EarnedEvent: Identifiable {
-        let id = UUID()
-        let delta: Int
-        let venueName: String
-        let venueSubtitle: String
-        let newBalance: Int
-    }
-
     private var userID: String { points.state.userID }
     private var earnCode: String { "AYANT-PTS:\(userID)" }
 
@@ -102,7 +89,6 @@ struct MyQRView: View {
             }
         }
         .onAppear {
-            baseline = currentBalances
             guard !reduceMotion else { return }
             withAnimation(.easeInOut(duration: SanTiming.qrSweep).repeatForever(autoreverses: false)) {
                 sweep = true
@@ -113,42 +99,9 @@ struct MyQRView: View {
         }
         // Бесконечные анимации не крутятся за закрытым экраном (ANIMATIONS.md §17).
         .onDisappear { withoutAnimation { sweep = false; shimmer = false } }
-        // Сотрудник просканировал код → Cloud Function записала баланс →
-        // листенер принёс его сюда. Клиент ничего не считает: он лишь замечает
-        // приход и анимирует счётчик К серверному значению.
-        .onChange(of: points.state.cards.value ?? []) { _, cards in
-            detectEarn(in: cards)
-        }
-        .fullScreenCover(item: $earned) { event in
-            PointsEarnedView(delta: event.delta,
-                             venueName: event.venueName,
-                             venueSubtitle: event.venueSubtitle,
-                             newBalance: event.newBalance) {
-                earned = nil
-                dismiss()
-            }
-        }
-    }
-
-    private var currentBalances: [String: Int] {
-        Dictionary((points.state.cards.value ?? []).map { ($0.venueID, $0.balance) },
-                   uniquingKeysWith: { a, _ in a })
-    }
-
-    private func detectEarn(in cards: [VenuePointsCard]) {
-        for card in cards {
-            let was = baseline[card.venueID]
-            // Незнакомая карта на первом снимке — не «начисление», а просто
-            // подгрузка. Показываем только рост уже известного баланса.
-            guard let was, card.balance > was else { continue }
-            let venue = store.venue(id: card.venueID)
-            earned = EarnedEvent(delta: card.balance - was,
-                                 venueName: card.venueName,
-                                 venueSubtitle: venue?.district ?? store.selectedCity.name,
-                                 newBalance: card.balance)
-            break
-        }
-        baseline = currentBalances
+        // Начисление замечает `PointsStore` (рост баланса в живом потоке), а
+        // экран «Начислено» показывает корень приложения — над любой вкладкой
+        // и только до тапа гостя. Здесь ничего ловить не нужно.
     }
 
     // MARK: Карточка с кодом

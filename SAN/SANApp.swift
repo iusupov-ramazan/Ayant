@@ -276,16 +276,33 @@ struct AppToast: View {
 /// Гейт онбординга + переключение пользователь/хост.
 struct SignedInRootView: View {
     @EnvironmentObject private var host: HostStore
+    @EnvironmentObject private var store: AppStore
+    @EnvironmentObject private var points: PointsStore
     @AppStorage("san.onboarded") private var onboarded = false
     @AppStorage("san.hostMode") private var hostMode = false
 
     var body: some View {
-        if hostMode && host.state.hasAccount {
-            HostRootView()
-        } else if onboarded {
-            RootView()
-        } else {
-            OnboardingView { onboarded = true }
+        Group {
+            if hostMode && host.state.hasAccount {
+                HostRootView()
+            } else if onboarded {
+                RootView()
+            } else {
+                OnboardingView { onboarded = true }
+            }
+        }
+        // «Начислено» — над всем приложением, на какой бы вкладке гость ни был.
+        // Событие живёт в состоянии стора и снимается только кнопкой «Отлично»:
+        // перерисовка вкладок, смена экрана, новый снимок баланса его не закрывают.
+        .fullScreenCover(item: Binding(
+            get: { hostMode && host.state.hasAccount ? nil : points.state.pendingEarn },
+            set: { if $0 == nil { points.send(.dismissEarn) } })) { event in
+            PointsEarnedView(delta: event.delta,
+                             venueName: event.venueName,
+                             venueSubtitle: store.venue(id: event.venueID)?.district ?? store.selectedCity.name,
+                             newBalance: event.newBalance) {
+                points.send(.dismissEarn)
+            }
         }
     }
 }

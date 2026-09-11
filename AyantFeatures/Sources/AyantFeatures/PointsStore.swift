@@ -40,6 +40,32 @@ public final class PointsStore: ObservableObject {
             redeem(venueID: venueID, rewardID: rewardID, pointsToSpend: points)
         case .dismissRedeem:         state.redeem = .idle
         case .loadHistory(let venueID): loadHistory(venueID: venueID)
+        case .dismissEarn:           state.pendingEarn = nil
+        }
+    }
+
+    // MARK: - Начисление
+
+    /// Балансы из ПРЕДЫДУЩЕГО снимка. `nil` до первого снимка: первая загрузка —
+    /// не начисление, а просто карты, которые уже были.
+    private var knownBalances: [String: Int]?
+
+    /// Сравнивает снимок с предыдущим и поднимает событие на рост баланса.
+    /// Раньше это делал экран «Мой QR» своим `@State`: событие жило в нём и
+    /// пропадало вместе с перерисовкой вкладки. Теперь оно в состоянии стора
+    /// и снимается только `dismissEarn`; второе начисление, пришедшее пока
+    /// экран открыт, не затирает первое.
+    private func detectEarn(in cards: [VenuePointsCard]) {
+        let now = Dictionary(cards.map { ($0.venueID, $0.balance) }, uniquingKeysWith: { a, _ in a })
+        defer { knownBalances = now }
+        guard let known = knownBalances, state.pendingEarn == nil else { return }
+        for card in cards {
+            guard let was = known[card.venueID], card.balance > was else { continue }
+            state.pendingEarn = PointsEarnEvent(
+                id: "\(card.venueID)-\(card.balance)-\(Int(clock.now.timeIntervalSince1970))",
+                venueID: card.venueID, venueName: card.venueName,
+                delta: card.balance - was, newBalance: card.balance)
+            return
         }
     }
 
@@ -76,6 +102,8 @@ public final class PointsStore: ObservableObject {
         observation?.cancel()
         state.userID = userID
 
+        knownBalances = nil
+        state.pendingEarn = nil
         guard !userID.isEmpty else {
             state.cards = .loaded([])
             return
@@ -86,7 +114,9 @@ public final class PointsStore: ObservableObject {
             for await result in repository.cards(userID: userID) {
                 if Task.isCancelled { return }
                 switch result {
-                case .success(let cards): state.cards = .loaded(cards)
+                case .success(let cards):
+                    state.cards = .loaded(cards)
+                    detectEarn(in: cards)
                 case .failure(let error):
                     // Уже показанные карты не стираем: сеть моргнула — пусть
                     // гость видит последний известный баланс, а не пустой экран.

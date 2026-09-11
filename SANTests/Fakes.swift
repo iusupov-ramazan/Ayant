@@ -153,13 +153,22 @@ final class FakePointsRepository: PointsRepository {
     var redeemError: AppError?
     var ledgerRequests = 0
 
+    /// Живой поток: тест «присылает» новые снимки через `emit`, как это делал бы
+    /// snapshot-листенер Firestore после скана сотрудником.
+    private var continuation: AsyncStream<Result<[VenuePointsCard], AppError>>.Continuation?
+
     nonisolated func cards(userID: String) -> AsyncStream<Result<[VenuePointsCard], AppError>> {
         AsyncStream { continuation in
             Task { @MainActor in
+                self.continuation = continuation
                 continuation.yield(.success(userID.isEmpty ? [] : self.cards))
-                continuation.finish()
             }
         }
+    }
+
+    func emit(_ cards: [VenuePointsCard]) {
+        self.cards = cards
+        continuation?.yield(.success(cards))
     }
 
     func redeem(venueID: String, userID: String, rewardID: String,

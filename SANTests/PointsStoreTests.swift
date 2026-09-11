@@ -72,6 +72,58 @@ final class PointsStoreTests: XCTestCase {
         XCTAssertEqual(store.state.history(for: "v1").value?.first?.kind, .redeem)
     }
 
+    // MARK: Начисление
+
+    private func card(_ venueID: String, _ balance: Int) -> VenuePointsCard {
+        VenuePointsCard(venueID: venueID, venueName: "Нават", balance: balance)
+    }
+
+    func testFirstSnapshotIsNotAnEarn() async {
+        repo.cards = [card("v1", 50)]
+        let s = PointsStore(repository: repo)
+        s.send(.observe(userID: "u1"))
+        await waitUntil(s.state.cards.value != nil)
+
+        XCTAssertNil(s.state.pendingEarn, "первая загрузка — просто карты, а не начисление")
+    }
+
+    func testBalanceGrowthRaisesEarnThatOnlyDismissClears() async {
+        repo.cards = [card("v1", 50)]
+        let s = PointsStore(repository: repo)
+        s.send(.observe(userID: "u1"))
+        await waitUntil(s.state.cards.value != nil)
+
+        repo.emit([card("v1", 80)])
+        await waitUntil(s.state.pendingEarn != nil)
+        XCTAssertEqual(s.state.pendingEarn?.delta, 30)
+        XCTAssertEqual(s.state.pendingEarn?.newBalance, 80)
+
+        // Новый снимок без роста (и даже с ростом) не закрывает и не подменяет экран.
+        repo.emit([card("v1", 80)])
+        repo.emit([card("v1", 90)])
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertEqual(s.state.pendingEarn?.delta, 30, "событие живёт до тапа гостя")
+
+        s.send(.dismissEarn)
+        XCTAssertNil(s.state.pendingEarn)
+
+        // Следующее начисление считается от последнего известного баланса.
+        repo.emit([card("v1", 100)])
+        await waitUntil(s.state.pendingEarn != nil)
+        XCTAssertEqual(s.state.pendingEarn?.delta, 10)
+    }
+
+    func testBalanceDropIsNotAnEarn() async {
+        repo.cards = [card("v1", 50)]
+        let s = PointsStore(repository: repo)
+        s.send(.observe(userID: "u1"))
+        await waitUntil(s.state.cards.value != nil)
+
+        repo.emit([card("v1", 20)])   // списание
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertNil(s.state.pendingEarn)
+    }
+
     func testGuestHistoryIsEmptyWithoutRequest() async {
         let guest = PointsStore(repository: repo)
         guest.send(.loadHistory(venueID: "v1"))

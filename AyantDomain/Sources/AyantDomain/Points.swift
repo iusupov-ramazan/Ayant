@@ -67,6 +67,25 @@ public struct PointsLedgerEntry: Identifiable, Equatable, Sendable {
     }
 }
 
+// MARK: - Событие начисления
+
+/// «Сотрудник просканировал — баллы пришли»: рост уже известного баланса,
+/// который стор заметил в живом потоке. Показывается экраном «Начислено» и
+/// снимается только рукой гостя (`dismissEarn`) — не таймером и не
+/// перерисовкой экрана, на котором его заметили.
+public struct PointsEarnEvent: Identifiable, Equatable, Sendable {
+    public let id: String
+    public let venueID: String
+    public let venueName: String
+    public let delta: Int
+    public let newBalance: Int
+
+    public init(id: String, venueID: String, venueName: String, delta: Int, newBalance: Int) {
+        self.id = id; self.venueID = venueID; self.venueName = venueName
+        self.delta = delta; self.newBalance = newBalance
+    }
+}
+
 // MARK: - Состояние
 
 /// Всё состояние экрана баллов — одним значением.
@@ -81,12 +100,16 @@ public struct PointsState: Equatable, Sendable {
     /// История по заведениям, новые сверху. Грузится по запросу экрана
     /// (`loadHistory`), а не вместе с картами: журнал длиннее и нужен реже.
     public var history: [String: LoadState<[PointsLedgerEntry]>] = [:]
+    /// Непоказанное начисление. Пока не `nil`, экран «Начислено» открыт.
+    public var pendingEarn: PointsEarnEvent?
 
     public init(userID: String = "",
                 cards: LoadState<[VenuePointsCard]> = .idle,
                 redeem: RedeemPhase = .idle,
-                history: [String: LoadState<[PointsLedgerEntry]>] = [:]) {
-        self.userID = userID; self.cards = cards; self.redeem = redeem; self.history = history
+                history: [String: LoadState<[PointsLedgerEntry]>] = [:],
+                pendingEarn: PointsEarnEvent? = nil) {
+        self.userID = userID; self.cards = cards; self.redeem = redeem
+        self.history = history; self.pendingEarn = pendingEarn
     }
 
     public func history(for venueID: String) -> LoadState<[PointsLedgerEntry]> {
@@ -136,6 +159,8 @@ public enum PointsIntent: Equatable, Sendable {
     case dismissRedeem
     /// Загрузить (или обновить) историю начислений и списаний по заведению.
     case loadHistory(venueID: String)
+    /// Гость закрыл экран «Начислено».
+    case dismissEarn
 }
 
 // MARK: - Контракт данных
