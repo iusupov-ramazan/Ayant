@@ -135,3 +135,38 @@ test("rewardReferral: к лимиту считаются только грант
     .filter(([p, d]) => p.startsWith("bonusGrants/") && d.reason === "referral");
   assert.equal(referralGrants.length, 1, "welcome-гранты не считаются к реферальному лимиту");
 });
+
+/* ── notifyHostOnReview: push владельцу заведения о новом отзыве ─────────── */
+
+test("notifyHostOnReview шлёт push на все токены владельца", async () => {
+  const h = makeHarness();
+  h.seed("venues/v9", { name: "Нават", ownerID: "owner1" });
+  h.seed("userTokens/tokA", { uid: "owner1", city: "bishkek" });
+  h.seed("userTokens/tokB", { uid: "owner1", city: "bishkek" });
+  h.seed("userTokens/tokC", { uid: "someone-else", city: "bishkek" });
+  const event = createdEvent(h, "reviews/r9",
+    { venueID: "v9", authorID: "guest1", authorName: "Айжан", rating: 5, text: "Очень вкусно" }, { id: "r9" });
+  await h.mod.notifyHostOnReview.run(event);
+
+  assert.equal(h.messagingCalls.length, 1);
+  const m = h.messagingCalls[0];
+  assert.deepEqual([...m.tokens].sort(), ["tokA", "tokB"]);
+  assert.equal(m.notification.title, "Новый отзыв · Нават");
+  assert.match(m.notification.body, /★★★★★ Айжан: Очень вкусно/);
+  assert.equal(m.data.type, "review");
+  assert.equal(m.data.venueID, "v9");
+});
+
+test("notifyHostOnReview молчит, если владелец пишет отзыв сам себе или токенов нет", async () => {
+  const h = makeHarness();
+  h.seed("venues/v9", { name: "Нават", ownerID: "owner1" });
+  h.seed("userTokens/tokA", { uid: "owner1" });
+  await h.mod.notifyHostOnReview.run(
+    createdEvent(h, "reviews/r10", { venueID: "v9", authorID: "owner1", rating: 4 }, { id: "r10" }));
+  assert.equal(h.messagingCalls.length, 0);
+
+  h.seed("venues/v10", { name: "Без токенов", ownerID: "owner2" });
+  await h.mod.notifyHostOnReview.run(
+    createdEvent(h, "reviews/r11", { venueID: "v10", authorID: "guest1", rating: 4 }, { id: "r11" }));
+  assert.equal(h.messagingCalls.length, 0);
+});

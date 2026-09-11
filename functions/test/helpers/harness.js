@@ -26,10 +26,13 @@ function makeHarness({ tokens = {} } = {}) {
       messagingCalls.push(m);
       return "msg-id";
     },
-    sendEachForMulticast: async (m) => ({
-      successCount: (m.tokens || []).length,
-      responses: (m.tokens || []).map(() => ({ success: true })),
-    }),
+    sendEachForMulticast: async (m) => {
+      messagingCalls.push(m);
+      return {
+        successCount: (m.tokens || []).length,
+        responses: (m.tokens || []).map(() => ({ success: true })),
+      };
+    },
   };
   const auth = {
     verifyIdToken: async (token) => {

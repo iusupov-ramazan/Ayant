@@ -360,7 +360,9 @@ struct HostAnalyticsView: View {
             .sanScreenBackground()
             .sanStatusBarCap()
             .toolbar(.hidden, for: .navigationBar)
-            .task(id: "\(period)-\(host.state.venues.count)") { await load() }
+            // Перечитываем и после каждого успешного скана: «Погашено купонов»
+            // растёт на сервере сразу, экран не должен ждать ручного обновления.
+            .task(id: "\(period)-\(host.state.venues.count)-\(host.state.scansCompleted)") { await load() }
             .refreshable { await load() }
         }
     }

@@ -462,8 +462,10 @@ struct HostScannerView: View {
                                               billAmount: billForReceipt,
                                               modeLabel: modeLabel,
                                               replayed: out.replayed)
+                        host.send(.noteScanSucceeded)
                     } else {
                         result = out.ok ? .success(out) : .error(Self.message(for: out.errorCode))
+                        if out.ok { host.send(.noteScanSucceeded) }
                     }
                 }
             } catch {
@@ -503,6 +505,7 @@ struct HostScannerView: View {
                                                                     idToken: token,
                                                                     idempotencyKey: key)
                 outcome = out.ok ? .redeemed(out) : .error(Self.message(for: out.errorCode))
+                if out.ok { host.send(.noteScanSucceeded) }
             } catch {
                 outcome = .error("Ошибка сети. Попробуйте ещё раз.")
                 networkFailed = true

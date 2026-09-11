@@ -93,6 +93,7 @@ public final class HostStore: ObservableObject {
         case .launchPush(let headline, let body, let venueID, let dealID):
             launchPush(headline: headline, body: body, venueID: venueID, dealID: dealID)
         case .cancelCampaign(let id):        cancelCampaign(id: id)
+        case .noteScanSucceeded:             state.scansCompleted += 1
         }
     }
 

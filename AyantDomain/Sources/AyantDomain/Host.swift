@@ -16,13 +16,19 @@ public struct HostState: Equatable {
     public var deals: [HostDealDTO] = []
     public var campaigns: [AdCampaign] = []
     public var sync: SyncPhase = .idle
+    /// Сколько успешных сканов сделано за сессию. Экраны со статистикой
+    /// перезагружаются, когда счётчик меняется: «Погашено купонов» должно
+    /// вырасти сразу после скана, а не после ручного обновления.
+    public var scansCompleted: Int = 0
 
     public init(ownerID: String = "", profile: HostProfile? = nil,
                 venues: [HostVenueDTO] = [], deals: [HostDealDTO] = [],
-                campaigns: [AdCampaign] = [], sync: SyncPhase = .idle) {
+                campaigns: [AdCampaign] = [], sync: SyncPhase = .idle,
+                scansCompleted: Int = 0) {
         self.ownerID = ownerID; self.profile = profile
         self.venues = venues; self.deals = deals
         self.campaigns = campaigns; self.sync = sync
+        self.scansCompleted = scansCompleted
     }
 
     /// Кабинет заведён — профиль создан.
@@ -112,4 +118,6 @@ public enum HostIntent: Equatable {
     case addCampaign(AdCampaign)
     case launchPush(headline: String, body: String, venueID: String, dealID: String?)
     case cancelCampaign(id: String)
+    /// Сканер успешно начислил/погасил — статистику пора перечитать.
+    case noteScanSucceeded
 }

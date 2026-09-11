@@ -97,7 +97,7 @@ struct HostVenuesView: View {
             .sanStatusBarCap(.sanHostHeader)
             .toolbar(.hidden, for: .navigationBar)
             .refreshable { host.send(.sync) }
-            .task(id: host.state.venues.count) { await loadViews() }
+            .task(id: "\(host.state.venues.count)-\(host.state.scansCompleted)") { await loadViews() }
             .navigationDestination(for: String.self) { id in
                 if let dto = host.state.venue(id: id) { HostVenueDetailView(venueID: dto.id) }
             }

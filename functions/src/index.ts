@@ -325,6 +325,45 @@ export const notifyOnNewDeal = onDocumentCreated("deals/{id}", async (event) => 
 });
 
 /* ───────────────────────────────────────────────────────────────────────────
+ * 2b) Новый отзыв → push владельцу заведения.
+ *     Адресно по FCM-токенам владельца (`userTokens` с uid == ownerID), без
+ *     частотного лимита: это не реклама, а событие по его же заведению. Свой
+ *     отзыв на своё заведение не уведомляем.
+ * ─────────────────────────────────────────────────────────────────────────── */
+export const notifyHostOnReview = onDocumentCreated("reviews/{id}", async (event) => {
+  const snap = event.data;
+  if (!snap) return;
+  const review = snap.data() || {};
+  const venueID = String(review.venueID || "");
+  if (!venueID) return;
+
+  const vdoc = await db.collection("venues").doc(venueID).get();
+  if (!vdoc.exists) return;
+  const venue = vdoc.data() || {};
+  const ownerID = String(venue.ownerID || "");
+  if (!ownerID || ownerID === String(review.authorID || "")) return;
+
+  const tokensSnap = await db.collection("userTokens").where("uid", "==", ownerID).get();
+  const tokens = tokensSnap.docs.map((d) => d.id).filter((t) => t.length > 0);
+  if (tokens.length === 0) { console.log(`🔕 review push: no tokens for owner ${ownerID}`); return; }
+
+  const rating = Math.max(0, Math.min(5, parseInt(String(review.rating), 10) || 0));
+  const stars = rating > 0 ? "★".repeat(rating) + "☆".repeat(5 - rating) + " " : "";
+  const author = String(review.authorName || "Гость");
+  const text = String(review.text || "").trim();
+  const body = `${stars}${author}${text ? ": " + (text.length > 120 ? text.slice(0, 117) + "…" : text) : ""}`;
+
+  const res = await getMessaging().sendEachForMulticast({
+    tokens,
+    notification: { title: `Новый отзыв · ${String(venue.name || "заведение")}`, body },
+    data: { type: "review", reviewID: event.params.id, venueID },
+    apns: { payload: { aps: { sound: "default", badge: 1 } } },
+    android: { notification: { sound: "default" }, priority: "high" },
+  });
+  console.log(`🔔 review push → owner ${ownerID}: ${res.successCount}/${tokens.length} delivered`);
+});
+
+/* ───────────────────────────────────────────────────────────────────────────
  * 3) Погашение купона → серверный авторитетный счётчик (analytics) + анти-абуз.
  *    Приложение пишет redemptions/{userID}_{dealID} (детерминированный id ⇒
  *    повторное погашение не создаёт новый документ). Здесь увеличиваем счётчик.
@@ -949,7 +988,10 @@ export const scanCoupon = onRequest(MONEY_PATH_OPTS, async (req, res) => {
 
     const day = dayKey();
     db.collection("analytics").doc(venueID).collection("days").doc(day)
-      .set({ redemptions: FieldValue.increment(1) }, { merge: true }).catch(() => {});
+      .set({ redemptions: FieldValue.increment(1), date: day }, { merge: true })
+      // Не роняем ответ на скан, но и не глотаем молча: без строки в логах
+      // «погашено не растёт» нечем было бы объяснить.
+      .catch((e) => console.warn(`⚠️ analytics redemptions increment failed: venue=${venueID}`, e));
 
     // Авторитетная метка погашения для обучения весов выдачи (кросс-платформенно).
     // Нужен userID купона для склейки с impression/tap; иначе метка бесполезна.
