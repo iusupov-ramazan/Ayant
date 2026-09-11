@@ -238,9 +238,16 @@ struct DealDetailView: View {
                 }
                 if !venue.phone.trimmingCharacters(in: .whitespaces).isEmpty,
                    let url = URL(string: "tel:\(venue.phone.filter { !$0.isWhitespace })") {
-                    Link(destination: url) {
+                    // Кнопка, а не `Link`: звонок по номеру — такое же обращение,
+                    // как по кнопке «Позвонить», и должен попадать в аналитику.
+                    Button {
+                        store.log(AnalyticsMetric.calls, for: venue.id)
+                        openURL(url)
+                    } label: {
                         Label(venue.phone, systemImage: "phone.fill").font(.subheadline)
                     }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.sanAccentText)
                 }
             }
             .padding(.horizontal, 16)
@@ -957,7 +964,10 @@ struct VenueDetailView: View {
                 .buttonStyle(.plain)
                 if showAllBranches {
                     ForEach(venue.branches) { b in
-                        Button { openURL(Directions.dgis(lat: b.latitude, lng: b.longitude)) } label: {
+                        Button {
+                            detail.send(.logContact(.maps))
+                            openURL(Directions.dgis(lat: b.latitude, lng: b.longitude))
+                        } label: {
                             HStack {
                                 Label(b.address, systemImage: "mappin.and.ellipse").font(.subheadline)
                                 Spacer()
@@ -970,7 +980,15 @@ struct VenueDetailView: View {
             }
             if !venue.phone.trimmingCharacters(in: .whitespaces).isEmpty,
                let url = URL(string: "tel:\(venue.phone.filter { !$0.isWhitespace })") {
-                Link(destination: url) { Label(venue.phone, systemImage: "phone.fill").font(.subheadline) }
+                // Тап по номеру считается обращением наравне с кнопкой «Позвонить».
+                Button {
+                    detail.send(.logContact(.call))
+                    openURL(url)
+                } label: {
+                    Label(venue.phone, systemImage: "phone.fill").font(.subheadline)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.sanAccentText)
             }
             if venue.whatsappURL != nil || venue.instagramURL != nil || venue.telegramURL != nil {
                 HStack(spacing: 12) {
