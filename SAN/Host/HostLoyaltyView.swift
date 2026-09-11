@@ -9,24 +9,29 @@ import AyantFeatures
 /// не сохранял, убраны — цифры, за которыми не стоит данных, подрывают доверие
 /// ко всему экрану.
 ///
-/// Конфиг баллов теперь правит сам владелец: режим, награды и правила
-/// собираются в черновик (`PointsDraft`), одна кнопка «Сохранить» отправляет
-/// `HostIntent.savePointsConfig`, а серверные ограничения (кэшбэк ≤ 20 %,
-/// пауза 0…1440 мин и т. д.) накладывает чистый `HostForms.applyPoints`.
-/// Админ-панель правит те же поля Firestore — кто сохранил последним, тот и прав.
+/// Экран по умолчанию — сводка настроек; «Изменить настройки» открывает
+/// редактор, где карта штампов и баллы собираются в черновики (`StampDraft`,
+/// `PointsDraft`) и уходят одной кнопкой «Сохранить»: штампы — через
+/// `saveVenue`, баллы — через `HostIntent.savePointsConfig`, где серверные
+/// ограничения (кэшбэк ≤ 20 %, пауза 0…1440 мин и т. д.) накладывает чистый
+/// `HostForms.applyPoints`. Админ-панель правит те же поля Firestore — кто
+/// сохранил последним, тот и прав.
 struct HostLoyaltyView: View {
     @EnvironmentObject private var host: HostStore
 
     @State private var selectedVenueID: String?
-    /// Черновик текста награды карты штампов, пока пользователь печатает.
-    /// Сохраняется по Return, по паузе в наборе (`rewardCommit`) и при смене заведения.
-    @State private var rewardDraft: String?
-    @State private var rewardCommit: Task<Void, Never>?
+    /// Экран по умолчанию только показывает настройки; правка — по кнопке
+    /// «Изменить», сохранение — по «Сохранить». Автосохранения на каждый
+    /// символ больше нет: оно оставляло клавиатуру открытой и писало в
+    /// Firestore на каждый тап степпера.
+    @State private var isEditing = false
 
-    /// Черновик конфига баллов и снимок, с которого он начат: «есть правки» —
-    /// это `draft != baseline`, без отдельных флагов.
+    /// Черновики и снимки, с которых они начаты: «есть правки» — это
+    /// `draft != baseline`, без отдельных флагов.
     @State private var draft = PointsDraft()
     @State private var baseline = PointsDraft()
+    @State private var stamps = StampDraft()
+    @State private var stampsBaseline = StampDraft()
     /// Заведение, на которое хотят переключиться при несохранённых правках.
     @State private var pendingSwitchID: String?
     @State private var savedFlash = false
@@ -36,15 +41,17 @@ struct HostLoyaltyView: View {
         host.state.venues.first { $0.id == selectedVenueID } ?? host.state.venues.first
     }
 
-    private var isDirty: Bool { draft != baseline }
+    private var isDirty: Bool { draft != baseline || stamps != stampsBaseline }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
                     header
-                    stampCardSection
-                    if venue != nil {
+                    if venue == nil {
+                        SanNoteCard(text: "Добавьте заведение, чтобы настроить карту штампов и баллы САН.")
+                    } else if isEditing {
+                        stampEditor
                         pointsMasterSection
                         if draft.enabled {
                             modesSection
@@ -52,6 +59,10 @@ struct HostLoyaltyView: View {
                             rulesSection
                             guestPreview
                         }
+                    } else {
+                        stampSummary
+                        pointsSummary
+                        if draft.enabled { guestPreview }
                     }
                 }
                 .padding(.horizontal, SanMetrics.screenPadding)
@@ -59,8 +70,9 @@ struct HostLoyaltyView: View {
                 .padding(.bottom, 28)
                 .sanScreenEnter()
             }
+            .scrollDismissesKeyboard(.interactively)
             .safeAreaInset(edge: .bottom) {
-                if venue != nil { saveFooter }
+                if venue != nil { footer }
             }
             .sanScreenBackground()
             .sanStatusBarCap()
@@ -70,10 +82,9 @@ struct HostLoyaltyView: View {
                 loadDraft()
             }
             .onChange(of: venue?.id) { _, _ in loadDraft() }
-            // Синк с сервера обновил заведение, пока правок нет — подхватываем,
-            // но недописанный черновик не затираем.
-            .onChange(of: host.state.venues) { _, _ in if !isDirty { loadDraft() } }
-            .onDisappear { flushRewardDraft() }
+            // Синк с сервера обновил заведение, пока никто не правит —
+            // подхватываем; открытый редактор не затираем.
+            .onChange(of: host.state.venues) { _, _ in if !isEditing { loadDraft() } }
             .confirmationDialog("Несохранённые изменения",
                                 isPresented: Binding(get: { pendingSwitchID != nil },
                                                      set: { if !$0 { pendingSwitchID = nil } }),
@@ -84,34 +95,64 @@ struct HostLoyaltyView: View {
                 }
                 Button("Остаться", role: .cancel) { pendingSwitchID = nil }
             } message: {
-                Text("Настройки баллов этого заведения не сохранены. Перейти к другому заведению?")
+                Text("Настройки этого заведения не сохранены. Перейти к другому заведению?")
             }
         }
     }
 
-    // MARK: Черновик баллов
+    // MARK: Черновики
 
     private func loadDraft() {
         let d = venue.map { PointsDraft($0) } ?? PointsDraft()
         draft = d
         baseline = d
+        let st = venue.map { StampDraft($0) } ?? StampDraft()
+        stamps = st
+        stampsBaseline = st
     }
 
     private func switchVenue(to id: String) {
         SanHaptics.selection()
-        // Черновик награды карты штампов принадлежит прошлому заведению:
-        // дописываем его туда и начинаем с чистого поля.
-        flushRewardDraft()
+        dismissKeyboard()
+        isEditing = false
         selectedVenueID = id
-        rewardDraft = nil
     }
 
-    private func savePoints() {
+    private func startEditing() {
+        SanHaptics.selection()
+        loadDraft()
+        withAnimation(.sanStandard) { isEditing = true }
+    }
+
+    private func cancelEditing() {
+        SanHaptics.selection()
+        dismissKeyboard()
+        loadDraft()
+        withAnimation(.sanStandard) { isEditing = false }
+    }
+
+    /// Одна кнопка на обе части экрана: карта штампов уходит через
+    /// `saveVenue` (форма целиком, чтобы не затереть остальные поля), баллы —
+    /// через `savePointsConfig`, где чистый `HostForms.applyPoints` накладывает
+    /// серверные ограничения.
+    private func saveAll() {
         guard let v = venue else { return }
+        dismissKeyboard()
         SanHaptics.save()
-        host.send(.savePointsConfig(venueID: v.id, fields: draft.fields))
+        if stamps != stampsBaseline {
+            var fields = HostForms.fields(from: v)
+            fields.loyaltyEnabled = stamps.enabled
+            fields.loyaltyGoal = stamps.goal
+            let reward = stamps.reward.trimmingCharacters(in: .whitespacesAndNewlines)
+            fields.loyaltyReward = reward.isEmpty ? v.loyaltyReward : reward
+            host.send(.saveVenue(existing: v, fields: fields))
+        }
+        if draft != baseline {
+            host.send(.savePointsConfig(venueID: v.id, fields: draft.fields))
+        }
         // Стор уже применил ограничения — показываем то, что реально сохранилось.
         loadDraft()
+        withAnimation(.sanStandard) { isEditing = false }
         savedFlashTask?.cancel()
         withAnimation(.sanStandard) { savedFlash = true }
         savedFlashTask = Task { @MainActor in
@@ -121,103 +162,173 @@ struct HostLoyaltyView: View {
         }
     }
 
-    // MARK: Карта штампов
+    /// Снимает фокус с любого поля. После «Сохранить» клавиатура оставалась
+    /// открытой поверх результата — экран выглядел так, будто ничего не произошло.
+    private func dismissKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                        to: nil, from: nil, for: nil)
+    }
 
-    private var stampCardSection: some View {
+    // MARK: Карта штампов — просмотр
+
+    private var stampSummary: some View {
         VStack(alignment: .leading, spacing: 12) {
             eyebrow("Карта штампов")
-            if let v = venue, draft.enabled {
-                // Механика одна на заведение: пока включены баллы САН, штампы не
-                // начисляются (сервер отвечает `loyalty_is_points`). Показываем
-                // это здесь, а не даём щёлкать тумблером впустую.
-                SanNoteCard(text: v.pointsEnabled
-                    ? "У заведения включены баллы САН — карта штампов не начисляется. Механика лояльности одна: либо баллы, либо штампы."
-                    : "После сохранения баллов САН карта штампов перестанет начисляться. Механика лояльности одна: либо баллы, либо штампы.")
-            } else if let v = venue {
-                VStack(spacing: 0) {
-                    SanGradientToggle(title: "Программа лояльности",
-                                      subtitle: "Штамп за каждый использованный купон",
-                                      isOn: Binding(
-                                        get: { v.loyaltyEnabled },
-                                        set: { on in commit(v) { $0.loyaltyEnabled = on } }))
-                        .padding(.horizontal, 16).padding(.vertical, 13)
-
-                    if v.loyaltyEnabled {
-                        SanHairline(leading: 16)
-                        SanFieldRow(label: "Штампов до награды") {
-                            Stepper(value: Binding(
-                                get: { v.loyaltyGoal },
-                                set: { newValue in commit(v) { $0.loyaltyGoal = max(2, newValue) } }
-                            ), in: 2...12) {
-                                Text("\(v.loyaltyGoal)")
-                                    .font(.golos(15.5, .semibold))
-                                    .foregroundStyle(Color.sanInk)
-                            }
-                        }
-                        SanHairline(leading: 16)
-                        SanFieldRow(label: "Награда") {
-                            SanFieldInput(placeholder: "Награда (напр. Бесплатный кофе)",
-                                          text: Binding(
-                                            get: { rewardDraft ?? v.loyaltyReward },
-                                            set: { rewardDraft = $0 }))
-                                .onSubmit { flushRewardDraft() }
-                                // Return нажимают не все: сохраняем и по паузе в наборе.
-                                .onChange(of: rewardDraft) { _, _ in scheduleRewardCommit() }
-                        }
-                    }
+            SanFieldCard {
+                summaryRow("Карта штампов", stamps.enabled ? "Включена" : "Выключена")
+                if stamps.enabled {
+                    SanHairline(leading: 16)
+                    summaryRow("Штампов до награды", "\(stamps.goal)")
+                    SanHairline(leading: 16)
+                    summaryRow("Награда", stamps.reward)
                 }
-                .sanGroupCard(radius: SanRadius.card)
-
-                if v.loyaltyEnabled {
-                    Text("Гость получает штамп за каждое погашение купона у вас. На \(v.loyaltyGoal)-м штампе — «\(rewardDraft ?? v.loyaltyReward)» купоном.")
-                        .font(.golos(12.5))
-                        .foregroundStyle(Color.sanInkSoft)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            } else {
-                SanNoteCard(text: "Добавьте заведение, чтобы включить карту штампов.")
+            }
+            if stamps.enabled && draft.enabled {
+                oneMechanicNote
+            } else if stamps.enabled {
+                Text("Гость получает штамп за визит: сотрудник сканирует QR его карты. На \(stamps.goal)-м штампе — «\(stamps.reward)».")
+                    .font(.golos(12.5)).foregroundStyle(Color.sanInkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
 
-    /// Сохраняет ОДНО поле, перенося остальные из DTO: `saveVenue` принимает
-    /// форму целиком, и собирать её по кусочкам — верный способ затереть чужое.
-    private func commit(_ dto: HostVenueDTO, _ change: (inout HostForms.VenueFields) -> Void) {
-        var fields = HostForms.fields(from: dto)
-        change(&fields)
-        host.send(.saveVenue(existing: dto, fields: fields))
-    }
+    // MARK: Карта штампов — правка
 
-    /// Дебаунс сохранения награды: пишем через 0,8 с после последнего символа,
-    /// а не на каждую букву — иначе каждое нажатие уходило бы в Firestore.
-    private func scheduleRewardCommit() {
-        rewardCommit?.cancel()
-        rewardCommit = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(800))
-            guard !Task.isCancelled else { return }
-            flushRewardDraft()
+    private var stampEditor: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            eyebrow("Карта штампов")
+            VStack(spacing: 0) {
+                SanGradientToggle(title: "Карта штампов",
+                                  subtitle: "Штамп за визит по QR карты гостя",
+                                  isOn: $stamps.enabled)
+                    .padding(.horizontal, 16).padding(.vertical, 13)
+                if stamps.enabled {
+                    SanHairline(leading: 16)
+                    SanFieldRow(label: "Штампов до награды") {
+                        Stepper(value: $stamps.goal, in: 2...12) {
+                            Text("\(stamps.goal)")
+                                .font(.golos(15.5, .semibold))
+                                .foregroundStyle(Color.sanInk)
+                        }
+                    }
+                    SanHairline(leading: 16)
+                    SanFieldRow(label: "Награда") {
+                        SanFieldInput(placeholder: "Награда (напр. Бесплатный кофе)", text: $stamps.reward)
+                    }
+                }
+            }
+            .sanGroupCard(radius: SanRadius.card)
+            if stamps.enabled && draft.enabled { oneMechanicNote }
         }
     }
 
-    /// Записывает черновик награды в ТЕКУЩЕЕ заведение, если он отличается.
-    /// Вызывается по Return, по паузе, при уходе с экрана и перед сменой
-    /// заведения — чтобы текст не утёк в соседнее.
-    private func flushRewardDraft() {
-        rewardCommit?.cancel()
-        guard let v = venue, let draft = rewardDraft else { return }
-        let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, trimmed != v.loyaltyReward else { return }
-        commit(v) { $0.loyaltyReward = trimmed }
+    /// Механика одна на заведение: пока включены баллы САН, штампы не
+    /// начисляются (сервер отвечает `loyalty_is_points`).
+    private var oneMechanicNote: some View {
+        SanNoteCard(text: "Включены и баллы, и штампы: начисляться будут только баллы САН. Механика лояльности одна — либо баллы, либо штампы.")
+    }
+
+    // MARK: Баллы САН — просмотр
+
+    private var pointsSummary: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            eyebrow("Баллы САН")
+            SanFieldCard {
+                summaryRow("Баллы САН", draft.enabled ? "Включены" : "Выключены")
+                if draft.enabled {
+                    SanHairline(leading: 16)
+                    summaryRow("Начисление", accrualSummary)
+                    SanHairline(leading: 16)
+                    summaryRow("Пауза между начислениями",
+                               draft.cooldownMinutes == "0" ? "Нет" : "\(draft.cooldownMinutes) мин")
+                    SanHairline(leading: 16)
+                    summaryRow("Срок сгорания", "\(draft.expiryMonths) мес")
+                    SanHairline(leading: 16)
+                    summaryRow("Списание",
+                               draft.redeemMode == "customerInitiated" ? "Гость сам в приложении" : "Сотрудник по QR гостя")
+                }
+            }
+            if draft.enabled { rewardsSummary }
+        }
+    }
+
+    private var accrualSummary: String {
+        switch draft.mode {
+        case "cashback":
+            return "Кэшбэк \(draft.cashback.isEmpty ? "0" : draft.cashback)% от чека"
+        case "bands":
+            return draft.bands.isEmpty
+                ? "Диапазоны не заданы"
+                : draft.bands.map { "до \($0.maxAmount) сом → \($0.points)" }.joined(separator: "\n")
+        default:
+            return "\(draft.flat.isEmpty ? "0" : draft.flat) баллов за визит"
+        }
+    }
+
+    private var rewardsSummary: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            eyebrow("Награды")
+            if draft.rewards.isEmpty {
+                Text("Наград пока нет — гостю не на что тратить баллы.")
+                    .font(.golos(13)).foregroundStyle(Color.sanInkSoft)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(16)
+                    .sanCard(padding: 0, radius: SanRadius.card)
+            } else {
+                SanFieldCard {
+                    ForEach(Array(draft.rewards.enumerated()), id: \.element.id) { i, r in
+                        if i > 0 { SanHairline(leading: 16) }
+                        rewardSummaryRow(r)
+                    }
+                }
+            }
+        }
+    }
+
+    private func rewardSummaryRow(_ r: PointsDraft.RewardRow) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(verbatim: r.title.isEmpty ? "Без названия" : r.title)
+                    .font(.golos(15, .semibold)).foregroundStyle(Color.sanInk)
+                Text(verbatim: r.type == "money"
+                     ? "Скидка сомами · 1 балл = \(r.ratio) сом"
+                     : "Товар или услуга")
+                    .font(.golos(12)).foregroundStyle(Color.sanInkSoft)
+            }
+            Spacer(minLength: 8)
+            VStack(alignment: .trailing, spacing: 3) {
+                Text(verbatim: r.type == "money" ? "от \(r.cost) баллов" : "\(r.cost) баллов")
+                    .font(.golos(14, .semibold)).foregroundStyle(Color.sanInk)
+                if !r.active {
+                    Text("выключена").font(.golos(11.5)).foregroundStyle(Color.sanInkSoft)
+                }
+            }
+        }
+        .padding(.horizontal, 16).padding(.vertical, 13)
+        .opacity(r.active ? 1 : 0.55)
+    }
+
+    private func summaryRow(_ label: LocalizedStringKey, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(label).font(.golos(14)).foregroundStyle(Color.sanInkSoft)
+            Spacer(minLength: 12)
+            Text(verbatim: value)
+                .font(.golos(15, .semibold)).foregroundStyle(Color.sanInk)
+                .multilineTextAlignment(.trailing)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 16).padding(.vertical, 13)
     }
 
     // MARK: Заголовок
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Баллы САН")
+            Text("Лояльность")
                 .sanEditorialTitle(42)
                 .foregroundStyle(Color.sanInk)
-            Text("Баллы копятся у вас и тратятся у вас. Это единственный механизм, который возвращает гостя именно к вам.")
+            Text("Штампы или баллы САН копятся у вас и тратятся у вас. Это единственный механизм, который возвращает гостя именно к вам.")
                 .sanText(14, .regular, lineHeight: 1.45)
                 .foregroundStyle(Color.sanInkSoft)
                 .frame(maxWidth: 290, alignment: .leading)
@@ -236,9 +347,9 @@ struct HostLoyaltyView: View {
                     let isOn = v.id == venue?.id
                     Button {
                         guard !isOn else { return }
-                        // Несохранённые правки баллов не переносим молча на
-                        // другое заведение — спрашиваем.
-                        if isDirty { pendingSwitchID = v.id } else { switchVenue(to: v.id) }
+                        // Несохранённые правки не переносим молча на другое
+                        // заведение — спрашиваем.
+                        if isEditing && isDirty { pendingSwitchID = v.id } else { switchVenue(to: v.id) }
                     } label: {
                         Text(v.name)
                             .font(.golos(13, .bold))
@@ -476,7 +587,8 @@ struct HostLoyaltyView: View {
                 .padding(6)
                 .background(Color.sanSurfaceMuted,
                             in: RoundedRectangle(cornerRadius: 30, style: .continuous))
-            Text("Так карта выглядит у гостя — с учётом несохранённых правок")
+            Text(isEditing ? "Так карта выглядит у гостя — с учётом несохранённых правок"
+                           : "Так карта выглядит у гостя")
                 .font(.golos(11.5)).foregroundStyle(Color.sanInkSoft)
         }
     }
@@ -490,29 +602,43 @@ struct HostLoyaltyView: View {
         return v
     }
 
-    // MARK: Подвал — сохранение
+    // MARK: Подвал
 
-    private var saveFooter: some View {
+    private var footer: some View {
         SanStickyFooter {
-            Button("Сохранить") { savePoints() }
-                .buttonStyle(SanPrimaryButton())
-                .disabled(!isDirty)
-                .opacity(isDirty ? 1 : 0.6)
-            Group {
-                if savedFlash {
-                    Label("Сохранено", systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(Color.sanOpen)
-                } else if isDirty {
-                    Text("Новые правила применяются к следующим сканам сразу после сохранения.")
-                        .foregroundStyle(Color(hex: 0x9A9188))
-                } else {
-                    Text("Изменений нет.")
-                        .foregroundStyle(Color(hex: 0x9A9188))
+            if isEditing {
+                HStack(spacing: 10) {
+                    Button("Отмена") { cancelEditing() }
+                        .buttonStyle(SanPillButton())
+                    Button("Сохранить") { saveAll() }
+                        .buttonStyle(SanPrimaryButton())
+                        .disabled(!isDirty)
+                        .opacity(isDirty ? 1 : 0.6)
                 }
+                Text(isDirty ? "Новые правила применяются к следующим сканам сразу после сохранения."
+                             : "Изменений нет.")
+                    .foregroundStyle(Color(hex: 0x9A9188))
+                    .font(.golos(11.5, .semibold))
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Button { startEditing() } label: {
+                    Label("Изменить настройки", systemImage: "pencil")
+                }
+                .buttonStyle(SanPrimaryButton())
+                Group {
+                    if savedFlash {
+                        Label("Сохранено", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(Color.sanOpen)
+                    } else {
+                        Text("Настройки применяются к следующим сканам сразу после сохранения.")
+                            .foregroundStyle(Color(hex: 0x9A9188))
+                    }
+                }
+                .font(.golos(11.5, .semibold))
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
             }
-            .font(.golos(11.5, .semibold))
-            .multilineTextAlignment(.center)
-            .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -558,6 +684,24 @@ struct HostLoyaltyView: View {
 
     private static func newID(_ prefix: String) -> String {
         "\(prefix)_\(UUID().uuidString.prefix(8))"
+    }
+}
+
+// MARK: - Черновик карты штампов
+
+/// Настройки штампов в том виде, в каком их держит редактор; в `VenueFields`
+/// уходят один раз, при сохранении.
+private struct StampDraft: Equatable {
+    var enabled = false
+    var goal = 6
+    var reward = ""
+
+    init() {}
+
+    init(_ dto: HostVenueDTO) {
+        enabled = dto.loyaltyEnabled
+        goal = min(max(dto.loyaltyGoal, 2), 12)
+        reward = dto.loyaltyReward
     }
 }
 
