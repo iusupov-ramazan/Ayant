@@ -10,8 +10,10 @@ import AyantData
 /// 3. Поставь useFirebase = true.
 enum AppConfig {
 
-    /// Переключатель mock ⇄ Firebase. Ставь true, когда настроишь консоль/ключи.
-    static let useFirebase = true
+    /// Переключатель mock ⇄ Firebase. В витринном режиме (`-screenshots`,
+    /// см. `ScreenshotFixtures`) приложение целиком живёт на выдуманном
+    /// каталоге и Firebase не инициализирует.
+    static let useFirebase = ScreenshotFixtures.mode == nil
 
     /// Базовый URL Cloud Functions — одно место вместо разбросанных по коду ссылок.
     /// При смене региона/проекта/бэкенда правится только здесь.
@@ -20,11 +22,15 @@ enum AppConfig {
     static func functionURL(_ name: String) -> String { AyantBackend.functionURL(name) }
 
     static func makeAuthService() -> AuthService {
-        useFirebase ? FirebaseAuthService() : MockAuthService()
+        if let shots = ScreenshotFixtures.mode { return MockAuthService(presetUser: shots.user) }
+        return useFirebase ? FirebaseAuthService() : MockAuthService()
     }
 
     static func makeDataRepository() -> DataRepository {
-        useFirebase ? FirebaseDataRepository() : MockDataRepository()
+        if let shots = ScreenshotFixtures.mode {
+            return MockDataRepository(venues: shots.venues, deals: shots.deals, reviews: shots.reviews)
+        }
+        return useFirebase ? FirebaseDataRepository() : MockDataRepository()
     }
 
     static func makeHostRepository() -> HostRepository {
@@ -53,7 +59,10 @@ enum AppConfig {
     }
 
     static func makeCouponService() -> CouponService {
-        useFirebase ? FirebaseCouponService() : MockCouponService()
+        if let shots = ScreenshotFixtures.mode {
+            return MockCouponService(coupons: shots.coupons, loyaltyCards: shots.loyaltyCards)
+        }
+        return useFirebase ? FirebaseCouponService() : MockCouponService()
     }
 
     /// Продуктовая аналитика (DAU/воронки). Вне Firebase — печать в консоль.
@@ -63,7 +72,11 @@ enum AppConfig {
 
     /// Живой источник карт баллов (snapshot-листенер вместо опроса) + списание.
     static func makePointsRepository() -> PointsRepository {
-        useFirebase
+        if let shots = ScreenshotFixtures.mode {
+            return MockPointsRepository(cards: shots.pointsCards,
+                                        laterEarn: shots.earn ? (delay: 2.5, points: 50) : nil)
+        }
+        return useFirebase
             ? FirebasePointsRepository(backend: makeCouponService(), auth: makeAuthService())
             : MockPointsRepository(cards: MockData.pointsCards)
     }

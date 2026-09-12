@@ -66,12 +66,7 @@ struct PointsEarnedView: View {
         }
     }
 
-    private static func stampsWord(_ n: Int) -> String {
-        let n10 = n % 10, n100 = n % 100
-        if n10 == 1 && n100 != 11 { return "штамп" }
-        if (2...4).contains(n10) && !(12...14).contains(n100) { return "штампа" }
-        return "штампов"
-    }
+    private static func stampsWord(_ n: Int) -> String { LPlural(n, "штамп", "штампа", "штампов") }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var ringsRunning = false
@@ -105,7 +100,7 @@ struct PointsEarnedView: View {
                 .contentTransition(.numericText())
                 .padding(.top, 28)
 
-            Text(headline)
+            Text(LocalizedStringKey(headline))
                 .sanText(24, .heavy, tracking: -1)
                 .foregroundStyle(Color.sanInk)
                 .padding(.top, 12)
@@ -116,7 +111,7 @@ struct PointsEarnedView: View {
 
             balanceCard.padding(.top, 26)
 
-            Text(footnote)
+            Text(LocalizedStringKey(footnote))
                 .font(.golos(13)).foregroundStyle(Color(hex: 0x9A9188))
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 280)
@@ -178,7 +173,7 @@ struct PointsEarnedView: View {
 
     private var balanceCard: some View {
         HStack {
-            Text(balanceLabel)
+            Text(LocalizedStringKey(balanceLabel))
                 .font(.golos(14, .semibold)).foregroundStyle(Color.sanInkSoft)
             Spacer(minLength: 12)
             Text("\(shownBalance)")

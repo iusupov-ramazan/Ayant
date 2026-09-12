@@ -82,14 +82,28 @@ public final class FirebasePointsRepository: PointsRepository {
 /// Нужен, чтобы приложение работало и тестировалось без Firebase (`AppConfig.useFirebase`).
 public final class MockPointsRepository: PointsRepository {
     private var stored: [VenuePointsCard]
+    /// Для демо: через `delay` секунд первая карта «получает» `points` баллов —
+    /// как если бы сотрудник просканировал QR. Нужно экрану «Начислено».
+    private let laterEarn: (delay: TimeInterval, points: Int)?
 
-    public init(cards: [VenuePointsCard] = []) { stored = cards }
+    public init(cards: [VenuePointsCard] = [], laterEarn: (delay: TimeInterval, points: Int)? = nil) {
+        stored = cards
+        self.laterEarn = laterEarn
+    }
 
     public func cards(userID: String) -> AsyncStream<Result<[VenuePointsCard], AppError>> {
         let snapshot = userID.isEmpty ? [] : stored
+        let later = laterEarn
         return AsyncStream { continuation in
             continuation.yield(.success(snapshot))
-            continuation.finish()
+            guard let later, !snapshot.isEmpty else { continuation.finish(); return }
+            Task {
+                try? await Task.sleep(for: .seconds(later.delay))
+                var next = snapshot
+                next[0].balance += later.points
+                next[0].lifetimeEarned += later.points
+                continuation.yield(.success(next))
+            }
         }
     }
 

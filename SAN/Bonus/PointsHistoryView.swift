@@ -319,7 +319,7 @@ extension PointsLedgerEntry {
 enum PointsLedgerFormat {
     private static func make(_ format: String) -> DateFormatter {
         let f = DateFormatter()
-        f.locale = Locale(identifier: "ru_RU")
+        f.locale = Locale(identifier: (UserDefaults.standard.string(forKey: "san.language") ?? "ru") == "en" ? "en_US" : "ru_RU")
         f.dateFormat = format
         return f
     }

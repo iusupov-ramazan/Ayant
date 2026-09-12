@@ -140,23 +140,46 @@ Location is used only to show distances to venues. The camera is used only by th
 
 Data collected, linked to the user, not used for tracking:
 - Email address, Name, User ID — app functionality (account)
-- Product interaction — analytics (venue statistics: views, taps, calls)
+- Photos or Videos, Other User Content — app functionality (review photos and text)
+- Product interaction — analytics + app functionality (venue statistics, ranking telemetry)
 
-Data collected, not linked: Coarse location — app functionality (distances). Location is never stored.
+Data collected, not linked, not used for tracking:
+- Device ID — analytics (Firebase Analytics app-instance identifier)
+- Coarse location — app functionality (distance to venues; only the distance in km is sent, never coordinates)
 
-No third-party advertising. No tracking; ATT prompt is not shown.
+Not collected: purchases, financial info, health, contacts, search or browsing history, sensitive info, diagnostics or crash data.
+No third-party advertising. No tracking; the ATT prompt is not shown.
 
 ---
 
 ## Screenshots (6.9-inch, 1320×2868)
 
-Order in App Store Connect, with the caption baked into each image:
-1. Главная — «Все акции Бишкека в одной ленте»
-2. Заведения — «Кафе, рестораны, кофейни рядом»
-3. Страница заведения — «Часы, маршрут, звонок — в одно касание»
-4. Акция и купон — «Купон в приложении, QR — сотруднику»
+Готовые кадры: `docs/appstore/screenshots/framed/ru/` и `framed/en/` — по семь
+на язык, загружать в App Store Connect в этом порядке:
+1. Главная — «Все акции Бишкека · в одной ленте»
+2. Заведения — «Все заведения · рядом с вами»
+3. Страница заведения — «Часы, маршрут, звонок · в одно касание»
+4. Купон — «Купон в приложении, QR — сотруднику»
 5. Мой QR — «Покажите QR — копите баллы»
 6. Бонусы — «Баллы и штампы у каждого заведения»
 7. Начислено — «Награда за каждый визит»
 
-Frames 1–4 are produced by `docs/appstore/make_screenshots.py` from simulator captures in `docs/appstore/screenshots/raw/`. Frames 5–7 need a signed-in account with points: capture them on a device (Settings → screenshot on iPhone 17 Pro Max or any 6.9-inch iPhone), drop the PNGs into `raw/` as `05-qr.png`, `06-wallet.png`, `07-earned.png`, and rerun the script.
+Контент на кадрах — выдуманные заведения из `SAN/Debug/ScreenshotFixtures.swift`
+(режим `-screenshots ru|en`, без Firebase и без реальных брендов), фото —
+Unsplash. Перегенерация:
+
+```bash
+# iPhone 16 Pro Max на iOS 18.4 (на iOS 26 в симуляторе не рендерятся эмодзи)
+xcrun simctl create "Ayant Shots" com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro-Max com.apple.CoreSimulator.SimRuntime.iOS-18-4
+xcrun simctl boot "Ayant Shots"; xcrun simctl status_bar "Ayant Shots" override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 --cellularBars 4
+xcodebuild build -project SAN.xcodeproj -scheme SAN -destination 'platform=iOS Simulator,name=Ayant Shots'
+xcrun simctl install "Ayant Shots" <path-to-SAN.app>
+xcrun simctl spawn "Ayant Shots" defaults write kg.san.app san.onboarded -bool YES
+xcrun simctl spawn "Ayant Shots" defaults write kg.san.app san.language -string ru   # или en
+xcrun simctl launch "Ayant Shots" kg.san.app -screenshots ru                          # + -screenshots-earn для экрана «Начислено»
+# пройти по экранам и снять: xcrun simctl io "Ayant Shots" screenshot raw-ru/NN-name.png
+python3 docs/appstore/make_screenshots.py
+```
+
+Если CDN Unsplash недоступен из симулятора, скачайте фото в папку и передайте
+`-screenshots-photos <dir>` (файлы `<id>.jpg`).

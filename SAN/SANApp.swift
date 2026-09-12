@@ -251,6 +251,7 @@ struct SANApp: App {
     /// Берёт текущий FCM-токен и пишет его в userTokens уже под авторизацией
     /// (правило userTokens требует request.auth != null).
     private func registerPushToken() {
+        guard AppConfig.useFirebase else { return }
         Messaging.messaging().token { token, _ in
             guard let token else { return }
             pushService.registerToken(token, city: store.selectedCitySlug, uid: session.user?.id)

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Собирает витринные скриншоты App Store из сырых захватов симулятора.
 
-Вход:  docs/appstore/screenshots/raw/NN-*.png  (1320×2868, iPhone 6.9")
-Выход: docs/appstore/screenshots/framed/NN-<lang>.png — тот же размер,
+Вход:  docs/appstore/screenshots/raw-ru/NN-*.png и raw-en/ (1320×2868, iPhone 6.9")
+Выход: docs/appstore/screenshots/framed/<lang>/NN-<lang>.png — тот же размер,
        фирменный градиент, подпись сверху, экран со скруглёнными углами.
 
 Запуск: python3 docs/appstore/make_screenshots.py
@@ -100,18 +100,26 @@ def frame(raw: Path, title: str, subtitle: str, out: Path) -> None:
 
 
 def main() -> None:
-    OUT.mkdir(parents=True, exist_ok=True)
-    raws = sorted(RAW.glob("[0-9][0-9]-*.png"))
-    if not raws:
-        raise SystemExit(f"no raw captures in {RAW}")
-    for raw in raws:
-        num = raw.name[:2]
-        caps = CAPTIONS.get(num)
-        if not caps:
-            print("skip (no caption):", raw.name)
+    # Захваты по языкам: raw-ru/ и raw-en/ — контент экрана на том же языке,
+    # что и подпись. Старый общий raw/ поддерживается как запасной вариант.
+    for lang in ("ru", "en"):
+        raw_dir = ROOT / "screenshots" / f"raw-{lang}"
+        if not raw_dir.exists():
+            raw_dir = RAW
+        raws = sorted(raw_dir.glob("[0-9][0-9]-*.png"))
+        if not raws:
+            print(f"no captures for {lang} in {raw_dir}")
             continue
-        for lang, (title, subtitle) in caps.items():
-            frame(raw, title, subtitle, OUT / f"{num}-{lang}.png")
+        out_dir = OUT / lang
+        out_dir.mkdir(parents=True, exist_ok=True)
+        for raw in raws:
+            num = raw.name[:2]
+            caps = CAPTIONS.get(num)
+            if not caps or lang not in caps:
+                print("skip (no caption):", raw.name)
+                continue
+            title, subtitle = caps[lang]
+            frame(raw, title, subtitle, out_dir / f"{num}-{lang}.png")
 
 
 if __name__ == "__main__":

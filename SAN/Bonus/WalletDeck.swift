@@ -288,12 +288,7 @@ struct WalletStampCard: View {
         return "Ещё \(left) \(Self.visits(left)) — и «\(card.reward)» в подарок."
     }
 
-    private static func visits(_ n: Int) -> String {
-        let n10 = n % 10, n100 = n % 100
-        if n10 == 1 && n100 != 11 { return "визит" }
-        if (2...4).contains(n10) && !(12...14).contains(n100) { return "визита" }
-        return "визитов"
-    }
+    private static func visits(_ n: Int) -> String { LPlural(n, "визит", "визита", "визитов") }
 }
 
 // MARK: - Прогресс-бар
@@ -339,12 +334,12 @@ extension Venue {
         switch pointsMode {
         case "cashback":
             guard cashbackPercent > 0 else { return nil }
-            return "кэшбэк \(cashbackPercent.sanPercentText)%"
+            return String(localized: "кэшбэк \(cashbackPercent.sanPercentText)%")
         case "bands":
-            return "по сумме чека"
+            return String(localized: "по сумме чека")
         default:
             guard pointsFlat > 0 else { return nil }
-            return "\(pointsFlat) за визит"
+            return String(localized: "\(pointsFlat) за визит")
         }
     }
 }

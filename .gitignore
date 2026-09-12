@@ -45,3 +45,6 @@ __pycache__/
 
 # SwiftPM build products of the local packages
 .build/
+
+# Сырые захваты симулятора для витрины — регенерируются (см. docs/appstore/listing.md)
+docs/appstore/screenshots/raw-*/

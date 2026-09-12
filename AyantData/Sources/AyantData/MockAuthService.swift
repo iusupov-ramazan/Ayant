@@ -8,6 +8,11 @@ public final class MockAuthService: AuthService {
     /// Пустой инициализатор нужен явно: синтезированный — internal.
     public init() {}
 
+    /// Сразу «вошедший» пользователь — для оффлайн-демо и витринных скриншотов.
+    public init(presetUser: SANUser) {
+        persist(presetUser)
+    }
+
 
     private let defaults = UserDefaults.standard
     private let sessionKey = "san.session.user"

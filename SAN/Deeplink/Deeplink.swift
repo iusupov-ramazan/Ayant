@@ -96,7 +96,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
-        Messaging.messaging().delegate = self
+        if AppConfig.useFirebase { Messaging.messaging().delegate = self }
         return true
     }
 
@@ -104,7 +104,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     // получить (ошибка 505 "No APNS token specified before fetching FCM Token").
     func application(_ application: UIApplication,
                      didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
-        Messaging.messaging().apnsToken = deviceToken
+        if AppConfig.useFirebase { Messaging.messaging().apnsToken = deviceToken }
     }
 
     func application(_ application: UIApplication,

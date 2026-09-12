@@ -404,7 +404,7 @@ struct CouponDetailView: View {
     /// «11 сентября» — родительный падеж даёт сам формат `d MMMM` в ru_RU.
     private var receivedText: String {
         coupon.createdAt.formatted(
-            Date.FormatStyle(locale: Locale(identifier: "ru_RU")).day().month(.wide))
+            Date.FormatStyle(locale: Locale(identifier: (UserDefaults.standard.string(forKey: "san.language") ?? "ru") == "en" ? "en_US" : "ru_RU")).day().month(.wide))
     }
 
     var body: some View {

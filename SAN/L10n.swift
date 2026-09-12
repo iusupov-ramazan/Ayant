@@ -11,6 +11,18 @@ import AyantDomain
 /// подхватывался и уважал выбранный в приложении язык (\.locale).
 func L(_ s: String) -> LocalizedStringKey { LocalizedStringKey(s) }
 
+/// Русское слово по числу («1 отзыв / 2 отзыва / 5 отзывов»), уже переведённое
+/// через каталог: формы — ключи, английские значения у них совпадают. Без этого
+/// в английском интерфейсе оставались русские хвосты вроде «2 отзыва».
+func LPlural(_ n: Int, _ one: String, _ few: String, _ many: String) -> String {
+    let n10 = n % 10, n100 = n % 100
+    let key: String
+    if n10 == 1 && n100 != 11 { key = one }
+    else if (2...4).contains(n10) && !(12...14).contains(n100) { key = few }
+    else { key = many }
+    return String(localized: String.LocalizationValue(key))
+}
+
 /// То же, но возвращает `String` — для мест, где `Text` не годится: подписи на
 /// UIKit-пинах карты, тексты для шаринга, Apple Wallet.
 ///

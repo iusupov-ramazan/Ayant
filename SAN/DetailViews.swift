@@ -210,7 +210,7 @@ struct DealDetailView: View {
                         VenueAvatar(venue: venue, size: 48)
                         VStack(alignment: .leading, spacing: 3) {
                             Text(venue.name).font(.subheadline.weight(.semibold)).foregroundStyle(.primary)
-                            Text("\(venue.category.rawValue) • \(venue.district)")
+                            (Text(venue.category.locKey) + Text(verbatim: " • \(venue.district)"))
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                         Spacer()
@@ -484,7 +484,7 @@ struct VenueDetailView: View {
             HStack(spacing: 6) {
                 Circle().fill(venue.isOpenNow ? Color.sanOpen : Color.sanInkSoft)
                     .frame(width: 6, height: 6)
-                Text(venue.hoursStatusText)
+                Text(venue.hoursStatusKey)
             }
             .font(.golos(12.5, .bold))
             .foregroundStyle(venue.isOpenNow ? Color.sanOpen : Color.sanInkSoft)
@@ -741,12 +741,7 @@ struct VenueDetailView: View {
         }
     }
 
-    private static func reviewsWord(_ n: Int) -> String {
-        let n10 = n % 10, n100 = n % 100
-        if n10 == 1 && n100 != 11 { return "отзыв" }
-        if (2...4).contains(n10) && !(12...14).contains(n100) { return "отзыва" }
-        return "отзывов"
-    }
+    private static func reviewsWord(_ n: Int) -> String { LPlural(n, "отзыв", "отзыва", "отзывов") }
 
     // MARK: Действия
 
@@ -917,12 +912,7 @@ struct VenueDetailView: View {
         .buttonStyle(.sanPress(0.98))
     }
 
-    private static func pointsWord(_ n: Int) -> String {
-        let n10 = n % 10, n100 = n % 100
-        if n10 == 1 && n100 != 11 { return "балл" }
-        if (2...4).contains(n10) && !(12...14).contains(n100) { return "балла" }
-        return "баллов"
-    }
+    private static func pointsWord(_ n: Int) -> String { LPlural(n, "балл", "балла", "баллов") }
 
     // MARK: Инфо
 
@@ -1005,7 +995,7 @@ struct VenueDetailView: View {
             }
             Button { withAnimation { hoursExpanded.toggle() } } label: {
                 HStack {
-                    Label(venue.hoursStatusText, systemImage: "clock")
+                    Label(venue.hoursStatusKey, systemImage: "clock")
                         .font(.subheadline)
                         .foregroundStyle(venue.isOpenNow ? .green : .secondary)
                     Spacer()
@@ -1148,7 +1138,7 @@ struct VenueDetailView: View {
                 VStack(spacing: 2) {
                     Text(String(format: "%.1f", agg.rating)).font(.system(size: 40, weight: .bold))
                     StarRatingView(rating: agg.rating, size: 12)
-                    Text("\(agg.count) отзывов").font(.caption2).foregroundStyle(.secondary)
+                    Text("\(agg.count) \(Self.reviewsWord(agg.count))").font(.caption2).foregroundStyle(.secondary)
                 }
                 RatingBreakdownView(breakdown: detail.state.ratingBreakdown)
             }
