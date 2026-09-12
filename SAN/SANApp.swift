@@ -109,6 +109,10 @@ struct SANApp: App {
                     .environmentObject(themeStore)
                     .environmentObject(hostStore)
                     .tint(.sanAccent)
+                    // Лист диплинка — отдельное окно презентации: без этого он
+                    // брал язык системы, и русское приложение показывало
+                    // «Posts / Reviews / Show QR» на английском симуляторе.
+                    .environment(\.locale, Locale(identifier: effectiveLanguage))
             }
             // Любой тап продлевает «активность» для бонус-движка.
             // Через ActivityTracker (UIKit, cancelsTouchesInView=false), чтобы НЕ
