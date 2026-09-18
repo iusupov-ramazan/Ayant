@@ -22,10 +22,13 @@ import kg.ayant.app.domain.RankingEvent
 import kg.ayant.app.domain.contract.RankingEventService
 import kg.ayant.app.domain.RankingEventType
 import kg.ayant.app.domain.RankingItemFeatures
+import kg.ayant.app.domain.model.AppSettings
 import kg.ayant.app.domain.model.City
 import kg.ayant.app.domain.model.Deal
 import kg.ayant.app.domain.model.FeedItem
 import kg.ayant.app.domain.model.Review
+import kg.ayant.app.domain.model.ReviewReportReason
+import kg.ayant.app.domain.model.ReviewReport
 import kg.ayant.app.domain.model.Venue
 import kg.ayant.app.domain.model.VenueCategory
 import kg.ayant.app.domain.GiftInfo
@@ -139,6 +142,14 @@ class AppViewModel @JvmOverloads constructor(
     private val _session = MutableStateFlow(AppSessionState())
     val session: StateFlow<AppSessionState> = _session.asStateFlow()
 
+    /**
+     * Глобальные настройки из админ-панели (config/appSettings). Mirrors
+     * `AppStore.settings`: дефолт → переопределяется в [load]; сеть недоступна —
+     * остаёмся на дефолтах.
+     */
+    private val _settings = MutableStateFlow(AppSettings.DEFAULT)
+    val settings: StateFlow<AppSettings> = _settings.asStateFlow()
+
     var isGuest: Boolean
         get() = _session.value.isGuest
         set(v) { _session.update { it.copy(isGuest = v) } }
@@ -178,7 +189,13 @@ class AppViewModel @JvmOverloads constructor(
         profile?.send(ProfileIntent.SetUser(currentUserID, currentUserName, isGuest))
     }
 
-    fun load() { feed?.load() }
+    fun load() {
+        feed?.load()
+        // Настройки панели — некритично: ошибка/отсутствие документа → дефолты.
+        viewModelScope.launch {
+            try { repository.fetchAppSettings()?.let { _settings.value = it } } catch (_: Exception) { /* дефолты */ }
+        }
+    }
 
     // MARK: - City
 
@@ -443,6 +460,25 @@ class AppViewModel @JvmOverloads constructor(
     fun deleteReview(review: Review) {
         feed?.removeReview(review.id)
         viewModelScope.launch { runCatching { repository.deleteReview(review.id) } }
+    }
+
+    /**
+     * Жалоба на отзыв (Guidelines 1.2).
+     *
+     * Отзыв НЕ прячем сразу: иначе жалоба стала бы кнопкой «удалить чужой
+     * отзыв» — достаточно пожаловаться, чтобы убрать неудобную правду о
+     * заведении. Решение принимает модератор в админ-панели.
+     *
+     * Гостю не отказываем: он подписан анонимно, uid у него есть, а модерация
+     * не должна упираться в регистрацию.
+     */
+    fun reportReview(review: Review, reason: ReviewReportReason) {
+        val reporterID = profileState.userID
+        if (reporterID.isEmpty()) return
+        val report = ReviewReport.of(review, reporterID, reason, Date(clock.nowMs))
+        // Продуктовой аналитики на Android пока нет (на iOS — `AnalyticsLog`),
+        // поэтому событие `review_reported` тут не пишем.
+        viewModelScope.launch { runCatching { repository.reportReview(report) } }
     }
 
     // MARK: - Feed (organic ranking with distance)

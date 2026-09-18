@@ -284,8 +284,8 @@ struct WalletStampCard: View {
     private var stampHint: String {
         let left = max(0, goal - card.stamps)
         // Коротко — карта фиксированной высоты, под подсказку две строки.
-        if left == 0 { return "Круг собран — купон «\(card.reward)» уже в «Мои купоны»." }
-        return "Ещё \(left) \(Self.visits(left)) — и «\(card.reward)» в подарок."
+        if left == 0 { return LF("Круг собран — купон «%@» уже в «Мои купоны».", card.reward) }
+        return LF("Ещё %lld %@ — и «%@» в подарок.", left, Self.visits(left), card.reward)
     }
 
     private static func visits(_ n: Int) -> String { LPlural(n, "визит", "визита", "визитов") }
@@ -334,12 +334,13 @@ extension Venue {
         switch pointsMode {
         case "cashback":
             guard cashbackPercent > 0 else { return nil }
-            return String(localized: "кэшбэк \(cashbackPercent.sanPercentText)%")
+            // `LS`, а не `String(localized:)`: последняя смотрит на язык системы.
+            return LF("кэшбэк %@%%", cashbackPercent.sanPercentText)
         case "bands":
-            return String(localized: "по сумме чека")
+            return LS("по сумме чека")
         default:
             guard pointsFlat > 0 else { return nil }
-            return String(localized: "\(pointsFlat) за визит")
+            return LF("%lld за визит", pointsFlat)
         }
     }
 }

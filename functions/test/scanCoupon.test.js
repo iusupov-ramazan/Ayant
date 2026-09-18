@@ -152,6 +152,89 @@ test("на цели карта обнуляется и выдаёт наград
   assert.equal(card.completedRounds, 1);
 });
 
+/* ── Пауза между штампами: config/appSettings.stampCooldownMinutes ─────── */
+
+test("CARD: без настроек повторный скан внутри 15 мин → 429 cooldown", async () => {
+  const h = makeHarness({ tokens: { [TOKEN]: HOST } });
+  seedVenue(h);
+  const first = await call(h, post({ code: `AYANT-CARD:u1:${VENUE}`, venueID: VENUE, idempotencyKey: "cd-1" }));
+  assert.equal(first.statusCode, 200);
+  // Другой ключ = другой скан (не ретрай) → окно действует.
+  const again = await call(h, post({ code: `AYANT-CARD:u1:${VENUE}`, venueID: VENUE, idempotencyKey: "cd-2" }));
+  assert.equal(again.statusCode, 429);
+  assert.equal(again.body.error, "cooldown");
+  assert.ok(again.body.retryAfterSec > 0 && again.body.retryAfterSec <= 15 * 60);
+  assert.equal(h.read(`loyaltyCards/u1_${VENUE}`).stamps, 1);
+});
+
+test("CARD: stampCooldownMinutes: 0 в настройках → штамп на каждый скан", async () => {
+  const h = makeHarness({ tokens: { [TOKEN]: HOST } });
+  seedVenue(h);
+  h.seed("config/appSettings", { stampCooldownMinutes: 0 });
+  const first = await call(h, post({ code: `AYANT-CARD:u1:${VENUE}`, venueID: VENUE, idempotencyKey: "z-1" }));
+  const again = await call(h, post({ code: `AYANT-CARD:u1:${VENUE}`, venueID: VENUE, idempotencyKey: "z-2" }));
+  assert.equal(first.statusCode, 200);
+  assert.equal(again.statusCode, 200);
+  assert.equal(again.body.stamps, 2);
+});
+
+test("CARD: окно берётся из настроек панели (30 мин)", async () => {
+  const h = makeHarness({ tokens: { [TOKEN]: HOST } });
+  seedVenue(h);
+  h.seed("config/appSettings", { stampCooldownMinutes: 30 });
+  await call(h, post({ code: `AYANT-CARD:u1:${VENUE}`, venueID: VENUE, idempotencyKey: "w-1" }));
+  const again = await call(h, post({ code: `AYANT-CARD:u1:${VENUE}`, venueID: VENUE, idempotencyKey: "w-2" }));
+  assert.equal(again.statusCode, 429);
+  // Больше дефолтных 15 минут — значит, прочитано именно значение из настроек.
+  assert.ok(again.body.retryAfterSec > 15 * 60 && again.body.retryAfterSec <= 30 * 60);
+});
+
+test("CARD: мусор в настройках → дефолтные 15 мин, скан не падает", async () => {
+  const h = makeHarness({ tokens: { [TOKEN]: HOST } });
+  seedVenue(h);
+  h.seed("config/appSettings", { stampCooldownMinutes: "abc" });
+  const first = await call(h, post({ code: `AYANT-CARD:u1:${VENUE}`, venueID: VENUE, idempotencyKey: "g-1" }));
+  assert.equal(first.statusCode, 200);
+  const again = await call(h, post({ code: `AYANT-CARD:u1:${VENUE}`, venueID: VENUE, idempotencyKey: "g-2" }));
+  assert.equal(again.statusCode, 429);
+  assert.ok(again.body.retryAfterSec <= 15 * 60);
+});
+
+test("CARD: тот же ключ на другую карту → 409 key_reused, штамп не начисляется", async () => {
+  const h = makeHarness({ tokens: { [TOKEN]: HOST } });
+  seedVenue(h);
+  h.seed("config/appSettings", { stampCooldownMinutes: 0 });
+  const first = await call(h, post({ code: `AYANT-CARD:u1:${VENUE}`, venueID: VENUE, idempotencyKey: "same" }));
+  assert.equal(first.statusCode, 200);
+  // Ключ живёт на карте u1: тот же ключ с другим кодом на ЭТОЙ карте — коллизия.
+  h.seed(`loyaltyCards/u1_${VENUE}/scanKeys/same`, { code: "AYANT-CARD:u9:OTHER", stamps: 7, rewardIssued: false });
+  const clash = await call(h, post({ code: `AYANT-CARD:u1:${VENUE}`, venueID: VENUE, idempotencyKey: "same" }));
+  assert.equal(clash.statusCode, 409);
+  assert.equal(clash.body.error, "key_reused");
+  assert.equal(h.read(`loyaltyCards/u1_${VENUE}`).stamps, 1);
+});
+
+test("CARD: окно из настроек клэмпится сверху до 1440 мин", async () => {
+  const h = makeHarness({ tokens: { [TOKEN]: HOST } });
+  seedVenue(h);
+  h.seed("config/appSettings", { stampCooldownMinutes: 999999 });
+  await call(h, post({ code: `AYANT-CARD:u1:${VENUE}`, venueID: VENUE, idempotencyKey: "c-1" }));
+  const again = await call(h, post({ code: `AYANT-CARD:u1:${VENUE}`, venueID: VENUE, idempotencyKey: "c-2" }));
+  assert.equal(again.statusCode, 429);
+  assert.ok(again.body.retryAfterSec > 30 * 60 && again.body.retryAfterSec <= 1440 * 60);
+});
+
+test("CARD: ретрай с тем же ключом внутри окна возвращает исходный результат, не 429", async () => {
+  const h = makeHarness({ tokens: { [TOKEN]: HOST } });
+  seedVenue(h);
+  const first = await call(h, post({ code: `AYANT-CARD:u1:${VENUE}`, venueID: VENUE, idempotencyKey: "r-1" }));
+  const retry = await call(h, post({ code: `AYANT-CARD:u1:${VENUE}`, venueID: VENUE, idempotencyKey: "r-1" }));
+  assert.equal(first.statusCode, 200);
+  assert.equal(retry.statusCode, 200);
+  assert.equal(retry.body.replayed, true);
+  assert.equal(h.read(`loyaltyCards/u1_${VENUE}`).stamps, 1);
+});
+
 /* ── Ветка B: купон акции (погашение) ───────────────────────────────────── */
 
 test("купон не найден → 404 coupon_not_found", async () => {

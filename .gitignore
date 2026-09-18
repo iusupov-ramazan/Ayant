@@ -48,3 +48,6 @@ __pycache__/
 
 # Сырые захваты симулятора для витрины — регенерируются (см. docs/appstore/listing.md)
 docs/appstore/screenshots/raw-*/
+
+# Kotlin compiler session files (build artifact)
+android/.kotlin/

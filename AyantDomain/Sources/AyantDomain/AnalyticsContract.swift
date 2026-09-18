@@ -14,6 +14,7 @@ public enum AnalyticsEvent: String {
     case dealRedeem     = "deal_redeem"      // ключевая метрика: купон погашен
     case saveDeal       = "save_deal"
     case reviewPosted   = "review_posted"
+    case reviewReported = "review_reported"
     case referralInvite = "referral_invite"  // пользователь поделился ссылкой
     case referralJoin   = "referral_join"    // пришёл по чужой ссылке
     case couponClaim    = "coupon_claim"     // обменял бонусы на купон

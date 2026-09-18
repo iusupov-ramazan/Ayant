@@ -100,7 +100,7 @@ struct PointsHistorySummary: View {
         .sanCard(padding: 16, radius: SanRadius.card)
     }
 
-    private func tile(label: String, value: String, tint: Color) -> some View {
+    private func tile(label: LocalizedStringKey, value: String, tint: Color) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(label)
                 .textCase(.uppercase)
@@ -287,12 +287,12 @@ extension PointsLedgerEntry {
 
     func sanTitle(venue: Venue) -> String {
         switch kind {
-        case .earn:   return "Начислено за визит"
+        case .earn:   return LS("Начислено за визит")
         case .redeem:
-            let title = venue.pointsRewards.first { $0.id == rewardID }?.title ?? "Награда"
-            return "Списано: \(title)"
-        case .expire:  return "Баллы сгорели"
-        case .unknown: return "Операция"
+            let title = venue.pointsRewards.first { $0.id == rewardID }?.title ?? LS("Награда")
+            return LF("Списано: %@", title)
+        case .expire:  return LS("Баллы сгорели")
+        case .unknown: return LS("Операция")
         }
     }
 
@@ -300,7 +300,7 @@ extension PointsLedgerEntry {
     var sanSubtitle: String {
         var text = PointsLedgerFormat.moment(at)
         if kind == .earn, let bill = billAmount, bill > 0 {
-            text += " · чек \(bill.sanThousands) сом"
+            text += LF(" · чек %@ сом", bill.sanThousands)
         }
         return text
     }
@@ -313,13 +313,13 @@ extension PointsLedgerEntry {
     }
 }
 
-// MARK: - Форматтеры (русская локаль)
+// MARK: - Форматтеры (локаль языка приложения)
 
 /// Форматтеры дорогие в создании — держим по одному экземпляру на формат.
 enum PointsLedgerFormat {
     private static func make(_ format: String) -> DateFormatter {
         let f = DateFormatter()
-        f.locale = Locale(identifier: (UserDefaults.standard.string(forKey: "san.language") ?? "ru") == "en" ? "en_US" : "ru_RU")
+        f.locale = AppLanguage.locale
         f.dateFormat = format
         return f
     }

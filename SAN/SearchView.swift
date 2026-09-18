@@ -12,20 +12,20 @@ enum SearchSort: String, CaseIterable {
     /// Полное название — в меню, где есть место на объяснение.
     var title: String {
         switch self {
-        case .best: return "Сначала лучшие"
-        case .near: return "Сначала ближние"
-        case .rating: return "Сначала с высоким рейтингом"
-        case .discount: return "Сначала с большой скидкой"
+        case .best: return LS("Сначала лучшие")
+        case .near: return LS("Сначала ближние")
+        case .rating: return LS("Сначала с высоким рейтингом")
+        case .discount: return LS("Сначала с большой скидкой")
         }
     }
 
     /// Короткое — в самом чипе: строка фильтров и так уезжает за край экрана.
     var chipTitle: String {
         switch self {
-        case .best: return "Лучшие"
-        case .near: return "Ближние"
-        case .rating: return "Рейтинг"
-        case .discount: return "Скидка"
+        case .best: return LS("Лучшие")
+        case .near: return LS("Ближние")
+        case .rating: return LS("Рейтинг")
+        case .discount: return LS("Скидка")
         }
     }
 }

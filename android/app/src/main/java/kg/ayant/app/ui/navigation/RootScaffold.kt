@@ -3,6 +3,7 @@ package kg.ayant.app.ui.navigation
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -248,7 +249,8 @@ fun RootScaffold(session: SessionViewModel, initialDeepLink: String? = null, the
                     kg.ayant.app.ui.auth.GuestAuthSheet(session) { nav.popBackStack() }
                     return@composable
                 }
-                SnakeGame(bonus, onClose = { nav.popBackStack() })
+                val settings by app.settings.collectAsState()
+                SnakeGame(bonus, watermark = settings.adPlaceholderText, onClose = { nav.popBackStack() })
             }
             composable("tetris") {
                 if (session.isGuest) {

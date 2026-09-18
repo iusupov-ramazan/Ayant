@@ -22,6 +22,7 @@ public enum FS {
         public static let venues = "venues"
         public static let deals = "deals"
         public static let reviews = "reviews"
+        public static let reviewReports = "reviewReports"
         public static let hosts = "hosts"
         public static let categories = "categories"
         public static let coupons = "coupons"
@@ -44,6 +45,28 @@ public enum FS {
     /// Документы с фиксированным id.
     public enum Document {
         public static let rankingWeights = "rankingWeights"
+        /// config/globalRewards — каталог наград глобального кошелька.
+        public static let globalRewards = "globalRewards"
+        /// config/appSettings — глобальные настройки из админ-панели.
+        public static let appSettings = "appSettings"
+    }
+
+    /// Поля config/appSettings. Читает и сервер (`scanCoupon`), и панель.
+    public enum AppSettingsDoc {
+        public static let stampCooldownMinutes = "stampCooldownMinutes"
+        public static let adPlaceholderText = "adPlaceholderText"
+    }
+
+    /// Элемент массива `items` в config/globalRewards.
+    public enum GlobalRewardDoc {
+        public static let items = "items"
+        public static let id = "id"
+        public static let title = "title"
+        public static let cost = "cost"
+        public static let emoji = "emoji"
+        /// Заведение-партнёр: без него награду нельзя погасить.
+        public static let venueID = "venueID"
+        public static let venueName = "venueName"
     }
 
     // MARK: - venues/{id}
@@ -125,6 +148,18 @@ public enum FS {
     }
 
     // MARK: - reviews/{id}
+
+    // MARK: - reviewReports/{reviewID}_{reporterID}
+
+    public enum ReviewReportDoc {
+        public static let reviewID = "reviewID"
+        public static let venueID = "venueID"
+        public static let reporterID = "reporterID"
+        public static let reason = "reason"
+        public static let createdAt = "createdAt"
+        /// "open" | "reviewed" — очередь разбора в админ-панели.
+        public static let status = "status"
+    }
 
     public enum ReviewDoc {
         public static let venueID = "venueID"

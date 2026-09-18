@@ -183,12 +183,15 @@ struct HostReplyView: View {
     @State private var text: String
     @FocusState private var focused: Bool
 
-    private static let quickReplies: [String] = [
-        "Спасибо за отзыв!",
-        "Извините за ожидание",
-        "Приходите ещё — исправимся",
-        "Напишите нам в директ",
-    ]
+    // Шаблоны подставляются в поле ввода строкой — переводим через `LS`.
+    private static var quickReplies: [String] {
+        [
+            LS("Спасибо за отзыв!"),
+            LS("Извините за ожидание"),
+            LS("Приходите ещё — исправимся"),
+            LS("Напишите нам в директ"),
+        ]
+    }
 
     init(review: Review) {
         self.review = review
@@ -650,7 +653,7 @@ struct HostPromoteView: View {
         }
     }
 
-    private func typeCard(_ icon: String, _ title: String, _ subtitle: String) -> some View {
+    private func typeCard(_ icon: String, _ title: LocalizedStringKey, _ subtitle: LocalizedStringKey) -> some View {
         Button { showCreate = true } label: {
             VStack(alignment: .leading, spacing: 10) {
                 SanIconTile(systemName: icon, size: 40)
@@ -747,7 +750,7 @@ struct HostPromoteCreateView: View {
     private let durations = [7, 14, 30, 0]        // 0 = бессрочно
     private func price(_ d: Int) -> Int { d == 0 ? 3000 : d * 150 }
     private func durationLabel(_ d: Int) -> String {
-        d == 0 ? "Бессрочно — \(price(0)) сом" : "\(d) дней — \(price(d)) сом"
+        d == 0 ? LF("Бессрочно — %lld сом", price(0)) : LF("%lld дней — %lld сом", d, price(d))
     }
 
     var body: some View {
@@ -767,7 +770,7 @@ struct HostPromoteCreateView: View {
                                 VenueSearchPicker(venues: host.state.venues, selected: $selectedVenue)
                             } label: {
                                 HStack(spacing: 6) {
-                                    Text(host.state.venue(id: selectedVenue)?.name ?? "Выбрать")
+                                    Text(host.state.venue(id: selectedVenue)?.name ?? LS("Выбрать"))
                                         .font(.golos(15.5, .semibold))
                                         .foregroundStyle(selectedVenue.isEmpty ? Color(hex: 0xC0B8AE) : Color.sanInk)
                                     Spacer(minLength: 0)
@@ -928,7 +931,7 @@ struct HostPromoteCreateView: View {
                                          startPoint: .topLeading, endPoint: .bottomTrailing))
                     .frame(width: 40, height: 40)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(host.state.venue(id: selectedVenue)?.name ?? "Ваше заведение")
+                    Text(host.state.venue(id: selectedVenue)?.name ?? LS("Ваше заведение"))
                         .font(.golos(14, .bold)).foregroundStyle(Color.sanInk).lineLimit(1)
                     Text("Реклама")
                         .textCase(.uppercase)
@@ -953,11 +956,8 @@ struct HostPromoteCreateView: View {
     }
 
     private static func daysWord(_ n: Int) -> String {
-        if n == 0 { return "бессрочно" }
-        let n10 = n % 10, n100 = n % 100
-        if n10 == 1 && n100 != 11 { return "день" }
-        if (2...4).contains(n10) && !(12...14).contains(n100) { return "дня" }
-        return "дней"
+        if n == 0 { return LS("бессрочно") }
+        return LPlural(n, "день", "дня", "дней")
     }
 
     private func launch() {
@@ -975,10 +975,10 @@ struct HostPromoteCreateView: View {
         }
         // Push-кампания: реально ставим в очередь рассылки (Cloud Function → FCM).
         if kind == .push {
-            let venueName = host.state.venue(id: selectedVenue)?.name ?? "заведение"
+            let venueName = host.state.venue(id: selectedVenue)?.name ?? LS("заведение")
             host.send(.launchPush(
                 headline: pushHeadline.isEmpty ? venueName : pushHeadline,
-                body: pushBody.isEmpty ? "Новое предложение в \(venueName)" : pushBody,
+                body: pushBody.isEmpty ? LF("Новое предложение в %@", venueName) : pushBody,
                 venueID: selectedVenue,
                 dealID: selectedDeal.isEmpty ? nil : selectedDeal))
         }
@@ -1101,7 +1101,7 @@ struct HostProfileView: View {
                         }
                     })
             VStack(alignment: .leading, spacing: 4) {
-                Text(businessName.isEmpty ? "Ваш бизнес" : businessName)
+                Text(businessName.isEmpty ? LS("Ваш бизнес") : businessName)
                     .font(.golos(20, .bold)).foregroundStyle(Color.sanInk).lineLimit(1)
                 verificationBadge
             }
@@ -1150,12 +1150,12 @@ struct HostProfileView: View {
     }
 
     private var infoSummary: String {
-        guard let p = host.state.profile else { return "Название, телефон, ИП, ИНН…" }
+        guard let p = host.state.profile else { return LS("Название, телефон, ИП, ИНН…") }
         var parts: [String] = []
-        if !p.legalForm.isEmpty { parts.append(p.legalForm) }
+        if !p.legalForm.isEmpty { parts.append(LS(p.legalForm)) }
         if !p.phone.isEmpty { parts.append(p.phone) }
-        if !p.inn.isEmpty { parts.append("ИНН \(p.inn)") }
-        return parts.isEmpty ? "Заполнить реквизиты и контакты" : parts.joined(separator: " · ")
+        if !p.inn.isEmpty { parts.append(LF("ИНН %@", p.inn)) }
+        return parts.isEmpty ? LS("Заполнить реквизиты и контакты") : parts.joined(separator: " · ")
     }
 
     // MARK: Верификация
@@ -1280,7 +1280,8 @@ struct HostBusinessInfoView: View {
             }
             Section {
                 Picker("Форма деятельности", selection: $legalForm) {
-                    ForEach(forms, id: \.self) { Text($0.isEmpty ? "Не указано" : $0).tag($0) }
+                    // Значения формы («ИП», «ООО»…) хранятся по-русски, показываются через каталог.
+                    ForEach(forms, id: \.self) { Text($0.isEmpty ? L("Не указано") : L($0)).tag($0) }
                 }
                 TextField(legalForm == "ООО" ? "Название юрлица" : "ФИО предпринимателя", text: $legalName)
                 TextField("ИНН / ОГРНИП", text: $inn).keyboardType(.numbersAndPunctuation)

@@ -276,6 +276,21 @@ extension Deal {
     }
 }
 
+// MARK: - ReviewReport
+
+extension ReviewReport {
+    var firestoreData: [String: Any] {
+        [
+            FS.ReviewReportDoc.reviewID: reviewID,
+            FS.ReviewReportDoc.venueID: venueID,
+            FS.ReviewReportDoc.reporterID: reporterID,
+            FS.ReviewReportDoc.reason: reason.rawValue,
+            FS.ReviewReportDoc.createdAt: Timestamp(date: createdAt),
+            FS.ReviewReportDoc.status: ReviewReportStatus.open,
+        ]
+    }
+}
+
 // MARK: - Review
 
 extension HostReply {

@@ -15,15 +15,15 @@ extension Date {
         let f = DateFormatter()
         // Локаль — язык приложения (Профиль → Язык), а не жёстко русская:
         // иначе в английском интерфейсе оставалось «23 сентября».
-        let lang = UserDefaults.standard.string(forKey: "san.language") ?? "ru"
-        f.locale = Locale(identifier: lang == "en" ? "en_US" : "ru_RU")
+        f.locale = AppLanguage.locale
         f.dateFormat = "d MMMM"
         return f.string(from: self)
     }
 }
 
 extension Int {
-    var som: String { String(localized: "\(self) сом") }
+    // `LF`, а не `String(localized:)`: последняя смотрит на язык системы.
+    var som: String { LF("%lld сом", self) }
 }
 
 extension Venue {

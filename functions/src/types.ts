@@ -53,6 +53,17 @@ export interface VenueDoc {
   pointsExpiryMonths?: Numeric;
 }
 
+/**
+ * config/appSettings — глобальные настройки из админ-панели («Настройки»).
+ * Зеркало `AppSettings.swift` / `AppSettings.kt`: имена полей — контракт.
+ */
+export interface AppSettingsDoc {
+  /** Пауза между штампами лояльности, мин. Явный 0 = без паузы. Пусто → 15. */
+  stampCooldownMinutes?: Numeric;
+  /** Текст рекламного плейсхолдера (читают только клиенты). */
+  adPlaceholderText?: string;
+}
+
 /** coupons/{id} — купон акции (погашается один раз). */
 export interface CouponDoc {
   code?: string;

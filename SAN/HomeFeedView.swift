@@ -507,7 +507,7 @@ struct HomeFeedView: View {
             ContentUnavailableView {
                 Label("Не удалось загрузить ленту", systemImage: "wifi.exclamationmark")
             } description: {
-                Text(feedStore.loadError ?? "Проверьте интернет и попробуйте ещё раз.")
+                Text(feedStore.loadError ?? LS("Проверьте интернет и попробуйте ещё раз."))
             }
             Button("Повторить") { Task { await store.load() } }
                 .buttonStyle(.bordered)

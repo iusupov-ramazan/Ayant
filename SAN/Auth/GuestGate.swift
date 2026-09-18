@@ -10,14 +10,16 @@ import AyantFeatures
 /// закрывается сам и корень пересобирается под новый аккаунт.
 struct GuestGate {
     /// Тексты для разных мест — чтобы гость понимал, что именно он теряет.
-    static let saveVenue = "Гостям доступен только просмотр. Войдите, чтобы сохранять места."
-    static let saveDeal = "Гостям доступен только просмотр. Войдите, чтобы сохранять предложения."
-    static let like = "Войдите, чтобы отмечать предложения — они переедут с вами на другое устройство."
-    static let qr = "Личный QR привязан к аккаунту: по нему заведение начисляет баллы. Войдите или создайте аккаунт."
-    static let bonuses = "Баллы, купоны и карты лояльности копятся в аккаунте. Войдите или создайте аккаунт."
-    static let game = "Награды за игру начисляются в аккаунт. Войдите или создайте аккаунт."
-    static let coupon = "Войдите в аккаунт, чтобы получить купон."
-    static let review = "Войдите в аккаунт, чтобы оставлять отзывы."
+    /// Ключи каталога (`LocalizedStringKey`), а не `String`: иначе алерт
+    /// оставался русским на английском и кыргызском интерфейсе.
+    static let saveVenue: LocalizedStringKey = "Гостям доступен только просмотр. Войдите, чтобы сохранять места."
+    static let saveDeal: LocalizedStringKey = "Гостям доступен только просмотр. Войдите, чтобы сохранять предложения."
+    static let like: LocalizedStringKey = "Войдите, чтобы отмечать предложения — они переедут с вами на другое устройство."
+    static let qr: LocalizedStringKey = "Личный QR привязан к аккаунту: по нему заведение начисляет баллы. Войдите или создайте аккаунт."
+    static let bonuses: LocalizedStringKey = "Баллы, купоны и карты лояльности копятся в аккаунте. Войдите или создайте аккаунт."
+    static let game: LocalizedStringKey = "Награды за игру начисляются в аккаунт. Войдите или создайте аккаунт."
+    static let coupon: LocalizedStringKey = "Войдите в аккаунт, чтобы получить купон."
+    static let review: LocalizedStringKey = "Войдите в аккаунт, чтобы оставлять отзывы."
 }
 
 // MARK: - Экран входа поверх приложения
@@ -44,7 +46,7 @@ extension View {
 
 private struct GuestAlertModifier: ViewModifier {
     @Binding var isPresented: Bool
-    let message: String
+    let message: LocalizedStringKey
     @State private var showAuth = false
 
     func body(content: Content) -> some View {
@@ -61,7 +63,7 @@ private struct GuestAlertModifier: ViewModifier {
 
 extension View {
     /// Стандартный отказ гостю: объяснение и переход к входу поверх экрана.
-    func guestAlert(isPresented: Binding<Bool>, message: String) -> some View {
+    func guestAlert(isPresented: Binding<Bool>, message: LocalizedStringKey) -> some View {
         modifier(GuestAlertModifier(isPresented: isPresented, message: message))
     }
 }

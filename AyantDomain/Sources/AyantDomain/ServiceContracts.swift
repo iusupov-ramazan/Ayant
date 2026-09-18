@@ -123,6 +123,9 @@ public struct RedeemOutcome: Equatable {
 public protocol CouponService {
     /// Пишет купон пользователя в Firestore (deal-купон создаёт клиент).
     func saveCoupon(_ coupon: Coupon, userID: String) async throws
+    /// Каталог наград глобального кошелька (config/globalRewards).
+    /// Пусто → показывать нечего: награда без партнёра не гасится.
+    func fetchGlobalRewards() async throws -> [Reward]
     /// Купоны пользователя из Firestore (для синка used-статуса и наград).
     func fetchCoupons(userID: String) async throws -> [Coupon]
     /// Карты лояльности пользователя из Firestore (разовый запрос).

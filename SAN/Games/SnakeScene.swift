@@ -10,6 +10,16 @@ final class SnakeScene: SKScene {
     var onScoreChange: ((Int) -> Void)?
     var onGameOver: ((Int) -> Void)?
 
+    /// Текст водяного знака по центру поля. Приходит из настроек админ-панели
+    /// (`AppSettings.adPlaceholderText`); пусто → локализованный дефолт.
+    /// Смена текста на уже показанной сцене перестраивает поле.
+    var watermarkText: String = "" {
+        didSet {
+            guard watermarkText != oldValue, view != nil else { return }
+            computeGrid()
+        }
+    }
+
     // Сетка
     private let cols = 15
     private let rows = 20
@@ -113,16 +123,45 @@ final class SnakeScene: SKScene {
         lines.lineWidth = 1
         gridLayer.addChild(lines)
 
-        // водяной знак по центру поля
-        let watermark = SKLabelNode(text: "Здесь может быть ваша реклама")
+        // Водяной знак по центру поля. Текст задаёт админ-панель и он может быть
+        // любой длины, поэтому подгоняем под поле: сначала перенос по словам в
+        // ширину поля, затем — если одно слово всё равно шире — уменьшаем кегль.
+        // Раньше кегль был фиксированным (11% поля) и длинная строка вылезала
+        // за край экрана.
+        let text = watermarkText.isEmpty
+            ? LS("Здесь может быть ваша реклама")
+            : watermarkText
+        let watermark = SKLabelNode(text: text)
         watermark.fontName = "AvenirNext-Bold"
-        watermark.fontSize = min(boardW, boardH) * 0.11
         watermark.fontColor = SKColor.gray.withAlphaComponent(0.18)
         watermark.verticalAlignmentMode = .center
         watermark.horizontalAlignmentMode = .center
+        watermark.numberOfLines = 0
+        watermark.lineBreakMode = .byWordWrapping
+        let maxWidth = boardW - cell * 2
+        watermark.preferredMaxLayoutWidth = maxWidth
+        watermark.fontSize = Self.fittedFontSize(for: watermark,
+                                                 base: min(boardW, boardH) * 0.11,
+                                                 maxWidth: maxWidth,
+                                                 maxHeight: boardH * 0.5)
         watermark.position = CGPoint(x: origin.x + boardW / 2,
                                      y: origin.y + boardH / 2)
         gridLayer.addChild(watermark)
+    }
+
+    /// Кегль, при котором подпись помещается в прямоугольник `maxWidth × maxHeight`.
+    /// Начинаем с `base` и уменьшаем пропорционально перебору; не меньше 8 pt.
+    private static func fittedFontSize(for label: SKLabelNode, base: CGFloat,
+                                       maxWidth: CGFloat, maxHeight: CGFloat) -> CGFloat {
+        var size = base
+        for _ in 0..<8 {
+            label.fontSize = size
+            let frame = label.frame
+            guard frame.width > maxWidth || frame.height > maxHeight else { break }
+            let ratio = min(maxWidth / max(frame.width, 1), maxHeight / max(frame.height, 1))
+            size = max(8, size * min(ratio, 0.92))
+        }
+        return size
     }
 
     // MARK: Управление игрой

@@ -51,6 +51,19 @@ test("PTS: начисляет flat-баллы новой карте", async () =
   assert.equal(h.read(`venuePoints/u1_${VENUE}`).balance, 5);
 });
 
+test("PTS: тот же ключ с другим кодом → 409 key_reused, баллы не начисляются", async () => {
+  const h = harness();
+  seedVenue(h, { pointsEnabled: true, pointsMode: "flat", pointsFlat: 5, earnCooldownMinutes: 0 });
+  const first = await scan(h, { code: `AYANT-PTS:u1`, venueID: VENUE, idempotencyKey: "same" });
+  assert.equal(first.statusCode, 200);
+  // Ключ хранится на карте u1_VENUE: подменяем код в сохранённом ключе — коллизия.
+  h.seed(`venuePoints/u1_${VENUE}/scanKeys/same`, { code: "AYANT-PTS:u9", awarded: 500, balance: 500 });
+  const clash = await scan(h, { code: `AYANT-PTS:u1`, venueID: VENUE, idempotencyKey: "same" });
+  assert.equal(clash.statusCode, 409);
+  assert.equal(clash.body.error, "key_reused");
+  assert.equal(h.read(`venuePoints/u1_${VENUE}`).balance, 5);
+});
+
 test("PTS: cashback = round(bill × pct%)", async () => {
   const h = harness();
   seedVenue(h, { pointsEnabled: true, pointsMode: "cashback", cashbackPercent: 10 });

@@ -16,13 +16,28 @@ public struct Reward: Identifiable, Hashable {
     public let title: String
     public let cost: Int
     public let emoji: String
+    /// Заведение-партнёр, которое гасит награду.
+    ///
+    /// Без него награда бесполезна: `scanCoupon` сверяет `coupon.venueID` с
+    /// заведением сканера и отвечает `wrong_venue`, то есть сотрудник не сможет
+    /// погасить купон. Поэтому награды без партнёра не показываются
+    /// (см. `isRedeemable`), а не выдают купон в никуда.
+    public let venueID: String
+    public let venueName: String
 
-    public init(id: String, title: String, cost: Int, emoji: String) {
+    public init(id: String, title: String, cost: Int, emoji: String,
+                venueID: String = "", venueName: String = "") {
         self.id = id
         self.title = title
         self.cost = cost
         self.emoji = emoji
+        self.venueID = venueID
+        self.venueName = venueName
     }
+
+    /// Награду можно предъявить в заведении. Без партнёра — нельзя.
+    public var isRedeemable: Bool { !venueID.isEmpty }
+
 }
 
 /// Купон, полученный пользователем за бонусы (показывается сотруднику).
@@ -98,4 +113,20 @@ public struct LoyaltyCard: Identifiable, Codable, Hashable {
         self.goal = goal
         self.reward = reward
     }
+}
+
+
+/// Встроенный список наград глобального кошелька.
+///
+/// Это ШАБЛОН, а не то, что видит пользователь: у наград здесь нет партнёра,
+/// поэтому показывать их нельзя (см. `Reward.isRedeemable`). Реальный каталог
+/// приходит из `config/globalRewards`, где у каждой награды проставлено
+/// заведение; админ-панель заполняет его этими же заготовками.
+public enum CouponCatalog {
+    public static let builtIn: [Reward] = [
+        Reward(id: "disc10", title: "−10% к любой акции", cost: 100, emoji: "🏷️"),
+        Reward(id: "coffee", title: "Бесплатный кофе у партнёра", cost: 300, emoji: "☕️"),
+        Reward(id: "dessert", title: "Десерт в подарок", cost: 400, emoji: "🍰"),
+        Reward(id: "vip", title: "VIP-доступ к новинкам", cost: 500, emoji: "⭐️"),
+    ]
 }

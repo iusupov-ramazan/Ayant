@@ -13,7 +13,7 @@ import Foundation
 /// который гоняют все три реализации (iOS, Android, Functions). Новый кейс идёт
 /// в фикстур, а не в тесты одной платформы.
 ///
-/// Зеркалит `data/PointsMath.kt` на Android 1:1 (имена, порядок проверок, коды ошибок).
+/// Зеркалит `android/domain/.../PointsMath.kt` на Android 1:1 (имена, порядок проверок, коды ошибок).
 public enum PointsMath {
 
     // MARK: - Константы (совпадают с functions/src/index.ts)

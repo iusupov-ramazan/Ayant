@@ -462,6 +462,11 @@ struct VenueCard: View {
 // MARK: - Рекламный слот-плейсхолдер (каждая 5-я позиция в ленте)
 
 struct AdPlaceholderCard: View {
+    /// Текст из настроек панели (`AppStore.settings.adPlaceholderText`);
+    /// пусто → локализованный дефолт. Длинный текст переносится и ужимается,
+    /// а не обрезается.
+    var text: String = ""
+
     var body: some View {
         VStack(spacing: 8) {
             Text("Реклама")
@@ -471,10 +476,11 @@ struct AdPlaceholderCard: View {
             Image(systemName: "megaphone.fill")
                 .font(.system(size: 30))
                 .foregroundStyle(Color.sanAccent.opacity(0.8))
-            Text("Здесь может быть\nваша реклама")
+            Text(text.isEmpty ? LS("Здесь может быть ваша реклама") : text)
                 .font(.headline)
                 .multilineTextAlignment(.center)
-                .lineLimit(2)
+                .lineLimit(3)
+                .minimumScaleFactor(0.6)
                 .foregroundStyle(.primary)
             Text("Заведения — продвигайтесь в Ayant")
                 .font(.caption)

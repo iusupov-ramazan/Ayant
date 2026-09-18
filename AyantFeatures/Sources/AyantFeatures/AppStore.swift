@@ -27,6 +27,11 @@ public final class AppStore: ObservableObject {
     @Published public var isGuest = false   // гость не может сохранять/оставлять отзывы
     @Published public var toastMessage: String?   // всплывающее уведомление (подарки и т. п.)
 
+    /// Глобальные настройки из админ-панели (config/appSettings): текст рекламного
+    /// плейсхолдера, пауза между штампами. Дефолт → переопределяется в `load()`;
+    /// сеть недоступна — остаёмся на дефолтах, экраны от этого не зависят.
+    @Published public private(set) var settings: AppSettings = .default
+
     /// Стор ленты. `AppStore` остаётся владельцем загрузки каталога (его же читают
     /// поиск, избранное и карточка заведения) и публикует снимок сюда — второй
     /// раз Firestore не читается.
@@ -116,6 +121,8 @@ public final class AppStore: ObservableObject {
 
     public func load() async {
         await feed.load()
+        // Настройки панели — некритично: ошибка/отсутствие документа → дефолты.
+        if let s = try? await repository.fetchAppSettings() { settings = s }
     }
 
     /// Забывает всё, что принадлежало вышедшему пользователю: личную библиотеку
@@ -644,6 +651,24 @@ public final class AppStore: ObservableObject {
     public func deleteReview(_ review: Review) {
         feed.removeReview(id: review.id)
         Task { try? await repository.deleteReview(id: review.id) }
+    }
+
+    /// Жалоба на отзыв (Guidelines 1.2).
+    ///
+    /// Отзыв НЕ прячем сразу: иначе жалоба стала бы кнопкой «удалить чужой
+    /// отзыв» — достаточно пожаловаться, чтобы убрать неудобную правду о
+    /// заведении. Решение принимает модератор в админ-панели.
+    ///
+    /// Гостю не отказываем: он подписан анонимно, uid у него есть, а модерация
+    /// не должна упираться в регистрацию.
+    public func reportReview(_ review: Review, reason: ReviewReportReason) {
+        let reporterID = profile.state.userID
+        guard !reporterID.isEmpty else { return }
+        let report = ReviewReport(review: review, reporterID: reporterID,
+                                  reason: reason, now: clock.now)
+        AnalyticsLog.log(.reviewReported, ["venue_id": review.venueID,
+                                           "reason": reason.rawValue])
+        Task { try? await repository.reportReview(report) }
     }
 
     // MARK: - Лента (v1, органическое ранжирование)

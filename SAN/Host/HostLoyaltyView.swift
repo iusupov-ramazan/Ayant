@@ -235,18 +235,18 @@ struct HostLoyaltyView: View {
         VStack(alignment: .leading, spacing: 12) {
             eyebrow("Баллы САН")
             SanFieldCard {
-                summaryRow("Баллы САН", draft.enabled ? "Включены" : "Выключены")
+                summaryRow("Баллы САН", draft.enabled ? LS("Включены") : LS("Выключены"))
                 if draft.enabled {
                     SanHairline(leading: 16)
                     summaryRow("Начисление", accrualSummary)
                     SanHairline(leading: 16)
                     summaryRow("Пауза между начислениями",
-                               draft.cooldownMinutes == "0" ? "Нет" : "\(draft.cooldownMinutes) мин")
+                               draft.cooldownMinutes == "0" ? LS("Нет") : LF("%@ мин", draft.cooldownMinutes))
                     SanHairline(leading: 16)
-                    summaryRow("Срок сгорания", "\(draft.expiryMonths) мес")
+                    summaryRow("Срок сгорания", LF("%@ мес", draft.expiryMonths))
                     SanHairline(leading: 16)
                     summaryRow("Списание",
-                               draft.redeemMode == "customerInitiated" ? "Гость сам в приложении" : "Сотрудник по QR гостя")
+                               draft.redeemMode == "customerInitiated" ? LS("Гость сам в приложении") : LS("Сотрудник по QR гостя"))
                 }
             }
             if draft.enabled { rewardsSummary }
@@ -256,13 +256,13 @@ struct HostLoyaltyView: View {
     private var accrualSummary: String {
         switch draft.mode {
         case "cashback":
-            return "Кэшбэк \(draft.cashback.isEmpty ? "0" : draft.cashback)% от чека"
+            return LF("Кэшбэк %@%% от чека", draft.cashback.isEmpty ? "0" : draft.cashback)
         case "bands":
             return draft.bands.isEmpty
-                ? "Диапазоны не заданы"
-                : draft.bands.map { "до \($0.maxAmount) сом → \($0.points)" }.joined(separator: "\n")
+                ? LS("Диапазоны не заданы")
+                : draft.bands.map { LF("до %@ сом → %@", $0.maxAmount, $0.points) }.joined(separator: "\n")
         default:
-            return "\(draft.flat.isEmpty ? "0" : draft.flat) баллов за визит"
+            return LF("%@ баллов за визит", draft.flat.isEmpty ? "0" : draft.flat)
         }
     }
 
@@ -289,16 +289,16 @@ struct HostLoyaltyView: View {
     private func rewardSummaryRow(_ r: PointsDraft.RewardRow) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(verbatim: r.title.isEmpty ? "Без названия" : r.title)
+                Text(verbatim: r.title.isEmpty ? LS("Без названия") : r.title)
                     .font(.golos(15, .semibold)).foregroundStyle(Color.sanInk)
                 Text(verbatim: r.type == "money"
-                     ? "Скидка сомами · 1 балл = \(r.ratio) сом"
-                     : "Товар или услуга")
+                     ? LF("Скидка сомами · 1 балл = %@ сом", r.ratio)
+                     : LS("Товар или услуга"))
                     .font(.golos(12)).foregroundStyle(Color.sanInkSoft)
             }
             Spacer(minLength: 8)
             VStack(alignment: .trailing, spacing: 3) {
-                Text(verbatim: r.type == "money" ? "от \(r.cost) баллов" : "\(r.cost) баллов")
+                Text(verbatim: r.type == "money" ? LF("от %@ баллов", r.cost) : LF("%@ баллов", r.cost))
                     .font(.golos(14, .semibold)).foregroundStyle(Color.sanInk)
                 if !r.active {
                     Text("выключена").font(.golos(11.5)).foregroundStyle(Color.sanInkSoft)
@@ -415,9 +415,9 @@ struct HostLoyaltyView: View {
 
     private static func modeTitle(_ mode: String) -> String {
         switch mode {
-        case "bands": return "Диапазоны"
-        case "cashback": return "Кэшбэк"
-        default: return "Фикс"
+        case "bands": return LS("Диапазоны")
+        case "cashback": return LS("Кэшбэк")
+        default: return LS("Фикс")
         }
     }
 
@@ -504,7 +504,7 @@ struct HostLoyaltyView: View {
                         hint: isMoney ? "Гость списывает баллы как скидку с чека"
                                       : "Конкретный товар или услуга за фиксированную цену в баллах") {
                 SanSegmented(items: ["item", "money"],
-                             title: { $0 == "money" ? "Скидка сомами" : "Товар" },
+                             title: { $0 == "money" ? LS("Скидка сомами") : LS("Товар") },
                              selection: reward.type)
             }
             SanHairline(leading: 16)
@@ -580,7 +580,7 @@ struct HostLoyaltyView: View {
             // здесь читались бы как реальные данные.
             WalletPointsCard(
                 card: VenuePointsCard(venueID: venue?.id ?? "preview",
-                                      venueName: venue?.name ?? "Ваше заведение",
+                                      venueName: venue?.name ?? LS("Ваше заведение"),
                                       balance: 0),
                 venue: previewVenue,
                 isFront: true)

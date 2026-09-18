@@ -85,7 +85,7 @@ struct AuthView: View {
     /// (см. тот же урок в `ProfileView`).
     private var infoAlert: Binding<Bool> {
         Binding(get: { session.infoMessage != nil },
-                set: { if !$0 { session.infoMessage = nil } })
+                set: { if !$0 { session.infoMessage = nil; session.passwordResetSentTo = nil } })
     }
 
     private var closeButton: some View {
@@ -178,9 +178,15 @@ struct AuthView: View {
         .padding(20)
         .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 24))
         .alert("Готово", isPresented: infoAlert) {
-            Button("Ок") { session.infoMessage = nil }
+            Button("Ок") { session.infoMessage = nil; session.passwordResetSentTo = nil }
         } message: {
-            Text(session.infoMessage ?? "")
+            // Текст собирает приложение: пакет знает только адрес, на который
+            // ушло письмо (`passwordResetSentTo`).
+            if let email = session.passwordResetSentTo {
+                Text(LF("Письмо для сброса пароля отправлено на %@", email))
+            } else {
+                Text(session.infoMessage ?? "")
+            }
         }
         // Подсказка «введите почту» живёт до первого изменения поля.
         .onChange(of: email) { _, _ in resetHint = nil }
@@ -194,7 +200,7 @@ struct AuthView: View {
             Spacer()
             Button("Забыли пароль?") {
                 guard AuthValidation.isValidEmail(email) else {
-                    resetHint = "Введите почту выше — на неё придёт письмо для сброса пароля"
+                    resetHint = LS("Введите почту выше — на неё придёт письмо для сброса пароля")
                     focused = .email
                     return
                 }
@@ -231,7 +237,7 @@ struct AuthView: View {
 
     /// `contentType` включает системный AutoFill: почту и имя iOS подставляет
     /// из контактов, пароль — из связки ключей.
-    private func field(_ placeholder: String, text: Binding<String>,
+    private func field(_ placeholder: LocalizedStringKey, text: Binding<String>,
                        icon: String, keyboard: UIKeyboardType = .default,
                        contentType: UITextContentType,
                        field: Field, hint: String?) -> some View {
@@ -252,7 +258,7 @@ struct AuthView: View {
         }
     }
 
-    private func secureField(_ placeholder: String, text: Binding<String>,
+    private func secureField(_ placeholder: LocalizedStringKey, text: Binding<String>,
                              contentType: UITextContentType,
                              hint: String?) -> some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -274,14 +280,15 @@ struct AuthView: View {
     /// (`AuthValidation.*Hint` возвращает nil на пустом поле).
     @ViewBuilder private func hintText(_ hint: String?) -> some View {
         if let hint {
-            Text(hint)
+            // Подсказки `AuthValidation` — русские строки домена; переводит каталог.
+            Text(L(hint))
                 .font(.caption)
                 .foregroundStyle(.red)
                 .padding(.horizontal, 4)
         }
     }
 
-    private func primaryLabel(_ title: String) -> some View {
+    private func primaryLabel(_ title: LocalizedStringKey) -> some View {
         Text(title)
             .fontWeight(.semibold)
             .foregroundStyle(.white)

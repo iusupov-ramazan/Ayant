@@ -1,7 +1,9 @@
 package kg.ayant.app.domain
 
+import kg.ayant.app.domain.model.AppSettings
 import kg.ayant.app.domain.model.Deal
 import kg.ayant.app.domain.model.Review
+import kg.ayant.app.domain.model.ReviewReport
 import kg.ayant.app.domain.model.Venue
 
 /**
@@ -36,6 +38,11 @@ interface DataRepository {
     suspend fun deleteReview(id: String)
     /** Owner reply on a review (visible to all). null clears it. */
     suspend fun updateReviewReply(reviewID: String, replyText: String?)
+    /**
+     * Жалоба на отзыв (Guidelines 1.2). Идемпотентна: повторная жалоба того же
+     * человека перезаписывает свою же запись — см. `ReviewReport.id`.
+     */
+    suspend fun reportReview(report: ReviewReport)
     /** Redemption log (server counter + anti-abuse). Deterministic id. */
     suspend fun logRedemption(userID: String, dealID: String, venueID: String)
     /** Referral: inviter → invitee. */
@@ -50,6 +57,9 @@ interface DataRepository {
      *  Keys match the trainer output (W_RATING, …). See ml/README.md. Only
      *  FirebaseDataRepository overrides this; others keep the default weights. */
     suspend fun fetchRankingWeights(): Map<String, Double>? = null
+
+    /** Глобальные настройки из панели (config/appSettings). null → [AppSettings.DEFAULT]. Mirrors `fetchAppSettings()`. */
+    suspend fun fetchAppSettings(): AppSettings? = null
 }
 
 /** Data claimed from a gift-coupon link. */

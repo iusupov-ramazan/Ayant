@@ -91,11 +91,8 @@ private enum CouponLook {
 
     /// «3 активных купона» — склонение по последним цифрам.
     static func activeText(_ n: Int) -> String {
-        if n == 0 { return "Активных купонов нет" }
-        let mod10 = n % 10, mod100 = n % 100
-        if mod10 == 1 && mod100 != 11 { return "\(n) активный купон" }
-        if (2...4).contains(mod10) && !(12...14).contains(mod100) { return "\(n) активных купона" }
-        return "\(n) активных купонов"
+        if n == 0 { return LS("Активных купонов нет") }
+        return LF(LPlural(n, "%lld активный купон", "%lld активных купона", "%lld активных купонов"), n)
     }
 }
 
@@ -139,7 +136,7 @@ struct MyCouponsView: View {
 
     private var subtitle: String {
         var text = CouponLook.activeText(available.count)
-        if !used.isEmpty { text += " · использованных: \(used.count)" }
+        if !used.isEmpty { text += LF(" · использованных: %lld", used.count) }
         return text
     }
 
@@ -345,7 +342,7 @@ struct GiftShareSheet: View {
     @State private var showActivity = false
 
     private var caption: String {
-        "🎁 Тебе подарок — купон «\(title)» в Ayant! Забери по ссылке: \(url.absoluteString)"
+        LF("🎁 Тебе подарок — купон «%@» в Ayant! Забери по ссылке: %@", title, url.absoluteString)
     }
 
     var body: some View {
@@ -403,8 +400,7 @@ struct CouponDetailView: View {
 
     /// «11 сентября» — родительный падеж даёт сам формат `d MMMM` в ru_RU.
     private var receivedText: String {
-        coupon.createdAt.formatted(
-            Date.FormatStyle(locale: Locale(identifier: (UserDefaults.standard.string(forKey: "san.language") ?? "ru") == "en" ? "en_US" : "ru_RU")).day().month(.wide))
+        coupon.createdAt.formatted(Date.FormatStyle(locale: AppLanguage.locale).day().month(.wide))
     }
 
     var body: some View {

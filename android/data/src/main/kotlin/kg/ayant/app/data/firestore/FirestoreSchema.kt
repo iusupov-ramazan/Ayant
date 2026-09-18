@@ -23,6 +23,7 @@ object FS {
         const val VENUES = "venues"
         const val DEALS = "deals"
         const val REVIEWS = "reviews"
+        const val REVIEW_REPORTS = "reviewReports"
         const val COUPONS = "coupons"
         const val GIFT_COUPONS = "giftCoupons"
         const val LOYALTY_CARDS = "loyaltyCards"
@@ -43,6 +44,16 @@ object FS {
     /** Документы с фиксированным id. */
     object Document {
         const val RANKING_WEIGHTS = "rankingWeights"
+        /** config/globalRewards — каталог наград глобального кошелька. */
+        const val GLOBAL_REWARDS = "globalRewards"
+        /** config/appSettings — глобальные настройки из админ-панели. */
+        const val APP_SETTINGS = "appSettings"
+    }
+
+    /** Поля config/appSettings. Читает и сервер (`scanCoupon`), и панель. Mirrors `FS.AppSettingsDoc`. */
+    object AppSettingsDoc {
+        const val STAMP_COOLDOWN_MINUTES = "stampCooldownMinutes"
+        const val AD_PLACEHOLDER_TEXT = "adPlaceholderText"
     }
 
     // ── venues/{id} ──────────────────────────────────────────────────────────
@@ -117,6 +128,30 @@ object FS {
     }
 
     // ── reviews/{id} ─────────────────────────────────────────────────────────
+
+    // MARK: - reviewReports/{reviewID}_{reporterID}
+
+    /** Элемент массива `items` в config/globalRewards. */
+    object GlobalRewardDoc {
+        const val ITEMS = "items"
+        const val ID = "id"
+        const val TITLE = "title"
+        const val COST = "cost"
+        const val EMOJI = "emoji"
+        /** Заведение-партнёр: без него награду нельзя погасить. */
+        const val VENUE_ID = "venueID"
+        const val VENUE_NAME = "venueName"
+    }
+
+    object ReviewReportDoc {
+        const val REVIEW_ID = "reviewID"
+        const val VENUE_ID = "venueID"
+        const val REPORTER_ID = "reporterID"
+        const val REASON = "reason"
+        const val CREATED_AT = "createdAt"
+        /** "open" | "reviewed" — очередь разбора в админ-панели. */
+        const val STATUS = "status"
+    }
 
     object ReviewDoc {
         const val VENUE_ID = "venueID"

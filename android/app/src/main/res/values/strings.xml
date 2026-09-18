@@ -629,4 +629,180 @@
     <string name="feed_load_failed_title">Не удалось загрузить ленту</string>
     <string name="feed_load_failed_body">Проверьте интернет и попробуйте ещё раз.</string>
     <string name="action_retry">Повторить</string>
+    <string name="onb_continue">Продолжить</string>
+    <string name="review_report_fake">Фейк</string>
+    <string name="bonus_rewards_empty">Награды появятся, когда подключатся заведения-партнёры. Бонусы копятся — тратить их будет на что.</string>
+    <!-- Водяной знак «Змейки»; текст задаёт админ-панель (config/appSettings), это дефолт -->
+    <string name="ad_placeholder">Здесь может быть ваша реклама</string>
+    <!-- ===== Localization pass (2026-09): Compose literals + domain titles moved into the catalog ===== -->
+    <!-- Units -->
+    <string name="distance_m">%1$d м</string>
+    <string name="distance_km">%1$s км</string>
+    <string name="unit_min">%1$d мин</string>
+    <string name="unit_months">%1$d мес</string>
+    <!-- Deal types / badges (domain `DealType.title` / `badgeLabel`) -->
+    <string name="deal_type_discount">Скидка</string>
+    <string name="deal_type_promo">Акция</string>
+    <string name="deal_type_novelty">Новинка</string>
+    <string name="deal_type_announcement">Объявление</string>
+    <string name="deal_badge_discount">СКИДКА</string>
+    <string name="deal_badge_promo">ПРОМО</string>
+    <string name="deal_badge_novelty">НОВОЕ</string>
+    <string name="deal_badge_announcement">АНОНС</string>
+    <string name="map_pin_new">Новое</string>
+    <string name="deal_ends_today">Заканчивается сегодня</string>
+    <string name="deal_hours_left">Осталось %1$d ч</string>
+    <!-- Venue categories (Firestore rawValue → catalog) -->
+    <string name="category_cafe">Кафе</string>
+    <string name="category_coffee">Кофейня</string>
+    <string name="category_fastfood">Фастфуд</string>
+    <string name="category_restaurant">Ресторан</string>
+    <string name="category_teahouse">Чайхана</string>
+    <string name="category_bakery">Пекарня</string>
+    <!-- Hours -->
+    <string name="hours_day_off_today">Сегодня выходной</string>
+    <string name="hours_open_until">Открыто · до %1$s</string>
+    <string name="weekday_mon">Понедельник</string>
+    <string name="weekday_tue">Вторник</string>
+    <string name="weekday_wed">Среда</string>
+    <string name="weekday_thu">Четверг</string>
+    <string name="weekday_fri">Пятница</string>
+    <string name="weekday_sat">Суббота</string>
+    <string name="weekday_sun">Воскресенье</string>
+    <!-- Venue detail -->
+    <plurals name="addresses_count">
+        <item quantity="one">%1$d адрес</item>
+        <item quantity="few">%1$d адреса</item>
+        <item quantity="many">%1$d адресов</item>
+        <item quantity="other">%1$d адреса</item>
+    </plurals>
+    <string name="venue_hide_addresses">Скрыть адреса</string>
+    <string name="venue_show_all_addresses">Посмотреть все адреса (%1$d)</string>
+    <plurals name="reviews_word">
+        <item quantity="one">%1$d отзыв</item>
+        <item quantity="few">%1$d отзыва</item>
+        <item quantity="many">%1$d отзывов</item>
+        <item quantity="other">%1$d отзыва</item>
+    </plurals>
+    <string name="points_until_reward">Ещё %1$d до «%2$s»</string>
+    <!-- SAN points (customer) -->
+    <string name="points_title">Баллы САН</string>
+    <string name="points_load_failed">Не удалось загрузить баллы</string>
+    <string name="points_empty_title">Пока нет баллов</string>
+    <string name="points_empty_body">Показывайте свой QR при оплате в заведениях с бонусами САН — за визиты копятся баллы. Награды — на странице заведения.</string>
+    <string name="points_your_points">Ваши баллы</string>
+    <string name="points_show_qr_earn">Показать QR для начисления</string>
+    <string name="points_how_body">Показывайте QR при оплате — сотрудник начисляет баллы. Тратьте их на награды из списка выше.</string>
+    <string name="points_reward_money_from">Скидка баллами · от %1$d б.</string>
+    <string name="points_short">%1$d б.</string>
+    <string name="points_discount_som">Скидка: %1$d сом</string>
+    <string name="points_cost">Стоимость: %1$d баллов</string>
+    <string name="points_redeemed_customer">Списано %1$d баллов. Остаток: %2$d. Заберите награду у сотрудника.</string>
+    <string name="points_redeem_replayed">Это повтор предыдущего запроса — баллы списаны один раз.</string>
+    <string name="points_redeem_show_qr">Покажите QR сотруднику — он спишет баллы и выдаст награду.</string>
+    <string name="points_redeeming">Списываем…</string>
+    <string name="points_redeem_button">Списать %1$d баллов</string>
+    <string name="points_new_balance">Новый баланс</string>
+    <string name="points_earned_note">Баллы копятся у этого заведения и тратятся у него же.</string>
+    <string name="action_great">Отлично</string>
+    <!-- SAN points errors (server codes → text; mirrors PointsMessages on iOS) -->
+    <string name="points_err_insufficient">Недостаточно баллов.</string>
+    <string name="points_err_reward_not_found">Награда недоступна.</string>
+    <string name="points_err_redeem_not_allowed">Списание доступно только у сотрудника.</string>
+    <string name="points_err_below_min">Слишком мало баллов.</string>
+    <string name="points_err_key_reused">Этот запрос уже выполнялся. Обновите экран.</string>
+    <string name="points_err_unauthenticated">Войдите в аккаунт, чтобы списать баллы.</string>
+    <string name="points_err_permission_denied">Нет доступа к баллам этого аккаунта.</string>
+    <string name="points_err_network">Нет связи. Проверьте интернет и повторите.</string>
+    <string name="points_err_generic">Не удалось списать баллы. Попробуйте ещё раз.</string>
+    <!-- Host scanner (server codes → text) -->
+    <string name="host_err_coupon_not_found">Купон не найден.</string>
+    <string name="host_err_wrong_venue">Этот код — для другого заведения.</string>
+    <string name="host_err_loyalty_off">Карта лояльности у заведения выключена.</string>
+    <string name="host_err_already_used">Купон уже был использован.</string>
+    <string name="host_err_not_owner">У вас нет прав на это заведение.</string>
+    <string name="host_err_venue_not_found">Заведение не найдено.</string>
+    <string name="host_err_no_token">Требуется вход в аккаунт заведения.</string>
+    <string name="host_err_missing_params">Пустой код купона.</string>
+    <string name="host_err_points_off">Баллы САН у заведения выключены.</string>
+    <string name="host_err_cooldown">Баллы этому гостю уже начислены недавно.</string>
+    <string name="host_err_missing_amount">Введите сумму чека.</string>
+    <string name="host_err_bad_band">Выберите диапазон суммы.</string>
+    <string name="host_err_no_points">Начислять нечего (0 баллов).</string>
+    <string name="host_err_bad_code">Неверный QR-код.</string>
+    <string name="host_err_insufficient">У гостя недостаточно баллов.</string>
+    <string name="host_err_reward_not_found">Награда не найдена или отключена.</string>
+    <string name="host_err_redeem_not_allowed">Списание баллов недоступно для этого заведения.</string>
+    <string name="host_err_below_min">Слишком мало баллов для этой награды.</string>
+    <string name="host_err_missing_user">Не удалось определить гостя.</string>
+    <string name="host_err_bad_reward_code">Неверный код награды.</string>
+    <string name="host_redeemed_som">Списано %1$d баллов (−%2$d сом). Остаток: %3$d.</string>
+    <string name="host_redeemed_item">Списано %1$d баллов. Остаток: %2$d. Выдайте награду гостю.</string>
+    <string name="host_awarded_balance">Начислено %1$d. Баланс гостя: %2$d баллов.</string>
+    <string name="host_pick_venue_first">Выберите заведение</string>
+    <string name="host_band_plus">%1$d+ сом</string>
+    <string name="host_band_upto">до %1$d сом</string>
+    <string name="host_mode_cashback_pct">Кэшбэк %1$s%%</string>
+    <string name="host_mode_flat_visit">%1$d за визит</string>
+    <string name="host_bill_guest">Сумма чека гостя</string>
+    <string name="host_bill_amount_som">Сумма, сом</string>
+    <string name="host_bands_not_configured">Диапазоны не настроены.</string>
+    <string name="host_award">Начислить</string>
+    <string name="loyalty_reward_default">Награда за лояльность</string>
+    <string name="venue_fallback_name">заведение</string>
+    <string name="host_avatar_fallback">Б</string>
+    <!-- Wallet -->
+    <string name="wallet_points_word">баллов</string>
+    <string name="wallet_rewards_available">Награды доступны</string>
+    <string name="wallet_stamp_per_visit">штамп за каждый визит</string>
+    <string name="stamp_hint_complete">Круг собран — покажите карту сотруднику и заберите «%1$s».</string>
+    <string name="stamp_hint_left">Ещё %1$s — и «%2$s» в подарок. Штампы ставит сотрудник, сканируя ваш QR.</string>
+    <plurals name="visits_count">
+        <item quantity="one">%1$d визит</item>
+        <item quantity="few">%1$d визита</item>
+        <item quantity="many">%1$d визитов</item>
+        <item quantity="other">%1$d визита</item>
+    </plurals>
+    <string name="wallet_mode_cashback">кэшбэк %1$s%%</string>
+    <string name="wallet_mode_bands">по сумме чека</string>
+    <string name="wallet_mode_flat">%1$d за визит</string>
+    <string name="feed_earn_cashback">+%1$s%% САН</string>
+    <string name="feed_earn_flat">+%1$d баллов</string>
+    <!-- Guest gate (mirrors GuestGate.swift) -->
+    <string name="guest_need_account">Нужен аккаунт</string>
+    <string name="guest_sign_in_or_create">Войти или создать аккаунт</string>
+    <string name="guest_save_venue">Гостям доступен только просмотр. Войдите, чтобы сохранять места.</string>
+    <string name="guest_save_deal">Гостям доступен только просмотр. Войдите, чтобы сохранять предложения.</string>
+    <string name="guest_like">Войдите, чтобы отмечать предложения — они переедут с вами на другое устройство.</string>
+    <string name="guest_qr">Личный QR привязан к аккаунту: по нему заведение начисляет баллы. Войдите или создайте аккаунт.</string>
+    <string name="guest_bonuses">Баллы, купоны и карты лояльности копятся в аккаунте. Войдите или создайте аккаунт.</string>
+    <string name="guest_game">Награды за игру начисляются в аккаунт. Войдите или создайте аккаунт.</string>
+    <string name="guest_review">Отзывы привязаны к аккаунту. Войдите или создайте аккаунт, чтобы оценивать блюда и услуги.</string>
+    <!-- Campaigns / verification / legal form (domain enum titles) -->
+    <string name="campaign_kind_boost">Буст заведения</string>
+    <string name="campaign_kind_push">Push-уведомление</string>
+    <string name="campaign_status_scheduled">Запланирована</string>
+    <string name="campaign_status_active">Активна</string>
+    <string name="campaign_status_sent">Отправлено</string>
+    <string name="campaign_status_completed">Завершена</string>
+    <string name="campaign_status_cancelled">Отменена</string>
+    <string name="verification_none">Не запрошена</string>
+    <string name="verification_pending">На рассмотрении</string>
+    <string name="verification_verified">Подтверждено ✓</string>
+    <string name="verification_rejected">Отклонено</string>
+    <string name="legal_form_ip">ИП</string>
+    <string name="legal_form_ooo">ООО</string>
+    <string name="legal_form_self">Самозанятый</string>
+    <!-- Auth hints / session errors (feature layer returns codes) -->
+    <string name="auth_hint_email">Похоже на опечатку: почта вида name@mail.ru</string>
+    <string name="auth_hint_name_length">Имя от %1$d до %2$d символов</string>
+    <string name="auth_hint_name_chars">Только буквы, пробел и дефис</string>
+    <string name="auth_hint_password">Пароль от %1$d символов</string>
+    <string name="session_err_network">Нет связи с сервером. Проверьте интернет.</string>
+    <string name="session_err_sign_in">Ошибка входа</string>
+    <!-- Notifications -->
+    <string name="notif_channel_name">Акции и предложения</string>
+    <string name="notif_channel_desc">Новые акции сохранённых заведений</string>
+    <string name="bonus_reminder_title">Не забудь про бонусы 🎁</string>
+    <string name="bonus_reminder_body">Загляни в Ayant — новые акции и бонусы ждут.</string>
 </resources>

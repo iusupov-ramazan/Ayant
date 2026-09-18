@@ -11,7 +11,7 @@ enum ImageUploader {
 
     enum UploadError: LocalizedError {
         case badResponse
-        var errorDescription: String? { "Не удалось загрузить изображение" }
+        var errorDescription: String? { LS("Не удалось загрузить изображение") }
     }
 
     /// Грузит файл в Cloudinary и возвращает secure_url.
@@ -84,7 +84,7 @@ struct PDFPickerField: View {
                 do {
                     let data = try Data(contentsOf: url)
                     urlString = try await ImageUploader.uploadPDF(data)
-                } catch { self.error = "Не удалось загрузить PDF" }
+                } catch { self.error = LS("Не удалось загрузить PDF") }
                 uploading = false
             }
         }
@@ -150,10 +150,10 @@ struct ImagePickerField: View {
                        let jpeg = ui.downscaled().jpegData(compressionQuality: 0.8) {
                         imageURL = try await ImageUploader.upload(jpeg)
                     } else {
-                        error = "Не удалось прочитать фото"
+                        error = LS("Не удалось прочитать фото")
                     }
                 } catch {
-                    self.error = "Ошибка загрузки фото"
+                    self.error = LS("Ошибка загрузки фото")
                 }
                 uploading = false
             }

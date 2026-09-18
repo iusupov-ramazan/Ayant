@@ -441,19 +441,14 @@ struct FeedDealCard: View {
             let f = RelativeDateTimeFormatter()
             // Язык приложения, а не системы: приложение русскоязычное и умеет
             // переключаться само (см. `LS`).
-            f.locale = Locale(identifier: UserDefaults.standard.string(forKey: "san.language") ?? "ru")
+            f.locale = AppLanguage.locale
             f.unitsStyle = .full
             parts.append(f.localizedString(for: start, relativeTo: Date()))
         }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
-    private static func reviewPlural(_ n: Int) -> String {
-        let n10 = n % 10, n100 = n % 100
-        if n10 == 1 && n100 != 11 { return "отзыв" }
-        if (2...4).contains(n10) && !(12...14).contains(n100) { return "отзыва" }
-        return "отзывов"
-    }
+    private static func reviewPlural(_ n: Int) -> String { LPlural(n, "отзыв", "отзыва", "отзывов") }
 }
 
 
@@ -652,12 +647,12 @@ extension Venue {
         switch pointsMode {
         case "cashback":
             guard cashbackPercent > 0 else { return nil }
-            return "+\(cashbackPercent.sanPercentText)% САН"
+            return LF("+%@%% САН", cashbackPercent.sanPercentText)
         case "bands":
-            return "Баллы САН"
+            return LS("Баллы САН")
         default:
             guard pointsFlat > 0 else { return nil }
-            return "+\(pointsFlat) баллов"
+            return LF("+%lld баллов", pointsFlat)
         }
     }
 }

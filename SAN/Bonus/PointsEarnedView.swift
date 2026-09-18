@@ -47,22 +47,22 @@ struct PointsEarnedView: View {
     }
     private var headline: String {
         switch earned {
-        case .points: return "Баллы начислены"
-        case .stamp(_, _, let issued, _): return issued ? "Карта заполнена!" : "Штамп получен"
+        case .points: return LS("Баллы начислены")
+        case .stamp(_, _, let issued, _): return issued ? LS("Карта заполнена!") : LS("Штамп получен")
         }
     }
     private var footnote: String {
         switch earned {
-        case .points: return "Баллы копятся у этого заведения и тратятся у него же."
+        case .points: return LS("Баллы копятся у этого заведения и тратятся у него же.")
         case .stamp(_, let goal, let issued, let reward):
-            return issued ? "Купон «\(reward)» уже в «Мои купоны» — покажите его сотруднику."
-                          : "Ещё \(goal) \(Self.stampsWord(goal)) — и «\(reward)» в подарок."
+            return issued ? LF("Купон «%@» уже в «Мои купоны» — покажите его сотруднику.", reward)
+                          : LF("Ещё %lld %@ — и «%@» в подарок.", goal, Self.stampsWord(goal), reward)
         }
     }
     private var balanceLabel: String {
         switch earned {
-        case .points: return "Новый баланс"
-        case .stamp(_, let goal, _, _): return "Штампов из \(goal)"
+        case .points: return LS("Новый баланс")
+        case .stamp(_, let goal, _, _): return LF("Штампов из %lld", goal)
         }
     }
 

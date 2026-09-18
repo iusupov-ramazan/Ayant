@@ -200,12 +200,12 @@ struct HostVenuesView: View {
         .background(Color.sanCanvas)
     }
 
-    private func tabButton(_ t: HostGridTab, icon: String, label: String, count: Int) -> some View {
+    private func tabButton(_ t: HostGridTab, icon: String, label: LocalizedStringKey, count: Int) -> some View {
         let active = gridTab == t
         return Button { select(t) } label: {
             HStack(spacing: 6) {
                 Image(systemName: icon).font(.system(size: 15, weight: .semibold))
-                (Text(L(label)) + Text(" \(count)"))
+                (Text(label) + Text(verbatim: " \(count)"))
                     .textCase(.uppercase)
                     .font(.golos(12.5, .heavy)).tracking(0.3)
             }
@@ -445,7 +445,7 @@ struct HostVenuesView: View {
         .accessibilityLabel("\(d.title), \(venue.name), \(LS(d.status.title))")
     }
 
-    private func addTile(_ label: String, aspect: CGFloat = 1,
+    private func addTile(_ label: LocalizedStringKey, aspect: CGFloat = 1,
                          action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Color.sanTileEmpty
@@ -455,7 +455,7 @@ struct HostVenuesView: View {
                         Image(systemName: "plus")
                             .font(.system(size: 20, weight: .bold))
                             .foregroundStyle(Color.sanAccentText)
-                        Text(L(label))
+                        Text(label)
                             .font(.golos(10.5, .heavy))
                             .foregroundStyle(Color.sanInkSoft)
                     }
@@ -579,9 +579,9 @@ struct HostVenuesView: View {
 
     private static func venuePlural(_ n: Int) -> String {
         let n10 = n % 10, n100 = n % 100
-        if n10 == 1 && n100 != 11 { return "Заведение" }
-        if (2...4).contains(n10) && !(12...14).contains(n100) { return "Заведения" }
-        return "Заведений"
+        if n10 == 1 && n100 != 11 { return LS("Заведение") }
+        if (2...4).contains(n10) && !(12...14).contains(n100) { return LS("Заведения") }
+        return LS("Заведений")
     }
 }
 
@@ -630,7 +630,7 @@ struct HostVenueStatsSheet: View {
         }
     }
 
-    private func metric(_ title: String, _ key: String, _ icon: String) -> some View {
+    private func metric(_ title: LocalizedStringKey, _ key: String, _ icon: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             SanIconTile(systemName: icon, size: 36)
             Text("\(stats[key] ?? 0)").font(.golos(26, .heavy)).foregroundStyle(Color.sanInk)
@@ -796,9 +796,9 @@ struct HostVenueDetailView: View {
                 }
             }
             HStack(spacing: 8) {
-                glassTile("\(PointsMath.effectiveCooldownMinutes(v.earnCooldownMinutes)) мин", "Пауза скана")
+                glassTile(LF("%lld мин", PointsMath.effectiveCooldownMinutes(v.earnCooldownMinutes)), "Пауза скана")
                 glassTile("\(v.pointsRewards.count)", "Награды")
-                glassTile("\(v.pointsExpiryMonths > 0 ? v.pointsExpiryMonths : 6) мес", "Сгорание")
+                glassTile(LF("%lld мес", v.pointsExpiryMonths > 0 ? v.pointsExpiryMonths : 6), "Сгорание")
             }
             .padding(.top, 16)
         }
@@ -1138,7 +1138,7 @@ struct HostVenueFormView: View {
         _branches = State(initialValue: existing?.branches ?? [])
         _loyaltyEnabled = State(initialValue: existing?.loyaltyEnabled ?? false)
         _loyaltyGoal = State(initialValue: existing?.loyaltyGoal ?? 6)
-        _loyaltyReward = State(initialValue: existing?.loyaltyReward ?? "Награда за лояльность")
+        _loyaltyReward = State(initialValue: existing?.loyaltyReward ?? LS("Награда за лояльность"))
         _couponsEnabled = State(initialValue: existing?.couponsEnabled ?? true)
         let wh = existing?.weekHours ?? []
         _weekHours = State(initialValue: wh.count == 7 ? wh : Venue.defaultWeek())
@@ -1697,9 +1697,9 @@ struct HostDealFormView: View {
                 startPoint: .bottom, endPoint: .top)
 
             VStack(alignment: .leading, spacing: 0) {
-                Text(venue?.name ?? "Ваше заведение")
+                Text(venue?.name ?? LS("Ваше заведение"))
                     .font(.golos(13, .bold)).foregroundStyle(.white.opacity(0.9))
-                Text(title.isEmpty ? "Заголовок предложения" : title)
+                Text(title.isEmpty ? LS("Заголовок предложения") : title)
                     .sanText(22, .heavy, tracking: -1, lineHeight: 1.05)
                     .foregroundStyle(.white).lineLimit(2)
                     .padding(.top, 6)

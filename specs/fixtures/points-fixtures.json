@@ -1,8 +1,8 @@
 {
   "$comment": [
     "ОБЩИЙ ФИКСТУР МАТЕМАТИКИ БАЛЛОВ САН. Один файл — три исполнителя:",
-    "  iOS       SANTests/PointsFixtureTests.swift      → Domain/PointsMath.swift",
-    "  Android   data/PointsFixtureTest.kt              → data/PointsMath.kt",
+    "  iOS       AyantDomain/Tests/AyantDomainTests/PointsFixtureTests.swift → AyantDomain/Sources/AyantDomain/PointsMath.swift",
+    "  Android   android/domain/src/test/.../PointsFixtureTest.kt          → android/domain/src/main/.../PointsMath.kt",
     "  Functions functions/test/fixtures.test.js        → реальные scanCoupon / redeemVenuePoints",
     "",
     "Сервер (functions/src/index.ts) — источник истины. Клиентский PointsMath только",

@@ -31,9 +31,17 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -44,9 +52,16 @@ import kotlin.math.abs
 
 private const val GRID = 17
 
+/**
+ * @param watermark Текст водяного знака на поле — из настроек админ-панели
+ *   (`AppViewModel.settings.adPlaceholderText`); пусто → локализованный дефолт.
+ *   Mirrors `SnakeScene.watermarkText` on iOS.
+ */
 @Composable
-fun SnakeGame(bonus: BonusViewModel, onClose: () -> Unit) {
+fun SnakeGame(bonus: BonusViewModel, watermark: String = "", onClose: () -> Unit) {
     val c = AyantTheme.colors
+    val watermarkText = watermark.ifBlank { stringResource(kg.ayant.app.R.string.ad_placeholder) }
+    val textMeasurer = rememberTextMeasurer()
 
     var snake by remember { mutableStateOf(listOf(7 to 8, 6 to 8, 5 to 8)) }
     var dir by remember { mutableStateOf(1 to 0) }
@@ -103,6 +118,7 @@ fun SnakeGame(bonus: BonusViewModel, onClose: () -> Unit) {
                     },
             ) {
                 val cell = size.width / GRID
+                drawWatermark(textMeasurer, watermarkText)
                 // food
                 drawRoundRectCell(food, cell, Color(0xFFFF5A1F))
                 // snake
@@ -128,6 +144,37 @@ fun SnakeGame(bonus: BonusViewModel, onClose: () -> Unit) {
             Text(stringResource(kg.ayant.app.R.string.game_snake_hint), fontSize = 13.sp, color = Color.White.copy(alpha = 0.9f), modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
         }
     }
+}
+
+/**
+ * Водяной знак по центру поля. Текст задаёт админ-панель и он может быть любой
+ * длины, поэтому подгоняем: перенос по словам в ширину поля, затем — если одно
+ * слово всё равно шире или блок выше половины поля — уменьшаем кегль.
+ * Mirrors `SnakeScene.buildGrid` / `fittedFontSize` on iOS.
+ */
+private fun DrawScope.drawWatermark(measurer: TextMeasurer, text: String) {
+    val maxW = (size.width * 0.86f).toInt().coerceAtLeast(1)
+    val maxH = (size.height * 0.5f).toInt().coerceAtLeast(1)
+    var fontPx = size.minDimension * 0.11f
+    var layout: TextLayoutResult
+    var tries = 0
+    while (true) {
+        layout = measurer.measure(
+            text = text,
+            style = TextStyle(fontSize = fontPx.toSp(), fontWeight = FontWeight.Black, textAlign = TextAlign.Center),
+            constraints = Constraints(maxWidth = maxW),
+            softWrap = true,
+        )
+        val fits = !layout.didOverflowWidth && layout.size.width <= maxW && layout.size.height <= maxH
+        if (fits || fontPx <= 8f || ++tries > 8) break
+        val ratio = minOf(maxW / layout.size.width.toFloat(), maxH / layout.size.height.toFloat(), 0.92f)
+        fontPx = maxOf(8f, fontPx * ratio)
+    }
+    drawText(
+        textLayoutResult = layout,
+        color = Color.White.copy(alpha = 0.22f),
+        topLeft = Offset((size.width - layout.size.width) / 2f, (size.height - layout.size.height) / 2f),
+    )
 }
 
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawRoundRectCell(p: Pair<Int, Int>, cell: Float, color: Color) {

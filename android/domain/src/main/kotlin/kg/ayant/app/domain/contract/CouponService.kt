@@ -1,6 +1,7 @@
 package kg.ayant.app.domain.contract
 
 import kg.ayant.app.domain.model.Coupon
+import kg.ayant.app.domain.model.Reward
 import kg.ayant.app.domain.model.LoyaltyCard
 import kg.ayant.app.domain.model.VenuePointsCard
 import kotlinx.coroutines.flow.Flow
@@ -44,6 +45,11 @@ data class RedeemOutcome(
 /** Backend coupon/loyalty tracking + venue scanner. Mirrors CouponService.swift. */
 interface CouponService {
     suspend fun saveCoupon(coupon: Coupon, userID: String)
+    /**
+     * Каталог наград глобального кошелька (config/globalRewards).
+     * Пусто → показывать нечего: награда без партнёра не гасится.
+     */
+    suspend fun fetchGlobalRewards(): List<Reward> = emptyList()
     suspend fun fetchCoupons(userID: String): List<Coupon>
     suspend fun fetchLoyaltyCards(userID: String): List<LoyaltyCard>
     /**

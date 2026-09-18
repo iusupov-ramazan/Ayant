@@ -180,6 +180,9 @@
     <button onclick="showPage('categories')" id="navCategories">Категории</button>
     <button onclick="showPage('hosts')"  id="navHosts">Хосты</button>
     <button onclick="showPage('boosts')" id="navBoosts">Реклама</button>
+    <button onclick="showPage('reports')" id="navReports">Жалобы</button>
+    <button onclick="showPage('rewards')" id="navRewards">Награды</button>
+    <button onclick="showPage('settings')" id="navSettings">Настройки</button>
     <button id="signOutBtn" onclick="signOut()">Выйти</button>
   </nav>
 
@@ -264,6 +267,78 @@
         </thead>
         <tbody id="boostsBody"><tr><td colspan="5" class="spinner">Загрузка…</td></tr></tbody>
       </table>
+    </div>
+  </div>
+
+  <!-- REPORTS PAGE -->
+  <!-- Жалобы на отзывы (App Review Guidelines 1.2). Очередь разбора: либо
+       удалить отзыв, либо закрыть жалобу как необоснованную. -->
+  <div class="page" id="pageReports">
+    <div class="toolbar">
+      <h2>Жалобы на отзывы</h2>
+      <label style="display:flex;align-items:center;gap:6px;font-weight:400">
+        <input type="checkbox" id="reportsShowClosed" onchange="loadReports()" />
+        Показывать разобранные
+      </label>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Отзыв</th><th>Причина</th><th>Заведение</th><th>Когда</th><th>Действия</th></tr>
+        </thead>
+        <tbody id="reportsBody"><tr><td colspan="5" class="spinner">Загрузка…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- REWARDS PAGE -->
+  <!-- Награды глобального кошелька (config/globalRewards).
+       У каждой ОБЯЗАТЕЛЬНО заведение-партнёр: scanCoupon сверяет venueID
+       купона с заведением сканера, и награда без партнёра не гасится. -->
+  <div class="page" id="pageRewards">
+    <div class="toolbar">
+      <h2>Награды за бонусы</h2>
+      <button class="btn btn-secondary" onclick="addRewardRow()">+ Награда</button>
+      <button class="btn btn-primary" onclick="saveRewards()">Сохранить</button>
+    </div>
+    <p style="color:var(--muted);margin:0 0 12px">
+      Гость копит бонусы в играх и меняет их здесь. Заведение-партнёр обязательно:
+      купон гасит сотрудник именно этого заведения. Награды без партнёра в приложении не показываются.
+    </p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Название</th><th>Цена, бонусов</th><th>Emoji</th><th>Заведение-партнёр</th><th></th></tr>
+        </thead>
+        <tbody id="rewardsBody"><tr><td colspan="5" class="spinner">Загрузка…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- SETTINGS PAGE -->
+  <!-- Глобальные настройки (config/appSettings). Читают оба клиента
+       (AppStore.settings / AppViewModel.settings) и scanCoupon (пауза между
+       штампами, кэш на минуту). Имена полей — контракт: FS.AppSettingsDoc на
+       клиентах и AppSettingsDoc в functions/src/types.ts. -->
+  <div class="page" id="pageSettings">
+    <div class="toolbar">
+      <h2>Настройки приложения</h2>
+      <button class="btn btn-primary" onclick="saveSettings()">Сохранить</button>
+    </div>
+    <div class="form-grid cols2" style="max-width:760px">
+      <div class="field">
+        <label>Пауза между штампами, мин.</label>
+        <input id="sStampCooldown" type="number" min="0" max="1440" placeholder="15" />
+        <small style="color:var(--muted)">Не чаще одного штампа лояльности одному гостю в одном заведении за это время.
+          <b>0 — без паузы</b> (только для тестов, в проде не оставлять). Пусто — 15 мин.
+          Сервер подхватывает в течение минуты.</small>
+      </div>
+      <div class="field">
+        <label>Текст рекламного плейсхолдера</label>
+        <input id="sAdText" maxlength="80" placeholder="Здесь может быть ваша реклама" />
+        <small style="color:var(--muted)">Водяной знак на поле «Змейки» и рекламный слот. Подгоняется под ширину
+          экрана автоматически (перенос, затем уменьшение). Пусто — стандартный текст на языке пользователя.</small>
+      </div>
     </div>
   </div>
 </div>
@@ -649,7 +724,7 @@
 import { initializeApp }           from 'https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js';
 import { getAuth, signInWithEmailAndPassword, signOut as fbSignOut, onAuthStateChanged }
   from 'https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js';
-import { getFirestore, collection, getDocs, doc, setDoc, addDoc, deleteDoc, deleteField,
+import { getFirestore, collection, getDocs, getDoc, doc, setDoc, addDoc, deleteDoc, deleteField,
          query, where, writeBatch, Timestamp }
   from 'https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js';
 
@@ -1157,6 +1232,198 @@ async function loadBoosts() {
   }
 }
 
+// ── Награды глобального кошелька ────────────────────────────────────────
+//
+// Хранятся одним документом config/globalRewards полем items[]. Клиент
+// отбрасывает награды без venueID, поэтому заведение обязательно.
+
+let globalRewards = [];
+const REWARD_TEMPLATES = [
+  { id: 'disc10',  title: '−10% к любой акции',          cost: 100, emoji: '🏷️' },
+  { id: 'coffee',  title: 'Бесплатный кофе у партнёра',  cost: 300, emoji: '☕️' },
+  { id: 'dessert', title: 'Десерт в подарок',            cost: 400, emoji: '🍰' },
+  { id: 'vip',     title: 'VIP-доступ к новинкам',       cost: 500, emoji: '⭐️' },
+];
+
+async function loadRewards() {
+  const body = document.getElementById('rewardsBody');
+  try {
+    const snap = await getDoc(doc(db, 'config', 'globalRewards'));
+    globalRewards = (snap.exists() ? (snap.data().items ?? []) : []).slice();
+    // Первый заход: показываем заготовки, чтобы не набивать их руками.
+    if (!globalRewards.length) globalRewards = REWARD_TEMPLATES.map(r => ({ ...r, venueID: '' }));
+    renderRewards();
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="5" class="spinner">Ошибка: ${e.message}</td></tr>`;
+  }
+}
+window.loadRewards = loadRewards;
+
+function renderRewards() {
+  const body = document.getElementById('rewardsBody');
+  if (!globalRewards.length) {
+    body.innerHTML = '<tr><td colspan="5" class="spinner">Наград нет</td></tr>';
+    return;
+  }
+  const options = venues.map(v => `<option value="${v.id}">${escapeHtml(v.name)}</option>`).join('');
+  body.innerHTML = globalRewards.map((r, i) => `
+    <tr>
+      <td><input value="${escapeHtml(r.title ?? '')}" oninput="editReward(${i},'title',this.value)" /></td>
+      <td><input type="number" min="1" value="${r.cost ?? 0}" oninput="editReward(${i},'cost',this.value)" style="width:110px" /></td>
+      <td><input value="${escapeHtml(r.emoji ?? '')}" maxlength="4" oninput="editReward(${i},'emoji',this.value)" style="width:70px" /></td>
+      <td>
+        <select onchange="editReward(${i},'venueID',this.value)">
+          <option value="">— не выбрано —</option>${options}
+        </select>
+        ${r.venueID ? '' : '<small style="color:#c0490f">без партнёра — не покажется</small>'}
+      </td>
+      <td><button class="btn btn-secondary btn-sm" onclick="removeReward(${i})">×</button></td>
+    </tr>`).join('');
+  // value у select проставляем после вставки: строка с кавычками в HTML ненадёжна.
+  globalRewards.forEach((r, i) => {
+    const sel = body.querySelectorAll('select')[i];
+    if (sel) sel.value = r.venueID ?? '';
+  });
+}
+
+window.editReward = (i, field, value) => {
+  globalRewards[i][field] = field === 'cost' ? (parseInt(value) || 0) : value;
+  if (field === 'venueID') {
+    globalRewards[i].venueName = venues.find(v => v.id === value)?.name ?? '';
+    renderRewards();
+  }
+};
+window.addRewardRow = () => {
+  globalRewards.push({ id: 'rw_' + Math.random().toString(36).slice(2, 8),
+                       title: '', cost: 100, emoji: '🎁', venueID: '', venueName: '' });
+  renderRewards();
+};
+window.removeReward = (i) => { globalRewards.splice(i, 1); renderRewards(); };
+
+window.saveRewards = async () => {
+  const items = globalRewards
+    .filter(r => (r.title ?? '').trim() && r.venueID)
+    .map(r => ({ id: r.id, title: r.title.trim(), cost: r.cost,
+                 emoji: r.emoji || '🎁', venueID: r.venueID, venueName: r.venueName ?? '' }));
+  const dropped = globalRewards.length - items.length;
+  try {
+    await setDoc(doc(db, 'config', 'globalRewards'), { items }, { merge: true });
+    toast(dropped ? `Сохранено. Без партнёра пропущено: ${dropped}` : 'Награды сохранены');
+  } catch (e) { toast('Ошибка: ' + e.message, 'error'); }
+};
+
+// ── Настройки приложения (config/appSettings) ──────────────────────────
+//
+// Один документ на продукт. stampCooldownMinutes читает scanCoupon (ветка A,
+// кэш на минуту), adPlaceholderText — оба клиента. Явный 0 сохраняется —
+// это «без паузы», а не «не задано» (тот же урок, что с earnCooldownMinutes).
+
+async function loadSettings() {
+  try {
+    const snap = await getDoc(doc(db, 'config', 'appSettings'));
+    const s = snap.exists() ? snap.data() : {};
+    document.getElementById('sStampCooldown').value = s.stampCooldownMinutes ?? 15;
+    document.getElementById('sAdText').value = s.adPlaceholderText ?? '';
+  } catch (e) { toast('Ошибка загрузки настроек: ' + e.message, 'error'); }
+}
+window.loadSettings = loadSettings;
+
+window.saveSettings = async () => {
+  // Явный 0 сохраняем; пусто/мусор → 15 (см. intOrDefault в functions).
+  const raw = parseInt(document.getElementById('sStampCooldown').value, 10);
+  const stampCooldownMinutes = Math.min(Math.max(Number.isFinite(raw) ? raw : 15, 0), 1440);
+  const adPlaceholderText = document.getElementById('sAdText').value.trim().slice(0, 80);
+  try {
+    await setDoc(doc(db, 'config', 'appSettings'), { stampCooldownMinutes, adPlaceholderText }, { merge: true });
+    toast(stampCooldownMinutes === 0
+      ? 'Сохранено. Внимание: пауза между штампами выключена'
+      : 'Настройки сохранены');
+  } catch (e) { toast('Ошибка: ' + e.message, 'error'); }
+};
+
+// ── Жалобы на отзывы ────────────────────────────────────────────────────
+//
+// Очередь модерации пользовательского контента (Guidelines 1.2). Жалоба не
+// прячет отзыв сама по себе — решение принимает человек здесь: либо удалить
+// отзыв, либо закрыть жалобу как необоснованную.
+
+const REPORT_REASONS = { fake: 'Фейк', spam: 'Спам', offensive: 'Оскорбительное' };
+
+async function loadReports() {
+  const body = document.getElementById('reportsBody');
+  const showClosed = document.getElementById('reportsShowClosed').checked;
+  try {
+    const snap = await getDocs(collection(db, 'reviewReports'));
+    let rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (!showClosed) rows = rows.filter(r => (r.status ?? 'open') === 'open');
+    rows.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan="5" class="spinner">Жалоб нет</td></tr>';
+      return;
+    }
+    // Тексты отзывов подтягиваем по одному: жалоб единицы, а выгружать всю
+    // коллекцию отзывов ради них — та самая ошибка, из-за которой убрали
+    // fetchReviews() без аргументов (docs/design/system-design.md §2, B2).
+    const texts = await Promise.all(rows.map(async r => {
+      try {
+        const d = await getDoc(doc(db, 'reviews', r.reviewID));
+        return d.exists() ? d.data() : null;
+      } catch { return null; }
+    }));
+    body.innerHTML = rows.map((r, i) => {
+      const rv = texts[i];
+      const closed = (r.status ?? 'open') !== 'open';
+      const when = r.createdAt?.seconds
+        ? new Date(r.createdAt.seconds * 1000).toLocaleString('ru-RU') : '';
+      const text = rv
+        ? `<b>${escapeHtml(rv.authorName ?? '')}</b> · ${'★'.repeat(rv.rating ?? 0)}<br>
+           <small>${escapeHtml((rv.text ?? '').slice(0, 160))}</small>`
+        : '<small style="color:var(--muted)">отзыв уже удалён</small>';
+      const actions = closed
+        ? '<span class="badge">разобрано</span>'
+        : `${rv ? `<button class="btn btn-danger btn-sm" onclick="deleteReportedReview('${r.id}','${r.reviewID}')">Удалить отзыв</button>` : ''}
+           <button class="btn btn-secondary btn-sm" onclick="dismissReport('${r.id}')">Отклонить жалобу</button>`;
+      return `<tr>
+        <td>${text}</td>
+        <td>${REPORT_REASONS[r.reason] ?? r.reason ?? ''}</td>
+        <td>${escapeHtml(venueName(r.venueID))}</td>
+        <td>${when}</td>
+        <td>${actions}</td>
+      </tr>`;
+    }).join('');
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="5" class="spinner">Ошибка: ${e.message}</td></tr>`;
+  }
+}
+window.loadReports = loadReports;
+
+function venueName(id) {
+  return venues.find(v => v.id === id)?.name ?? id ?? '';
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+window.deleteReportedReview = async (reportID, reviewID) => {
+  if (!confirm('Удалить отзыв? Отменить нельзя.')) return;
+  try {
+    await deleteDoc(doc(db, 'reviews', reviewID));
+    await setDoc(doc(db, 'reviewReports', reportID), { status: 'reviewed' }, { merge: true });
+    toast('Отзыв удалён');
+    loadReports();
+  } catch (e) { toast('Ошибка: ' + e.message, 'error'); }
+};
+
+window.dismissReport = async (reportID) => {
+  try {
+    await setDoc(doc(db, 'reviewReports', reportID), { status: 'reviewed' }, { merge: true });
+    toast('Жалоба отклонена');
+    loadReports();
+  } catch (e) { toast('Ошибка: ' + e.message, 'error'); }
+};
+
 window.approveBoost = async (id) => {
   await setDoc(doc(db, 'pushCampaigns', id), { status: 'approved' }, { merge: true });
   toast('Кампания одобрена — рассылка запущена', 'success');
@@ -1650,6 +1917,9 @@ window.showPage = (page) => {
   document.getElementById('page' + page.charAt(0).toUpperCase() + page.slice(1)).classList.add('active');
   document.getElementById('nav'  + page.charAt(0).toUpperCase() + page.slice(1)).classList.add('active');
   if (page === 'boosts') loadBoosts();
+  if (page === 'reports') loadReports();
+  if (page === 'rewards') loadRewards();
+  if (page === 'settings') loadSettings();
   if (page === 'categories') loadCategories();
 };
 

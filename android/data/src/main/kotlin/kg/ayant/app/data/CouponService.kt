@@ -4,7 +4,10 @@ import kg.ayant.app.domain.contract.CouponService
 import kg.ayant.app.domain.contract.RedeemOutcome
 import kg.ayant.app.domain.contract.ScanOutcome
 
+import kg.ayant.app.domain.MockData
 import kg.ayant.app.domain.model.Coupon
+import kg.ayant.app.domain.model.CouponCatalog
+import kg.ayant.app.domain.model.Reward
 import kg.ayant.app.domain.model.LoyaltyCard
 import kg.ayant.app.domain.model.VenuePointsCard
 
@@ -28,6 +31,15 @@ import java.net.URL
 import java.util.Date
 
 class MockCouponService : CouponService {
+    /**
+     * Оффлайн-демо: те же награды, но привязанные к мок-заведению — иначе
+     * каталог был бы пуст и экран нечем было бы посмотреть.
+     */
+    override suspend fun fetchGlobalRewards(): List<Reward> {
+        val venue = MockData.venues.firstOrNull() ?: return emptyList()
+        return CouponCatalog.builtIn.map { it.copy(venueID = venue.id, venueName = venue.name) }
+    }
+
     override suspend fun saveCoupon(coupon: Coupon, userID: String) {}
     override suspend fun fetchCoupons(userID: String): List<Coupon> = emptyList()
     override suspend fun fetchLoyaltyCards(userID: String): List<LoyaltyCard> = emptyList()
@@ -43,6 +55,33 @@ class MockCouponService : CouponService {
 }
 
 class FirebaseCouponService : CouponService {
+    /**
+     * Каталог наград из config/globalRewards.
+     *
+     * Награды без `venueID` отбрасываем здесь же: купон по такой награде
+     * сотрудник не погасит (`scanCoupon` → `wrong_venue`).
+     */
+    override suspend fun fetchGlobalRewards(): List<Reward> {
+        val snap = db.collection(FS.Collection.CONFIG)
+            .document(FS.Document.GLOBAL_REWARDS).get().await()
+        if (!snap.exists()) return emptyList()
+        @Suppress("UNCHECKED_CAST")
+        val items = snap.get(FS.GlobalRewardDoc.ITEMS) as? List<Map<String, Any?>> ?: return emptyList()
+        return items.mapNotNull { m ->
+            val id = m[FS.GlobalRewardDoc.ID] as? String ?: return@mapNotNull null
+            val title = m[FS.GlobalRewardDoc.TITLE] as? String ?: return@mapNotNull null
+            val venueID = m[FS.GlobalRewardDoc.VENUE_ID] as? String ?: return@mapNotNull null
+            if (venueID.isEmpty()) return@mapNotNull null
+            Reward(
+                id = id, title = title,
+                cost = (m[FS.GlobalRewardDoc.COST] as? Number)?.toInt() ?: 0,
+                emoji = m[FS.GlobalRewardDoc.EMOJI] as? String ?: "🎁",
+                venueID = venueID,
+                venueName = m[FS.GlobalRewardDoc.VENUE_NAME] as? String ?: "",
+            )
+        }
+    }
+
     private val db = FirebaseFirestore.getInstance()
     private val functionsBase = "https://us-central1-san-25d32.cloudfunctions.net"
     private val scanURL = "$functionsBase/scanCoupon"

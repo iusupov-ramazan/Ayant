@@ -29,7 +29,7 @@ struct ProfileView: View {
         var id: Self { self }
     }
 
-    private var username: String { session.user?.name ?? "Гость" }
+    private var username: String { session.user?.name ?? LS("Гость") }
 
     var body: some View {
         NavigationStack {
@@ -162,29 +162,27 @@ struct ProfileView: View {
                 SanHairline(leading: 60)
                 settingRow(icon: "globe", title: "Язык") {
                     Menu {
-                        // Кыргызского здесь нет намеренно: строковый каталог iOS
-                        // переведён на кыргызский лишь частично, и выбор языка
-                        // давал бы экран-винегрет из двух языков. На Android
-                        // ресурсы переведены полностью — там кыргызский есть.
-                        // Вернуть сюда, когда `Localizable.xcstrings` дозаполнят.
-                        Button("Русский") { language = "ru" }
-                        Button("English") { language = "en" }
+                        // Названия языков — на самих языках, без перевода.
+                        Button { language = "ru" } label: { Text(verbatim: "Русский") }
+                        Button { language = "en" } label: { Text(verbatim: "English") }
+                        Button { language = "ky" } label: { Text(verbatim: "Кыргызча") }
                     } label: { menuValue(languageTitle) }
                 }
                 SanHairline(leading: 60)
                 settingRow(icon: "circle.lefthalf.filled", title: "Тема") {
                     Menu {
                         ForEach(AppTheme.allCases) { theme in
-                            Button { themeStore.theme = theme } label: { Label(theme.title, systemImage: theme.icon) }
+                            // `AppTheme.title` — русская строка из пакета; переводит каталог.
+                            Button { themeStore.theme = theme } label: { Label(L(theme.title), systemImage: theme.icon) }
                         }
-                    } label: { menuValue(themeStore.theme.title) }
+                    } label: { menuValue(LS(themeStore.theme.title)) }
                 }
             }
             .sanGroupCard()
         }
     }
 
-    private func settingRow<Trailing: View>(icon: String, title: String,
+    private func settingRow<Trailing: View>(icon: String, title: LocalizedStringKey,
                                              @ViewBuilder trailing: () -> Trailing) -> some View {
         HStack(spacing: 12) {
             SanIconTile(systemName: icon, size: 34)
@@ -204,9 +202,11 @@ struct ProfileView: View {
     }
 
     private var languageTitle: String {
-        // «ky» больше не предлагается (каталог iOS переведён не полностью) —
-        // старую настройку показываем как русский, как и трактует её `SANApp`.
-        switch language { case "en": return "English"; default: return "Русский" }
+        switch language {
+        case "en": return "English"
+        case "ky": return "Кыргызча"
+        default:   return "Русский"
+        }
     }
 
     // MARK: Режим заведения
@@ -257,7 +257,7 @@ struct ProfileView: View {
                         Button { activeSheet = .editReview(review) } label: {
                             VStack(alignment: .leading, spacing: 5) {
                                 HStack {
-                                    Text(store.venue(id: review.venueID)?.name ?? "Заведение")
+                                    Text(store.venue(id: review.venueID)?.name ?? LS("Заведение"))
                                         .font(.golos(15, .bold)).foregroundStyle(Color.sanInk)
                                     Spacer()
                                     StarRatingView(rating: Double(review.rating), size: 11)
@@ -347,7 +347,7 @@ struct ProfileView: View {
         return "\(short) (\(build))"
     }
 
-    private func linkRow(_ title: String) -> some View {
+    private func linkRow(_ title: LocalizedStringKey) -> some View {
         HStack {
             Text(title).font(.golos(16, .medium)).foregroundStyle(Color.sanInk)
             Spacer()
@@ -425,7 +425,7 @@ struct ProfileView: View {
         }
     }
 
-    private func accountRow(_ title: String, icon: String) -> some View {
+    private func accountRow(_ title: LocalizedStringKey, icon: String) -> some View {
         HStack(spacing: 12) {
             Image(systemName: icon).font(.system(size: 16, weight: .semibold)).frame(width: 34)
             Text(title).font(.golos(16, .semibold))

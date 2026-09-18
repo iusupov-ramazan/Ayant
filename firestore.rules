@@ -72,6 +72,22 @@ service cloud.firestore {
       allow delete: if isAdmin() || (isSignedIn() && resource.data.authorID == uid());
     }
 
+    // ── Жалобы на отзывы ─────────────────────────────────────────────────
+    // Guidelines 1.2: механизм жалоб на пользовательский контент.
+    //
+    // Создать может любой вошедший (в том числе анонимный гость) и только от
+    // своего имени; id документа детерминированный — {reviewID}_{reporterID},
+    // поэтому повторная жалоба перезаписывает свою же, а не засоряет очередь.
+    // Читает и закрывает ТОЛЬКО админ: жалоба — это донос, её не должны видеть
+    // ни автор отзыва, ни владелец заведения.
+    match /reviewReports/{id} {
+      allow read, update, delete: if isAdmin();
+      allow create: if isSignedIn()
+                    && request.resource.data.reporterID == uid()
+                    && request.resource.data.reviewID is string
+                    && request.resource.data.venueID is string;
+    }
+
     // ── Push-кампании ────────────────────────────────────────────────────
     // Хост создаёт кампанию по своему заведению ("pending"). Одобряет только
     // админ (status → approved/rejected); рассылку делает Cloud Function.
@@ -162,8 +178,16 @@ service cloud.firestore {
     // ── Погашения купонов ────────────────────────────────────────────────
     // Пользователь создаёт документ (id = uid_dealID). Счётчик и пометку
     // "counted" делает Cloud Function (admin SDK обходит правила).
+    // Документ привязан к автору: userID — это uid вызывающего, а id — ровно
+    // uid_dealID (так его пишут оба клиента: FirebaseServices.logRedemption /
+    // FirebaseDataRepository.logRedemption). Иначе любой вошедший мог бы
+    // накрутить «Погашено» чужому заведению через countRedemption.
     match /redemptions/{id} {
-      allow create: if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.userID == uid()
+        && request.resource.data.dealID is string
+        && request.resource.data.venueID is string
+        && id == uid() + '_' + request.resource.data.dealID;
       allow read, update, delete: if false;
     }
 

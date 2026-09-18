@@ -46,15 +46,15 @@ struct AboutView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 
-    private func group(_ title: String, @ViewBuilder content: () -> some View) -> some View {
+    private func group(_ title: LocalizedStringKey, @ViewBuilder content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title).font(.headline)
             content()
         }
     }
 
-    private func bullet(_ bold: String, _ rest: String) -> some View {
-        (Text("• ").bold() + Text(bold).bold() + Text(" \(rest)"))
+    private func bullet(_ bold: LocalizedStringKey, _ rest: LocalizedStringKey) -> some View {
+        (Text("• ").bold() + Text(bold).bold() + Text(verbatim: " ") + Text(rest))
             .font(.subheadline)
     }
 }

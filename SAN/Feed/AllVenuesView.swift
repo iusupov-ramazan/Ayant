@@ -103,7 +103,7 @@ struct AllVenuesView: View {
     /// цифрам; город через точку, чтобы не склонять его самого.
     static func countText(_ n: Int, city: String) -> String {
         let noun = LPlural(n, "заведение", "заведения", "заведений")
-        let cityName = String(localized: String.LocalizationValue(city))
+        let cityName = LS(city)
         return "\(n) \(noun) · \(cityName)"
     }
 

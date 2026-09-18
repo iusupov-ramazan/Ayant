@@ -110,7 +110,8 @@ struct MyQRView: View {
         VStack(spacing: 0) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(store.currentUserName)
+                    // «Вы» — заглушка из пакета, остальное — имя пользователя.
+                    Text(L(store.currentUserName))
                         .font(.golos(14.5, .bold)).foregroundStyle(Color.sanInk)
                     Text(L(store.selectedCity.name))
                         .font(.golos(12, .regular)).foregroundStyle(Color.sanInkSoft)

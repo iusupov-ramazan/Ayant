@@ -34,13 +34,11 @@ struct SANApp: App {
     @StateObject private var hostStore = AyantStores.host()
     private let pushService = AppConfig.makePushService()
     @Environment(\.scenePhase) private var scenePhase
-    @AppStorage("san.language") private var appLanguage = "ru"   // ru | en
+    @AppStorage("san.language") private var appLanguage = "ru"   // ru | en | ky
 
-    /// Языки, у которых строковый каталог заполнен целиком. Кыргызский переведён
-    /// частично, и если оставить его выбранным, экран получится из двух языков
-    /// сразу — поэтому старую настройку «ky» тихо считаем русским, пока
-    /// `Localizable.xcstrings` не дозаполнят. На Android ресурсы полные.
-    private static let completeLanguages: Set<String> = ["ru", "en"]
+    /// Языки, у которых строковый каталог заполнен целиком. Неизвестное значение
+    /// настройки тихо считаем русским — иначе экран собрался бы из двух языков.
+    private static let completeLanguages: Set<String> = ["ru", "en", "ky"]
     private var effectiveLanguage: String {
         Self.completeLanguages.contains(appLanguage) ? appLanguage : "ru"
     }
@@ -222,7 +220,10 @@ struct SANApp: App {
     /// бы в никуда. Пока флаг выключен — напоминание снято.
     private func refreshBonusReminder() {
         if ReleaseFlags.globalBonusWallet {
-            NotificationManager.refresh(reachedGoalToday: bonus.reachedGoalToday)
+            NotificationManager.refresh(
+                reachedGoalToday: bonus.reachedGoalToday,
+                title: LS("Бонусы ждут 🎁"),
+                body: LS("Залипни в Ayant на 30 активных минут и забери +50 бонусов"))
         } else {
             NotificationManager.disable()
         }
@@ -273,7 +274,10 @@ struct AppToast: View {
     var body: some View {
         ZStack {
             if let msg = store.toastMessage {
-                Text(msg)
+                // Тост приходит из `AppStore` (пакет AyantFeatures) русской
+                // строкой-ключом; переводит каталог приложения, как и у
+                // статусов домена.
+                Text(L(msg))
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.white)
                     .multilineTextAlignment(.center)

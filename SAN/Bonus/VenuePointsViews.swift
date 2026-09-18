@@ -362,7 +362,7 @@ struct RedeemSheet: View {
         .sanCard(padding: 20, radius: SanRadius.hero)
     }
 
-    private func statTile(label: String, value: Int, negative: Bool) -> some View {
+    private func statTile(label: LocalizedStringKey, value: Int, negative: Bool) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(label)
                 .textCase(.uppercase)
@@ -583,27 +583,27 @@ struct RedeemSheet: View {
 enum PointsMessages {
     static func text(for error: AppError) -> String {
         switch error.code {
-        case "insufficient":       return "Недостаточно баллов."
-        case "reward_not_found":   return "Награда недоступна."
-        case "redeem_not_allowed": return "Списание доступно только у сотрудника."
-        case "below_min":          return "Слишком мало баллов для этой награды."
-        case "key_reused":         return "Этот запрос уже выполнялся. Обновите экран."
+        case "insufficient":       return LS("Недостаточно баллов.")
+        case "reward_not_found":   return LS("Награда недоступна.")
+        case "redeem_not_allowed": return LS("Списание доступно только у сотрудника.")
+        case "below_min":          return LS("Слишком мало баллов для этой награды.")
+        case "key_reused":         return LS("Этот запрос уже выполнялся. Обновите экран.")
         case "unauthenticated", "no_token", "bad_token":
-            return "Войдите в аккаунт, чтобы списать баллы."
-        case "permission_denied":  return "Нет доступа к баллам этого аккаунта."
-        case "network":            return "Нет связи. Проверьте интернет и повторите."
-        default:                   return "Не удалось списать баллы. Попробуйте ещё раз."
+            return LS("Войдите в аккаунт, чтобы списать баллы.")
+        case "permission_denied":  return LS("Нет доступа к баллам этого аккаунта.")
+        case "network":            return LS("Нет связи. Проверьте интернет и повторите.")
+        default:                   return LS("Не удалось списать баллы. Попробуйте ещё раз.")
         }
     }
 
     /// Ошибка загрузки журнала — коротко, под кнопкой «Повторить».
     static func historyText(for error: AppError) -> String {
         switch error.code {
-        case "network":            return "Нет связи. Проверьте интернет и повторите."
+        case "network":            return LS("Нет связи. Проверьте интернет и повторите.")
         case "unauthenticated", "no_token", "bad_token":
-            return "Войдите в аккаунт, чтобы видеть историю."
-        case "permission_denied":  return "Нет доступа к истории этого аккаунта."
-        default:                   return "Не удалось загрузить историю."
+            return LS("Войдите в аккаунт, чтобы видеть историю.")
+        case "permission_denied":  return LS("Нет доступа к истории этого аккаунта.")
+        default:                   return LS("Не удалось загрузить историю.")
         }
     }
 }

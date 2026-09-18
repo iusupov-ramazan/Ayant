@@ -36,6 +36,8 @@ public final class MockDataRepository: DataRepository {
     public func saveReview(_ review: Review) async throws {}
     public func deleteReview(id: String) async throws {}
     public func updateReviewReply(reviewID: String, reply: HostReply?) async throws {}
+    public func reportReview(_ report: ReviewReport) async throws {}
+
     public func logRedemption(userID: String, dealID: String, venueID: String) async throws {}
     public func recordReferral(inviteeID: String, referrerID: String) async throws {}
     public func claimBonusGrants(userID: String) async throws -> Int { 0 }
@@ -49,6 +51,15 @@ public final class MockDataRepository: DataRepository {
 
 /// Mock купон-сервиса: без бэкенда. Сканирование всегда «успех + штамп» для демо.
 public final class MockCouponService: CouponService {
+    /// Оффлайн-демо: те же награды, но привязанные к мок-заведению — иначе
+    /// каталог был бы пуст и экран нечем было бы посмотреть.
+    public func fetchGlobalRewards() async throws -> [Reward] {
+        guard let venue = MockData.venues.first else { return [] }
+        return CouponCatalog.builtIn.map {
+            Reward(id: $0.id, title: $0.title, cost: $0.cost, emoji: $0.emoji,
+                   venueID: venue.id, venueName: venue.name)
+        }
+    }
     /// Пустой инициализатор нужен явно: синтезированный — internal.
     public init() {}
 

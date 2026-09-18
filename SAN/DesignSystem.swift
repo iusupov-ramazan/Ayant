@@ -399,10 +399,17 @@ extension Font.Weight {
 
 /// Крупный заголовок экрана (SF Pro, bold).
 struct SanScreenTitle: View {
-    let text: String
-    init(_ text: String) { self.text = text }
+    private let text: Text
+    /// Литерал — ключ каталога локализации (как у `Text`).
+    init(_ key: LocalizedStringKey) { text = Text(key) }
+    /// Готовая строка (имя заведения и т. п.) — показывается как есть.
+    /// `@_disfavoredOverload` — как у `Text`: иначе строковый литерал выбирал бы
+    /// эту версию, а не ключ каталога, и текст оставался бы русским при
+    /// выбранном English/Кыргызча.
+    @_disfavoredOverload
+    init<S: StringProtocol>(_ string: S) { text = Text(string) }
     var body: some View {
-        Text(text)
+        text
             .font(.golos(32, .heavy))
             .foregroundStyle(Color.sanInk)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -411,10 +418,18 @@ struct SanScreenTitle: View {
 
 /// Приглушённый капс-заголовок секции.
 struct SanSectionHeader: View {
-    let text: String
-    init(_ text: String) { self.text = text }
+    private let text: Text
+    /// Литерал — ключ каталога локализации (как у `Text`).
+    init(_ key: LocalizedStringKey) { text = Text(key) }
+    /// Готовая строка — показывается как есть.
+    /// `@_disfavoredOverload` — как у `Text`: иначе строковый литерал выбирал бы
+    /// эту версию, а не ключ каталога, и текст оставался бы русским при
+    /// выбранном English/Кыргызча.
+    @_disfavoredOverload
+    init<S: StringProtocol>(_ string: S) { text = Text(string) }
     var body: some View {
-        Text(text.uppercased())
+        text
+            .textCase(.uppercase)
             .font(.golos(12, .bold))
             .tracking(1.0)
             .foregroundStyle(Color.sanInkSoft)

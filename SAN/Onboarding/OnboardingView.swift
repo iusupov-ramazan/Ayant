@@ -10,6 +10,9 @@ struct OnboardingView: View {
     var onFinished: () -> Void
 
     @State private var step = 0
+    /// Ждём ответа на системный запрос геолокации, чтобы уйти на следующий шаг
+    /// не раньше, чем диалог закроется.
+    @State private var awaitingLocationAnswer = false
 
     // Пока доступен только Бишкек — выбор города отключён (2 шага).
     private let stepCount = 2
@@ -29,6 +32,11 @@ struct OnboardingView: View {
             // Город зафиксирован на Бишкеке до запуска в других городах.
             store.selectedCitySlug = City.bishkek.id
         }
+        .onChange(of: location.authorizationStatus) { _, _ in
+            guard awaitingLocationAnswer else { return }
+            awaitingLocationAnswer = false
+            withAnimation { step = 1 }
+        }
     }
 
     private var progressDots: some View {
@@ -43,19 +51,31 @@ struct OnboardingView: View {
     }
 
     // MARK: Шаг 1 — Геолокация
+    //
+    // Кнопка названа нейтрально, и мимо системного запроса пути нет — это
+    // требование App Review (5.1.1(iv), отклонение 15.09.2026). Было
+    // «Разрешить геолокацию» и «Не сейчас»: первое подсказывало ответ, второе
+    // позволяло вообще не дойти до системного диалога. Сам экран-объяснение
+    // разрешён и полезен — нельзя только подменять им выбор пользователя.
 
     private var locationStep: some View {
         prePrompt(
             icon: "location.circle.fill",
             title: "Включи геолокацию",
             subtitle: "Разреши доступ к локации, чтобы видеть, как далеко заведения от тебя. Без неё всё работает — просто без расстояний.",
-            primary: "Разрешить геолокацию",
-            secondary: "Не сейчас"
+            primary: "Продолжить",
+            secondary: nil
         ) {
+            // Системный диалог показывается ровно один раз за установку. Если
+            // ответ уже дан (или геолокация запрещена родительским контролем),
+            // он не появится и делегат промолчит — тогда уходим дальше сами,
+            // иначе шаг стал бы тупиком без единственной кнопки.
+            guard location.authorizationStatus == .notDetermined else {
+                withAnimation { step = 1 }
+                return
+            }
+            awaitingLocationAnswer = true
             location.request()
-            withAnimation { step = 1 }
-        } onSkip: {
-            withAnimation { step = 1 }
         }
     }
 
@@ -80,10 +100,15 @@ struct OnboardingView: View {
 
     // MARK: Переиспользуемый pre-prompt
 
-    private func prePrompt(icon: String, title: String, subtitle: String,
-                           primary: String, secondary: String,
+    /// `secondary`/`onSkip` — опциональные: у шага геолокации кнопки «мимо»
+    /// быть не должно (см. комментарий к `locationStep`).
+    ///
+    /// Ключи каталога, а не `String`: `Text(String)` ничего не переводит, и
+    /// онбординг оставался русским даже в английской сборке.
+    private func prePrompt(icon: String, title: LocalizedStringKey, subtitle: LocalizedStringKey,
+                           primary: LocalizedStringKey, secondary: LocalizedStringKey?,
                            onPrimary: @escaping () -> Void,
-                           onSkip: @escaping () -> Void) -> some View {
+                           onSkip: (() -> Void)? = nil) -> some View {
         VStack(spacing: 20) {
             Spacer()
             Image(systemName: icon)
@@ -105,8 +130,10 @@ struct OnboardingView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.sanAccent)
-                Button(action: onSkip) {
-                    Text(secondary).font(.subheadline).foregroundStyle(.secondary)
+                if let secondary, let onSkip {
+                    Button(action: onSkip) {
+                        Text(secondary).font(.subheadline).foregroundStyle(.secondary)
+                    }
                 }
             }
             .padding(.horizontal, 16)

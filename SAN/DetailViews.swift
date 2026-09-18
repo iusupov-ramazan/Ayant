@@ -59,7 +59,7 @@ struct DealDetailView: View {
             }
             .padding(.bottom, 24)
         }
-        .navigationTitle(venue?.name ?? "Предложение")
+        .navigationTitle(venue?.name ?? LS("Предложение"))
         .navigationBarTitleDisplayMode(.inline)
         .guestAlert(isPresented: $showGuestAlert, message: GuestGate.saveDeal)
         .onAppear {
@@ -273,6 +273,8 @@ struct VenueDetailView: View {
     @State private var hoursExpanded = false
     @State private var photoViewerIndex: Int?
     @State private var reportingReview: Review?
+    /// Показываем подтверждение: молчаливая жалоба неотличима от сломанной кнопки.
+    @State private var reportSent = false
     @State private var showGuestPrompt = false
     @State private var guestMessage = GuestGate.saveVenue
     @State private var showMapOptions = false
@@ -781,11 +783,11 @@ struct VenueDetailView: View {
         .padding(.horizontal, 16)
     }
 
-    private func actionButton(_ title: String, _ icon: String, action: @escaping () -> Void) -> some View {
+    private func actionButton(_ title: LocalizedStringKey, _ icon: String, action: @escaping () -> Void) -> some View {
         Button(action: action) { actionLabel(title, icon) }.buttonStyle(.plain)
     }
 
-    private func actionLabel(_ title: String, _ icon: String) -> some View {
+    private func actionLabel(_ title: LocalizedStringKey, _ icon: String) -> some View {
         VStack(spacing: 5) {
             Image(systemName: icon).font(.subheadline)
             Text(title).font(.caption2)
@@ -1184,14 +1186,29 @@ struct VenueDetailView: View {
                 .padding(.horizontal, 16)
             }
         }
+        // Причины перечисляем из домена, а не литералами: список один и тот же
+        // на обеих платформах и в админ-панели.
         .confirmationDialog("Пожаловаться на отзыв", isPresented: Binding(
             get: { reportingReview != nil }, set: { if !$0 { reportingReview = nil } }
         ), titleVisibility: .visible) {
-            Button("Фейк", role: .destructive) { reportingReview = nil }
-            Button("Спам", role: .destructive) { reportingReview = nil }
-            Button("Оскорбительное", role: .destructive) { reportingReview = nil }
+            ForEach(ReviewReportReason.allCases, id: \.self) { reason in
+                Button(L(reason.title), role: .destructive) { send(reason) }
+            }
             Button("Отмена", role: .cancel) { reportingReview = nil }
         }
+        .alert("Жалоба отправлена", isPresented: $reportSent) {
+            Button("Понятно", role: .cancel) {}
+        } message: {
+            Text("Мы проверим отзыв. Если он нарушает правила, его удалят.")
+        }
+    }
+
+    private func send(_ reason: ReviewReportReason) {
+        guard let review = reportingReview else { return }
+        reportingReview = nil
+        store.reportReview(review, reason: reason)
+        SanHaptics.success()
+        reportSent = true
     }
 }
 

@@ -23,6 +23,7 @@ import * as path from "path";
 import * as crypto from "crypto";
 import type {
   Numeric,
+  AppSettingsDoc,
   VenueDoc,
   CouponDoc,
   VenuePointsDoc,
@@ -84,9 +85,12 @@ const REFERRAL_MAX_REWARDS = capFromEnv(process.env.REFERRAL_MAX_REWARDS, 20);
 // 1 балл = 1 сом при погашении. Гардрейлы (даже при self-serve конфиге хоста):
 const DEFAULT_EARN_COOLDOWN_MIN = 60;   // не чаще 1 начисления баллов на гостя/заведение
 // Штампы: не чаще одного на гостя/заведение за это окно. Дефолт 15 мин;
-// на время тестирования переопределяется через env STAMP_COOLDOWN_MIN
-// (0 — без паузы). В продакшене переменную не задавать.
-const DEFAULT_STAMP_COOLDOWN_MIN = capFromEnv(process.env.STAMP_COOLDOWN_MIN, 15);
+// значение правит администратор в панели («Настройки» →
+// config/appSettings.stampCooldownMinutes, 0 — без паузы), см. `stampCooldownMinutes`.
+// Env-переключатель STAMP_COOLDOWN_MIN убран намеренно: два источника правды
+// для одной константы — это «забытый тестовый ноль в проде».
+const DEFAULT_STAMP_COOLDOWN_MIN = 15;
+const MAX_STAMP_COOLDOWN_MIN = 1440;
 const DEFAULT_EXPIRY_MONTHS = 6;        // баллы сгорают после N мес. без активности
 const MAX_CASHBACK_PERCENT = 20;        // потолок кэшбэка (защита от опечатки «50%»)
 const MAX_POINTS_PER_EARN = 10000;      // потолок за одно начисление
@@ -106,6 +110,33 @@ const MAX_POINTS_PER_EARN = 10000;      // потолок за одно начи
 function intOrDefault(raw: Numeric, fallback: number): number {
   const n = parseInt(String(raw), 10);
   return Number.isFinite(n) ? n : fallback;
+}
+
+// ── Глобальные настройки (config/appSettings) ───────────────────────────────
+// Читаются на горячем пути скана, поэтому кэшируются на минуту на инстанс:
+// правка в панели доезжает не мгновенно, зато нет лишнего чтения на каждый скан.
+const APP_SETTINGS_TTL_MS = 60 * 1000;
+let appSettingsCache: { at: number; data: AppSettingsDoc } | null = null;
+
+async function loadAppSettings(): Promise<AppSettingsDoc> {
+  const now = Date.now();
+  if (appSettingsCache && now - appSettingsCache.at < APP_SETTINGS_TTL_MS) return appSettingsCache.data;
+  let data: AppSettingsDoc = {};
+  try {
+    const snap = await db.collection("config").doc("appSettings").get();
+    if (snap.exists) data = (snap.data() || {}) as AppSettingsDoc;
+  } catch (e) {
+    // Нет документа/прав — работаем на дефолтах: скан не должен падать из-за настроек.
+    console.warn("appSettings read failed, using defaults", e);
+  }
+  appSettingsCache = { at: now, data };
+  return data;
+}
+
+/** Пауза между штампами из настроек: явный 0 сохраняется (см. `intOrDefault`), клэмп 0…1440. */
+function stampCooldownMinutes(settings: AppSettingsDoc): number {
+  return Math.min(Math.max(intOrDefault(settings.stampCooldownMinutes, DEFAULT_STAMP_COOLDOWN_MIN), 0),
+    MAX_STAMP_COOLDOWN_MIN);
 }
 
 // Метрики телеметрии, которые клиент может логировать (redemptions — только через
@@ -875,7 +906,8 @@ export const scanCoupon = onRequest(MONEY_PATH_OPTS, async (req, res) => {
       if (!cardUser || cardVenue !== venueID) { res.status(409).json({ error: "wrong_venue" }); return; }
 
       const nowMs = Date.now();
-      const cooldownMin = DEFAULT_STAMP_COOLDOWN_MIN;   // штампы: 15 мин по умолчанию (отдельно от баллов)
+      // Штампы: окно из настроек панели (дефолт 15 мин; отдельно от 60-мин паузы баллов).
+      const cooldownMin = stampCooldownMinutes(await loadAppSettings());
       const cardRef = db.collection("loyaltyCards").doc(`${cardUser}_${venueID}`);
       const keyRef = idempotencyKey ? cardRef.collection("scanKeys").doc(idempotencyKey) : null;
 
