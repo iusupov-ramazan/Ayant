@@ -33,6 +33,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
@@ -42,6 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import kg.ayant.app.R
 import kg.ayant.app.domain.model.LoyaltyCard
 import kg.ayant.app.domain.model.PointsReward
 import kg.ayant.app.domain.model.Venue
@@ -54,6 +57,8 @@ import kg.ayant.app.ui.theme.gradientColors
 import kg.ayant.app.ui.theme.rememberReduceMotion
 import kg.ayant.app.ui.theme.stampBrush
 import kotlin.math.roundToInt
+import kg.ayant.app.core.localizedName
+import kg.ayant.app.core.AppLanguage
 
 /**
  * Wallet deck and stamp card (SCREENS.md G6). Mirrors `WalletDeck.swift`.
@@ -141,7 +146,7 @@ fun WalletPointsCard(
                 )
                 venue?.let {
                     Text(
-                        it.category.rawValue, fontSize = 11.5.sp,
+                        it.category.localizedName(), fontSize = 11.5.sp,
                         color = Color.White.copy(alpha = 0.72f),
                         modifier = Modifier.padding(top = 4.dp),
                     )
@@ -163,12 +168,12 @@ fun WalletPointsCard(
             "${card.balance}", fontSize = 46.sp, fontWeight = FontWeight.Black,
             letterSpacing = (-2.4).sp, lineHeight = 46.sp, color = Color.White,
         )
-        Text("баллов", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.82f))
+        Text(stringResource(R.string.wallet_points_word), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.82f))
         Spacer(Modifier.height(18.dp))
         AyantProgressBar(fraction = fraction, height = 6.dp)
         Spacer(Modifier.height(9.dp))
         Text(
-            next?.let { "Ещё ${it.cost - card.balance} до «${it.title}»" } ?: "Награды доступны",
+            next?.let { stringResource(R.string.points_until_reward, it.cost - card.balance, it.title) } ?: stringResource(R.string.wallet_rewards_available),
             fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold,
             color = Color.White.copy(alpha = 0.9f), maxLines = 1,
         )
@@ -200,7 +205,7 @@ fun WalletStampCard(card: LoyaltyCard, modifier: Modifier = Modifier) {
                     letterSpacing = (-0.3).sp, color = Color.White, maxLines = 1,
                 )
                 Text(
-                    "штамп за каждый визит", fontSize = 12.sp,
+                    stringResource(R.string.wallet_stamp_per_visit), fontSize = 12.sp,
                     color = Color.White.copy(alpha = 0.82f),
                     modifier = Modifier.padding(top = 3.dp),
                 )
@@ -277,21 +282,11 @@ private fun Stamp(index: Int, filled: Boolean, reduceMotion: Boolean, modifier: 
     }
 }
 
+@Composable
 private fun stampHint(card: LoyaltyCard, goal: Int): String {
     val left = (goal - card.stamps).coerceAtLeast(0)
-    if (left == 0) return "Круг собран — покажите карту сотруднику и заберите «${card.reward}»."
-    return "Ещё $left ${visitsWord(left)} — и «${card.reward}» в подарок. " +
-        "Штампы ставит сотрудник, сканируя ваш QR."
-}
-
-private fun visitsWord(n: Int): String {
-    val n10 = n % 10
-    val n100 = n % 100
-    return when {
-        n10 == 1 && n100 != 11 -> "визит"
-        n10 in 2..4 && n100 !in 12..14 -> "визита"
-        else -> "визитов"
-    }
+    if (left == 0) return stringResource(R.string.stamp_hint_complete, card.reward)
+    return stringResource(R.string.stamp_hint_left, pluralStringResource(R.plurals.visits_count, left, left), card.reward)
 }
 
 /**
@@ -331,15 +326,16 @@ fun AyantProgressBar(
 }
 
 /** «кэшбэк 5%» / «30 за визит» — reads the config, computes nothing. */
+@Composable
 fun Venue.pointsModeLabel(): String? {
     if (!pointsEnabled) return null
     return when (pointsMode) {
-        "cashback" -> if (cashbackPercent > 0) "кэшбэк ${percentText(cashbackPercent)}%" else null
-        "bands" -> "по сумме чека"
-        else -> if (pointsFlat > 0) "$pointsFlat за визит" else null
+        "cashback" -> if (cashbackPercent > 0) stringResource(R.string.wallet_mode_cashback, percentText(cashbackPercent)) else null
+        "bands" -> stringResource(R.string.wallet_mode_bands)
+        else -> if (pointsFlat > 0) stringResource(R.string.wallet_mode_flat, pointsFlat) else null
     }
 }
 
 private fun percentText(v: Double): String =
     if (v == v.roundToInt().toDouble()) v.roundToInt().toString()
-    else String.format("%.1f", v).replace('.', ',')
+    else String.format(AppLanguage.locale, "%.1f", v)

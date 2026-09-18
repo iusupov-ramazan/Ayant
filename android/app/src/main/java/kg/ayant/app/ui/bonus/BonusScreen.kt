@@ -169,7 +169,18 @@ fun BonusScreen(
                         modifier = Modifier.clickable(onClick = onCoupons),
                     )
                 }
-                CouponViewModel.catalog.forEach { reward -> RewardRow(reward, bonus, coupons, app) }
+                // Показываем только награды с заведением-партнёром: купон по
+                // награде без него сотрудник не погасит (`wrong_venue`).
+                val rewards by coupons.rewards.collectAsState()
+                LaunchedEffect(Unit) { coupons.loadRewards() }
+                if (rewards.isEmpty()) {
+                    Text(
+                        stringResource(R.string.bonus_rewards_empty),
+                        fontSize = 13.5.sp, color = c.inkSoft,
+                    )
+                } else {
+                    rewards.forEach { reward -> RewardRow(reward, bonus, coupons, app) }
+                }
             }
 
             // Points link (баллы САН)
@@ -178,7 +189,7 @@ fun BonusScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 AyantIconTile(Icons.Filled.Star, size = 44)
-                Text("Баллы САН", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = c.ink, modifier = Modifier.padding(start = 14.dp))
+                Text(stringResource(R.string.points_title), fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = c.ink, modifier = Modifier.padding(start = 14.dp))
                 Spacer(Modifier.weight(1f))
                 Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = c.inkSoft, modifier = Modifier.size(18.dp))
             }
@@ -272,9 +283,3 @@ private fun GameTile(emoji: String, title: String, subtitle: String, modifier: M
     }
 }
 
-private fun plural(n: Int): String {
-    val n10 = n % 10; val n100 = n % 100
-    if (n10 == 1 && n100 != 11) return "бонус"
-    if (n10 in 2..4 && n100 !in 12..14) return "бонуса"
-    return "бонусов"
-}

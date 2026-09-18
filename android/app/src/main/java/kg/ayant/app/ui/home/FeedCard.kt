@@ -7,7 +7,6 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
-import android.text.format.DateUtils
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.ColumnScope
@@ -78,6 +77,8 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImagePainter
 import coil.compose.rememberAsyncImagePainter
 import kg.ayant.app.R
+import kg.ayant.app.core.badgeLabel
+import kg.ayant.app.core.relativeText
 import kg.ayant.app.core.distanceText
 import kg.ayant.app.domain.model.Deal
 import kg.ayant.app.domain.model.DealType
@@ -91,6 +92,7 @@ import kg.ayant.app.ui.theme.ayantRisoHatch
 import kg.ayant.app.ui.theme.gradientColors
 import kg.ayant.app.ui.theme.rememberReduceMotion
 import kotlin.math.roundToInt
+import kg.ayant.app.core.AppLanguage
 
 /**
  * Redesigned feed card (SCREENS.md G2). Mirrors `FeedCard.swift`.
@@ -657,11 +659,8 @@ private fun postMeta(reviewCount: Int?, startDate: java.util.Date?): String? {
             add(stringResource(R.string.venue_reviews_count, reviewCount))
         }
         if (startDate != null) {
-            add(
-                DateUtils.getRelativeTimeSpanString(
-                    startDate.time, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS,
-                ).toString()
-            )
+            // Локаль приложения, а не системы: `DateUtils` берёт системные ресурсы.
+            add(startDate.relativeText())
         }
     }
     return parts.takeIf { it.isNotEmpty() }?.joinToString(" · ")
@@ -803,27 +802,22 @@ private fun Bone(width: Dp, height: Dp, radius: Dp = 5.dp, alpha: Float) {
 
 // MARK: - Small derived values
 
-/** Badge text when there is no percentage discount. Mirrors `DealType.badgeLabel`. */
-fun DealType.badgeLabel(): String = when (this) {
-    DealType.DISCOUNT -> "СКИДКА"
-    DealType.PROMO -> "ПРОМО"
-    DealType.NOVELTY -> "НОВОЕ"
-    DealType.ANNOUNCEMENT -> "АНОНС"
-}
+// `DealType.badgeLabel()` («СКИДКА» / «ПРОМО» / …) живёт в `core/L10n.kt` — через каталог.
 
 /**
  * «How much you'll earn» chip: reads the points config, computes nothing.
  * Award arithmetic lives only in `PointsMath`.
  */
+@Composable
 fun Venue.earnRateLabel(): String? {
     if (!pointsEnabled) return null
     return when (pointsMode) {
-        "cashback" -> if (cashbackPercent > 0) "+${cashbackPercent.percentText()}% САН" else null
-        "bands" -> "Баллы САН"
-        else -> if (pointsFlat > 0) "+$pointsFlat баллов" else null
+        "cashback" -> if (cashbackPercent > 0) stringResource(R.string.feed_earn_cashback, cashbackPercent.percentText()) else null
+        "bands" -> stringResource(R.string.search_chip_points)
+        else -> if (pointsFlat > 0) stringResource(R.string.feed_earn_flat, pointsFlat) else null
     }
 }
 
 private fun Double.percentText(): String =
     if (this == this.roundToInt().toDouble()) this.roundToInt().toString()
-    else String.format("%.1f", this).replace('.', ',')
+    else String.format(AppLanguage.locale, "%.1f", this)

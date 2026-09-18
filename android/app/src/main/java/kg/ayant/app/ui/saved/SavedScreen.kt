@@ -55,6 +55,7 @@ import androidx.compose.material3.Icon
 import kg.ayant.app.ui.components.VenuePhoto
 import kg.ayant.app.ui.theme.AyantRadius
 import kg.ayant.app.ui.home.earnRateLabel
+import kg.ayant.app.core.localizedName
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -115,7 +116,7 @@ fun SavedScreen(
                                 cover = v.imageURL,
                                 gradient = v.gradientColors,
                                 title = v.name,
-                                subtitle = "${v.category.rawValue} · ${v.district}",
+                                subtitle = "${v.category.localizedName()} · ${v.district}",
                                 pill = v.earnRateLabel(),
                                 onClick = { onVenue(v.id) },
                                 onRemove = { app.toggleSave(v) },

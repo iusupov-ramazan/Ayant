@@ -127,7 +127,7 @@ class SessionViewModel(
                 user = null
                 onFinish(null)
             } catch (e: Exception) {
-                val text = e.localizedMessage ?: "Не удалось удалить аккаунт"
+                val text = e.localizedMessage ?: ERROR_DELETE
                 errorMessage = text
                 onFinish(text)
             }
@@ -148,16 +148,26 @@ class SessionViewModel(
                 val user = withTimeout(AUTH_TIMEOUT_MS) { op() }
                 applyUser(user)
             } catch (e: TimeoutCancellationException) {
-                errorMessage = "Нет связи с сервером. Проверьте интернет."
+                errorMessage = ERROR_NETWORK
             } catch (e: Exception) {
-                errorMessage = e.localizedMessage ?: "Ошибка входа"
+                errorMessage = e.localizedMessage ?: ERROR_SIGN_IN
             }
             isWorking = false
         }
     }
 
-    private companion object {
-        const val AUTH_TIMEOUT_MS = 30_000L
+    companion object {
+        private const val AUTH_TIMEOUT_MS = 30_000L
+
+        /**
+         * Коды ошибок вместо текста: у `:feature` нет Android-ресурсов, поэтому
+         * в `errorMessage` кладём код, а экран переводит его через каталог
+         * (`sessionErrorText` в `core/L10n.kt`). Всё, что не код, — сообщение
+         * провайдера, показывается как есть.
+         */
+        const val ERROR_NETWORK = "error.network"
+        const val ERROR_SIGN_IN = "error.sign_in"
+        const val ERROR_DELETE = "error.delete"
     }
 
     private fun applyUser(u: AyantUser) {

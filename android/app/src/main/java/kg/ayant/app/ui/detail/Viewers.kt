@@ -24,6 +24,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.material3.Text
 import coil.compose.AsyncImage
+import androidx.compose.ui.res.stringResource
+import kg.ayant.app.R
 
 /** Fullscreen photo viewer with swipe. Mirrors PhotoViewerView. */
 @Composable
@@ -43,7 +45,7 @@ fun PhotoViewerDialog(photos: List<String>, startIndex: Int, onDismiss: () -> Un
                 }
             }
             IconButton(onClick = onDismiss, modifier = Modifier.align(Alignment.TopStart).padding(8.dp)) {
-                Icon(Icons.Filled.Close, "Закрыть", tint = Color.White)
+                Icon(Icons.Filled.Close, stringResource(R.string.action_close), tint = Color.White)
             }
         }
     }
@@ -67,7 +69,7 @@ fun PdfMenuDialog(urlString: String, onDismiss: () -> Unit) {
                 modifier = Modifier.fillMaxSize().padding(top = 48.dp),
             )
             IconButton(onClick = onDismiss, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) {
-                Icon(Icons.Filled.Close, "Закрыть", tint = Color.Black)
+                Icon(Icons.Filled.Close, stringResource(R.string.action_close), tint = Color.Black)
             }
         }
     }

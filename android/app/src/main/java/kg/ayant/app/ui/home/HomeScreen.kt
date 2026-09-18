@@ -73,6 +73,7 @@ import kg.ayant.app.ui.vm.AppViewModel
 import kg.ayant.app.ui.vm.FeedViewModel
 import kg.ayant.app.domain.model.Deal
 import kg.ayant.app.ui.components.VenuePhoto
+import kg.ayant.app.core.localizedName
 
 /**
  * Главная (SCREENS.md G2) — the defining screen of the redesign.
@@ -97,7 +98,7 @@ fun HomeScreen(
     var category by remember { mutableStateOf<VenueCategory?>(null) }
     // Сохранение и лайк принадлежат аккаунту: гостю объясняем это диалогом,
     // а не молчаливым «ничего не произошло».
-    var guestMessage by remember { mutableStateOf<String?>(null) }
+    var guestMessage by remember { mutableStateOf<Int?>(null) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
 
     // ВНИМАНИЕ: общие ViewModel приходят параметром из RootScaffold. Вызов
@@ -386,7 +387,7 @@ private fun CategoryRail(selected: VenueCategory?, onSelect: (VenueCategory?) ->
                 CategoryChip(stringResource(R.string.category_all), selected == null) { onSelect(null) }
             }
             items(VenueCategory.all) { cat ->
-                CategoryChip(cat.rawValue, selected == cat) {
+                CategoryChip(cat.localizedName(), selected == cat) {
                     onSelect(if (selected == cat) null else cat)
                 }
             }
@@ -570,7 +571,7 @@ private fun shareDeal(context: android.content.Context, deal: Deal, venue: Venue
     val parts = buildList {
         add(deal.title)
         venue?.let { add(it.name) }
-        deal.newPrice?.let { add("$it сом") }
+        deal.newPrice?.let { add(context.getString(R.string.price_som, it)) }
     }
     val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
         type = "text/plain"

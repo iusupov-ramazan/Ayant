@@ -79,7 +79,9 @@ import kg.ayant.app.domain.model.Venue
 import kg.ayant.app.domain.model.VenueCategory
 import kg.ayant.app.location.LocationManager
 import kg.ayant.app.ui.components.StarRating
-import kg.ayant.app.ui.home.badgeLabel
+import kg.ayant.app.core.AppLanguage
+import kg.ayant.app.core.badgeLabel
+import kg.ayant.app.core.localizedName
 import kg.ayant.app.ui.components.VenuePhoto
 import kg.ayant.app.ui.theme.AyantMetrics
 import kg.ayant.app.ui.theme.AyantMotion
@@ -94,6 +96,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kg.ayant.app.domain.pointsActive
+import androidx.compose.ui.platform.LocalContext
 
 /**
  * Поиск после редизайна (SCREENS.md G8). Зеркалит `SearchView.swift`.
@@ -122,6 +125,7 @@ fun SearchScreen(
     val c = AyantTheme.colors
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     var query by remember { mutableStateOf("") }
     // Подписка на владельцев данных: адаптеры `app.*` — обычные геттеры поверх
@@ -220,7 +224,7 @@ fun SearchScreen(
             }
             // Подписи пинов — как на iOS: капсула с выгодой, а не иконка.
             val items = remember(mapVenues, feedState) {
-                pinItems(mapVenues, feedState.loadedCatalog.deals)
+                pinItems(context, mapVenues, feedState.loadedCatalog.deals)
             }
             GoogleMap(
                 modifier = Modifier.fillMaxWidth().height(MAP_FIXED),
@@ -576,7 +580,7 @@ private fun ResultRow(
             }
             Spacer(Modifier.height(4.dp))
             Text(
-                "${venue.category.rawValue} · ${venue.district}",
+                "${venue.category.localizedName()} · ${venue.district}",
                 fontSize = 12.5.sp, color = c.inkSoft, maxLines = 1,
             )
             Spacer(Modifier.height(7.dp))
@@ -633,7 +637,7 @@ private fun FilterSheet(
         FilterGroup(stringResource(R.string.filter_category)) {
             QuickChip(stringResource(R.string.filter_all), category == null) { onCategory(null) }
             VenueCategory.all.forEach { cat ->
-                QuickChip(cat.rawValue, category == cat) { onCategory(if (category == cat) null else cat) }
+                QuickChip(cat.localizedName(), category == cat) { onCategory(if (category == cat) null else cat) }
             }
         }
     }
@@ -666,7 +670,7 @@ private class MapVenueItem(
 ) : ClusterItem {
     override fun getPosition() = LatLng(venue.latitude, venue.longitude)
     override fun getTitle() = venue.name
-    override fun getSnippet() = "${venue.category.rawValue} · ${venue.district}"
+    override fun getSnippet() = "${venue.category.localizedName(AppLanguage.context)} · ${venue.district}"
     override fun getZIndex() = 0f
 }
 
@@ -675,7 +679,7 @@ private class MapVenueItem(
  * лучшая скидка → `−40%`; иначе тип акции → `ПРОМО`; иначе спецпредложение дня
  * → `Новое`; иначе рейтинг. Самая большая скидка получает акцентный градиент.
  */
-private fun pinItems(venues: List<Venue>, deals: List<Deal>): List<MapVenueItem> {
+private fun pinItems(context: android.content.Context, venues: List<Venue>, deals: List<Deal>): List<MapVenueItem> {
     val byVenue = deals.filter { it.isActive }.groupBy { it.venueID }
     val best = venues
         .mapNotNull { v -> byVenue[v.id]?.mapNotNull { it.effectiveDiscountPercent }?.maxOrNull()?.let { v.id to it } }
@@ -688,9 +692,9 @@ private fun pinItems(venues: List<Venue>, deals: List<Deal>): List<MapVenueItem>
             percent != null -> MapVenueItem(
                 v, "−$percent%", if (v.id == best) PinStyle.FEATURED else PinStyle.PLAIN,
             )
-            venueDeals.isNotEmpty() -> MapVenueItem(v, venueDeals.first().type.badgeLabel(), PinStyle.PLAIN)
-            v.hasTodaySpecial -> MapVenueItem(v, "Новое", PinStyle.DARK)
-            else -> MapVenueItem(v, "★ %.1f".format(v.rating), PinStyle.PLAIN)
+            venueDeals.isNotEmpty() -> MapVenueItem(v, venueDeals.first().type.badgeLabel(context), PinStyle.PLAIN)
+            v.hasTodaySpecial -> MapVenueItem(v, context.getString(R.string.map_pin_new), PinStyle.DARK)
+            else -> MapVenueItem(v, "★ %.1f".format(AppLanguage.locale, v.rating), PinStyle.PLAIN)
         }
     }
 }
@@ -749,7 +753,7 @@ private fun MapPreviewCard(
         Column(Modifier.weight(1f)) {
             Text(venue.name, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = c.ink, maxLines = 1)
             Text(
-                "${venue.category.rawValue} • ${venue.district}" + (distanceKm?.let { " • ${it.distanceText()}" } ?: ""),
+                "${venue.category.localizedName()} • ${venue.district}" + (distanceKm?.let { " • ${it.distanceText()}" } ?: ""),
                 fontSize = 12.sp, color = c.inkSoft, maxLines = 1,
             )
             Row(verticalAlignment = Alignment.CenterVertically) {

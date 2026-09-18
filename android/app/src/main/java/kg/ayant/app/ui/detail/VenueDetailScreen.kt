@@ -76,6 +76,7 @@ import kg.ayant.app.core.dial
 import kg.ayant.app.core.distanceText
 import kg.ayant.app.core.openUrl
 import kg.ayant.app.core.shareText
+import kg.ayant.app.domain.model.ReviewReportReason
 import kg.ayant.app.domain.model.Venue
 import kg.ayant.app.location.LocationManager
 import kg.ayant.app.ui.components.CoverImage
@@ -94,6 +95,12 @@ import kg.ayant.app.ui.theme.AyantRadius
 import androidx.compose.foundation.layout.aspectRatio
 import kg.ayant.app.domain.pointsActive
 import kg.ayant.app.domain.stampsActive
+import androidx.compose.ui.res.pluralStringResource
+import kg.ayant.app.core.localizedName
+import kg.ayant.app.core.localizedHoursStatus
+import kg.ayant.app.core.localizedLabel
+import kg.ayant.app.core.weekdayLongRes
+import kg.ayant.app.core.AppLanguage
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -212,7 +219,7 @@ fun VenueDetailScreen(
                             Text(ratingText(agg.first), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = c.ink)
                         }
                         Text(
-                            "· ${agg.second} ${reviewsWord(agg.second)}",
+                            "· " + pluralStringResource(R.plurals.reviews_word, agg.second, agg.second),
                             fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = c.inkSoft,
                         )
                         if (venue.isVerified) {
@@ -227,7 +234,7 @@ fun VenueDetailScreen(
                     Spacer(Modifier.height(9.dp))
                     Text(
                         buildString {
-                            append(venue.category.rawValue)
+                            append(venue.category.localizedName())
                             append(" · ").append(venue.district)
                             location.distanceKm(venue.latitude, venue.longitude)?.let {
                                 append(" · ").append(it.distanceText())
@@ -247,11 +254,11 @@ fun VenueDetailScreen(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
                             Box(Modifier.size(6.dp).clip(CircleShape).background(openColor))
-                            Text(venue.hoursStatusText, fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = openColor)
+                            Text(venue.localizedHoursStatus(), fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = openColor)
                         }
                         if (venue.branches.isNotEmpty()) {
                             Text(
-                                "${venue.branches.size + 1} адреса",
+                                pluralStringResource(R.plurals.addresses_count, venue.branches.size + 1, venue.branches.size + 1),
                                 fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = c.inkSoft,
                                 modifier = Modifier.clip(CircleShape).background(c.surface)
                                     .padding(horizontal = 13.dp, vertical = 8.dp),
@@ -303,7 +310,7 @@ fun VenueDetailScreen(
                             Text(stringResource(R.string.reviews), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = c.ink, modifier = Modifier.padding(horizontal = 16.dp))
                             Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(20.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text("%.1f".format(agg.first), fontSize = 40.sp, fontWeight = FontWeight.Bold, color = c.ink)
+                                    Text(ratingText(agg.first), fontSize = 40.sp, fontWeight = FontWeight.Bold, color = c.ink)
                                     StarRating(rating = agg.first, size = 12)
                                     Text(stringResource(R.string.venue_reviews_count, agg.second), fontSize = 11.sp, color = c.inkSoft)
                                 }
@@ -395,7 +402,7 @@ fun VenueDetailScreen(
                             // Hours (expandable)
                             Row(Modifier.fillMaxWidth().clickable { hoursExpanded = !hoursExpanded }, verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Filled.Schedule, null, tint = if (venue.isOpenNow) c.open else c.inkSoft, modifier = Modifier.size(18.dp))
-                                Text(" ${venue.hoursStatusText}", fontSize = 14.sp, color = if (venue.isOpenNow) c.open else c.inkSoft)
+                                Text(" ${venue.localizedHoursStatus()}", fontSize = 14.sp, color = if (venue.isOpenNow) c.open else c.inkSoft)
                                 Spacer(Modifier.weight(1f))
                                 Icon(if (hoursExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, null, tint = c.inkSoft, modifier = Modifier.size(18.dp))
                             }
@@ -404,9 +411,9 @@ fun VenueDetailScreen(
                                     for (i in 0 until 7) {
                                         val isToday = i == Venue.todayIndex
                                         Row(Modifier.fillMaxWidth()) {
-                                            Text(Venue.weekdayLong[i], fontSize = 12.sp, fontWeight = if (isToday) FontWeight.SemiBold else FontWeight.Normal, color = if (isToday) c.ink else c.inkSoft)
+                                            Text(stringResource(weekdayLongRes(i)), fontSize = 12.sp, fontWeight = if (isToday) FontWeight.SemiBold else FontWeight.Normal, color = if (isToday) c.ink else c.inkSoft)
                                             Spacer(Modifier.weight(1f))
-                                            Text(venue.hours(i).label, fontSize = 12.sp, color = if (venue.hours(i).closed) c.inkSoft else c.ink)
+                                            Text(venue.hours(i).localizedLabel(), fontSize = 12.sp, color = if (venue.hours(i).closed) c.inkSoft else c.ink)
                                         }
                                     }
                                 }
@@ -416,8 +423,8 @@ fun VenueDetailScreen(
                                 Row(Modifier.fillMaxWidth().clickable { showAllBranches = !showAllBranches }, verticalAlignment = Alignment.CenterVertically) {
                                     Icon(Icons.Filled.LocationOn, null, tint = c.accentText, modifier = Modifier.size(18.dp))
                                     Text(
-                                        if (showAllBranches) " Скрыть адреса"
-                                        else " Посмотреть все адреса (${venue.branches.size + 1})",
+                                        if (showAllBranches) " " + stringResource(R.string.venue_hide_addresses)
+                                        else " " + stringResource(R.string.venue_show_all_addresses, venue.branches.size + 1),
                                         fontSize = 14.sp, fontWeight = FontWeight.Medium, color = c.accentText
                                     )
                                     Spacer(Modifier.weight(1f))
@@ -553,18 +560,33 @@ fun VenueDetailScreen(
             dismissButton = { TextButton(onClick = { showMapOptions = false; context.openUrl(Dir.google(venue.latitude, venue.longitude)) }) { Text("Google Maps") } },
         )
     }
-    if (reportingReview != null) {
-        var reported by remember { mutableStateOf(false) }
+    // Жалоба уходит в Firestore и попадает в очередь модерации админ-панели.
+    // Раньше диалог просто показывал «Спасибо», ничего никуда не отправляя.
+    reportingReview?.let { review ->
+        var reported by remember(review.id) { mutableStateOf(false) }
         AlertDialog(
             onDismissRequest = { reportingReview = null },
             title = { Text(if (reported) stringResource(R.string.review_report_thanks_title) else stringResource(R.string.review_report_title)) },
             text = { Text(if (reported) stringResource(R.string.review_report_sent) else stringResource(R.string.review_report_choose)) },
             confirmButton = {
-                if (reported) TextButton(onClick = { reportingReview = null }) { Text(stringResource(R.string.action_done)) }
-                else TextButton(onClick = { reported = true }) { Text(stringResource(R.string.review_report_spam)) }
-            },
-            dismissButton = {
-                if (!reported) TextButton(onClick = { reported = true }) { Text(stringResource(R.string.review_report_offensive)) }
+                if (reported) {
+                    TextButton(onClick = { reportingReview = null }) { Text(stringResource(R.string.action_done)) }
+                } else {
+                    // Причины — из домена, тот же список, что на iOS и в админке.
+                    Row {
+                        ReviewReportReason.entries.forEach { reason ->
+                            TextButton(onClick = { app.reportReview(review, reason); reported = true }) {
+                                Text(
+                                    when (reason) {
+                                        ReviewReportReason.FAKE -> stringResource(R.string.review_report_fake)
+                                        ReviewReportReason.SPAM -> stringResource(R.string.review_report_spam)
+                                        ReviewReportReason.OFFENSIVE -> stringResource(R.string.review_report_offensive)
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
             },
         )
     }
@@ -747,7 +769,7 @@ private fun VenuePointsHeroCard(venue: Venue, balance: Int, onClick: () -> Unit)
         AyantProgressBar(fraction = fraction, height = 8.dp)
         Spacer(Modifier.height(10.dp))
         Text(
-            next?.let { "Ещё ${it.cost - balance} до «${it.title}»" }
+            next?.let { stringResource(R.string.points_until_reward, it.cost - balance, it.title) }
                 ?: stringResource(R.string.venue_points_rewards_available),
             fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.94f),
         )
@@ -816,17 +838,7 @@ private fun VenueDealRows(
 }
 
 /** «4,8» — рейтинг с десятичной запятой. */
-private fun ratingText(v: Double): String = String.format("%.1f", v).replace('.', ',')
-
-private fun reviewsWord(n: Int): String {
-    val n10 = n % 10
-    val n100 = n % 100
-    return when {
-        n10 == 1 && n100 != 11 -> "отзыв"
-        n10 in 2..4 && n100 !in 12..14 -> "отзыва"
-        else -> "отзывов"
-    }
-}
+private fun ratingText(v: Double): String = String.format(AppLanguage.locale, "%.1f", v)
 
 // MARK: - Публикации: кладка в две колонки
 //

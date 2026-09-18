@@ -45,6 +45,7 @@ import kg.ayant.app.domain.model.Deal
 import kg.ayant.app.domain.model.Venue
 import kg.ayant.app.ui.theme.AyantTheme
 import kg.ayant.app.ui.theme.gradientColors
+import kg.ayant.app.core.localizedName
 
 private val AdGradient = Brush.horizontalGradient(listOf(Color(0xFFFF4D29), Color(0xFFFFB300)))
 
@@ -121,7 +122,7 @@ fun VenueCard(
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 StarRating(rating = rating, count = ratingCount, size = 12)
-                Text(" · ${venue.category.rawValue}", fontSize = 12.sp, color = c.inkSoft)
+                Text(" · ${venue.category.localizedName()}", fontSize = 12.sp, color = c.inkSoft)
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (distanceKm != null) {
@@ -181,7 +182,7 @@ fun VenueCompactRow(
             }
             StarRating(rating = rating, count = ratingCount, size = 12)
             Text(
-                "${venue.category.rawValue} · ${venue.district}" + (distanceKm?.let { " · ${it.distanceText()}" } ?: ""),
+                "${venue.category.localizedName()} · ${venue.district}" + (distanceKm?.let { " · ${it.distanceText()}" } ?: ""),
                 fontSize = 12.sp, color = c.inkSoft, maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
         }

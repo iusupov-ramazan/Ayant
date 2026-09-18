@@ -60,6 +60,7 @@ import kotlin.math.roundToInt
 import kg.ayant.app.domain.HostForms
 import kg.ayant.app.domain.HostIntent
 import androidx.compose.ui.focus.onFocusChanged
+import kg.ayant.app.core.AppLanguage
 
 /**
  * «Лояльность» — the host flagship (SCREENS.md H6). Mirrors `HostLoyaltyView.swift`.
@@ -321,12 +322,12 @@ fun HostLoyaltyScreen(host: HostViewModel) {
                 Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(c.surface)) {
                     RuleRow(
                         stringResource(R.string.host_rule_cooldown), stringResource(R.string.host_rule_cooldown_hint),
-                        "${PointsMath.effectiveCooldownMinutes(venue?.earnCooldownMinutes ?: PointsMath.DEFAULT_EARN_COOLDOWN_MINUTES)} мин",
+                        stringResource(R.string.unit_min, PointsMath.effectiveCooldownMinutes(venue?.earnCooldownMinutes ?: PointsMath.DEFAULT_EARN_COOLDOWN_MINUTES)),
                     )
                     RuleRow(
                         stringResource(R.string.host_rule_expiry), stringResource(R.string.host_rule_expiry_hint),
                         // 0 здесь не значение, а «не настроено» — пол в 1 месяц.
-                        "${(venue?.pointsExpiryMonths ?: 0).takeIf { it > 0 } ?: 6} мес",
+                        stringResource(R.string.unit_months, (venue?.pointsExpiryMonths ?: 0).takeIf { it > 0 } ?: 6),
                     )
                     RuleRow(
                         stringResource(R.string.host_rule_redeem), stringResource(R.string.host_rule_redeem_hint),
@@ -408,7 +409,7 @@ private fun RewardRow(r: PointsReward) {
         }
         Column(Modifier.weight(1f)) {
             Text(r.title, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, color = c.ink)
-            Text("${r.cost} баллов", fontSize = 12.sp, color = c.inkSoft)
+            Text(stringResource(R.string.qr_points_count, r.cost), fontSize = 12.sp, color = c.inkSoft)
         }
         // Read-only: только админ-панель пишет это состояние.
         val tint = if (r.active) c.open else c.inkSoft
@@ -441,7 +442,7 @@ private fun RuleRow(title: String, hint: String, value: String) {
 private fun previewVenue(dto: HostVenueDTO?, percent: Double): Venue? {
     if (dto == null) return null
     return Venue(
-        id = dto.id, name = dto.name, category = VenueCategory("Кафе"), district = "",
+        id = dto.id, name = dto.name, category = VenueCategory.CAFE, district = "",
         address = "", phone = "", emoji = "⭐️",
         gradient = listOf(0xFFFF5A1FL, 0xFFFF9500L),   // бренд-градиент, как в маппере
         pointsEnabled = true,
@@ -460,7 +461,7 @@ private fun thousands(v: Int): String {
 
 private fun percentText(v: Double): String =
     if (v == v.roundToInt().toDouble()) v.roundToInt().toString()
-    else String.format("%.1f", v).replace('.', ',')
+    else String.format(AppLanguage.locale, "%.1f", v)
 
 /** Кнопка «+»/«−» для шага. Отдельно, чтобы ряд читался. */
 @Composable

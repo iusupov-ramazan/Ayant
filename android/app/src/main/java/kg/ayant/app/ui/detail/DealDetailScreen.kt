@@ -64,6 +64,8 @@ import kg.ayant.app.ui.theme.AyantTheme
 import kg.ayant.app.ui.theme.gradientColors
 import kg.ayant.app.ui.vm.AppViewModel
 import kg.ayant.app.ui.vm.SessionViewModel
+import kg.ayant.app.core.localizedName
+import kg.ayant.app.core.localizedUrgency
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -136,7 +138,7 @@ fun DealDetailScreen(
                 Text(deal.title, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = c.ink)
                 Text(deal.details, fontSize = 16.sp, color = c.inkSoft)
                 PriceLabel(deal)
-                deal.urgencyText?.let {
+                deal.localizedUrgency()?.let {
                     Text(
                         "🔥 $it", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFFD32F2F),
                         modifier = Modifier.clip(RoundedCornerShape(50)).background(Color(0xFFD32F2F).copy(alpha = 0.12f)).padding(horizontal = 10.dp, vertical = 5.dp),
@@ -191,7 +193,7 @@ fun DealDetailScreen(
                         VenueAvatar(venue.gradientColors, venue.imageURL, 48)
                         Column(Modifier.padding(start = 12.dp).weight(1f)) {
                             Text(venue.name, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = c.ink)
-                            Text("${venue.category.rawValue} • ${venue.district}", fontSize = 12.sp, color = c.inkSoft)
+                            Text("${venue.category.localizedName()} • ${venue.district}", fontSize = 12.sp, color = c.inkSoft)
                         }
                         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = c.inkSoft, modifier = Modifier.size(18.dp))
                     }

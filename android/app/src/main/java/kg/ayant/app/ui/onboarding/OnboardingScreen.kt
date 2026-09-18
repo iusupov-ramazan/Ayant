@@ -73,18 +73,25 @@ fun OnboardingScreen(onFinished: () -> Unit) {
         }
 
         if (step == 0) {
+            // Кнопка названа нейтрально, и мимо системного запроса пути нет —
+            // требование App Review (5.1.1(iv), отклонение iOS-сборки
+            // 15.09.2026). Было «Разрешить геолокацию» и «Не сейчас»: первое
+            // подсказывало ответ, второе позволяло вообще не дойти до диалога.
+            // Держим одинаково с iOS, чтобы клиенты не разъезжались.
+            //
+            // Тупика нет: колбэк лаунчера двигает шаг при любом ответе, в том
+            // числе при «навсегда запрещено», когда диалог уже не показывается.
             PrePrompt(
                 icon = Icons.Filled.LocationOn,
                 title = stringResource(R.string.onb_location_title),
                 subtitle = stringResource(R.string.onb_location_sub),
-                primary = stringResource(R.string.onb_location_allow),
-                secondary = stringResource(R.string.onb_not_now),
+                primary = stringResource(R.string.onb_continue),
+                secondary = null,
                 onPrimary = {
                     locationLauncher.launch(
                         arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
                     )
                 },
-                onSkip = { step = 1 },
             )
         } else {
             PrePrompt(
@@ -110,9 +117,10 @@ private fun androidx.compose.foundation.layout.ColumnScope.PrePrompt(
     title: String,
     subtitle: String,
     primary: String,
-    secondary: String,
+    /** `null` — шага «мимо» нет (см. комментарий на шаге геолокации). */
+    secondary: String? = null,
     onPrimary: () -> Unit,
-    onSkip: () -> Unit,
+    onSkip: (() -> Unit)? = null,
 ) {
     val c = AyantTheme.colors
     Spacer(Modifier.weight(1f))
@@ -127,6 +135,8 @@ private fun androidx.compose.foundation.layout.ColumnScope.PrePrompt(
     Spacer(Modifier.weight(1f))
     Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         AyantPrimaryButton(text = primary, onClick = onPrimary)
-        TextButton(onClick = onSkip) { Text(secondary, color = c.inkSoft) }
+        if (secondary != null && onSkip != null) {
+            TextButton(onClick = onSkip) { Text(secondary, color = c.inkSoft) }
+        }
     }
 }

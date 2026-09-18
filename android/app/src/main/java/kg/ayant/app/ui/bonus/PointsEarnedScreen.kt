@@ -49,6 +49,8 @@ import kg.ayant.app.ui.theme.AyantTheme
 import kg.ayant.app.ui.theme.ayantScreenEnter
 import kg.ayant.app.ui.theme.rememberReduceMotion
 import kotlin.math.roundToInt
+import androidx.compose.ui.res.stringResource
+import kg.ayant.app.R
 
 /**
  * «Начисление» (SCREENS.md G5). Mirrors `PointsEarnedView.swift`.
@@ -101,7 +103,7 @@ fun PointsEarnedScreen(
             )
             Spacer(Modifier.height(12.dp))
             Text(
-                "Баллы начислены", fontSize = 24.sp, fontWeight = FontWeight.Black,
+                stringResource(R.string.host_points_awarded), fontSize = 24.sp, fontWeight = FontWeight.Black,
                 letterSpacing = (-1).sp, color = c.ink,
             )
             Spacer(Modifier.height(8.dp))
@@ -117,7 +119,7 @@ fun PointsEarnedScreen(
                     .padding(horizontal = 20.dp, vertical = 18.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("Новый баланс", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = c.inkSoft)
+                Text(stringResource(R.string.points_new_balance), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = c.inkSoft)
                 Spacer(Modifier.weight(1f))
                 Text(
                     "$shownBalance", fontSize = 24.sp, fontWeight = FontWeight.Black,
@@ -127,7 +129,7 @@ fun PointsEarnedScreen(
 
             Spacer(Modifier.height(14.dp))
             Text(
-                "Баллы копятся у этого заведения и тратятся у него же.",
+                stringResource(R.string.points_earned_note),
                 fontSize = 13.sp, color = Color(0xFF9A9188),
                 textAlign = TextAlign.Center, modifier = Modifier.widthIn(max = 280.dp),
             )
@@ -143,7 +145,7 @@ fun PointsEarnedScreen(
                     .padding(vertical = 17.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text("Отлично", fontSize = 16.5.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Text(stringResource(R.string.action_great), fontSize = 16.5.sp, fontWeight = FontWeight.Bold, color = Color.White)
             }
         }
     }

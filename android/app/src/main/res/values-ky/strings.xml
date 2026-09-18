@@ -32,7 +32,7 @@
     <string name="auth_sign_in">Кирүү</string>
     <string name="auth_register">Каттоо</string>
     <string name="auth_name">Аты</string>
-    <string name="auth_email">Почта</string>
+    <string name="auth_email">Электрондук почта</string>
     <string name="auth_password">Сырсөз</string>
     <string name="auth_do_sign_in">Кирүү</string>
     <string name="auth_create_account">Аккаунт түзүү</string>
@@ -431,7 +431,7 @@
     <string name="hprofile_details_contacts">Реквизиттер жана байланыштар</string>
     <string name="hprofile_inn">ИНН %1$s</string>
     <string name="hprofile_fill_details">Реквизиттерди жана байланыштарды толтуруу</string>
-    <string name="hprofile_verification">Верификация</string>
+    <string name="hprofile_verification">Текшерүү</string>
     <string name="hprofile_verified">Мекеме текшерилген</string>
     <string name="hprofile_verify_hint">Белги конактардын ишенимин жогорулатат.</string>
     <string name="hprofile_request_verify">«Текшерилген» суроо</string>

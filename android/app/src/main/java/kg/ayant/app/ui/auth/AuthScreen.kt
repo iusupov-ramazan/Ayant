@@ -54,6 +54,10 @@ import kg.ayant.app.domain.AuthValidation
 import kg.ayant.app.ui.theme.AyantPrimaryButton
 import kg.ayant.app.ui.theme.AyantTheme
 import kg.ayant.app.ui.vm.SessionViewModel
+import kg.ayant.app.core.authEmailHint
+import kg.ayant.app.core.authNameHint
+import kg.ayant.app.core.authPasswordHint
+import kg.ayant.app.core.sessionErrorText
 
 /**
  * Экран входа. Зеркалит `AuthView.swift`, включая два режима подачи.
@@ -155,7 +159,7 @@ fun AuthScreen(
                 }
 
                 if (tab == 1) {
-                    val nameHint = AuthValidation.nameHint(name)
+                    val nameHint = authNameHint(name)
                     OutlinedTextField(
                         value = name, onValueChange = { name = it },
                         label = { Text(stringResource(R.string.auth_name)) }, singleLine = true,
@@ -165,7 +169,7 @@ fun AuthScreen(
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
-                val emailHint = AuthValidation.emailHint(email)
+                val emailHint = authEmailHint(email)
                 OutlinedTextField(
                     value = email, onValueChange = { email = it },
                     label = { Text(stringResource(R.string.auth_email)) }, singleLine = true,
@@ -175,7 +179,7 @@ fun AuthScreen(
                     supportingText = { if (emailHint != null) Text(emailHint) },
                     modifier = Modifier.fillMaxWidth(),
                 )
-                val passwordHint = if (tab == 1) AuthValidation.passwordHint(password) else null
+                val passwordHint = if (tab == 1) authPasswordHint(password) else null
                 OutlinedTextField(
                     value = password, onValueChange = { password = it },
                     label = { Text(stringResource(R.string.auth_password)) }, singleLine = true,
@@ -224,7 +228,7 @@ fun AuthScreen(
             onDismissRequest = { session.errorMessage = null },
             confirmButton = { TextButton(onClick = { session.errorMessage = null }) { Text(stringResource(R.string.action_ok)) } },
             title = { Text(stringResource(R.string.auth_error)) },
-            text = { Text(sessionState.errorMessage ?: "") },
+            text = { Text(sessionErrorText(sessionState.errorMessage)) },
         )
     }
 }
