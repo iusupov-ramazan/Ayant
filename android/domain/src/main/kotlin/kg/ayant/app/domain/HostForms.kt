@@ -5,6 +5,8 @@ import kg.ayant.app.domain.model.DayHours
 import kg.ayant.app.domain.model.DealType
 import kg.ayant.app.domain.model.HostDealDTO
 import kg.ayant.app.domain.model.HostVenueDTO
+import kg.ayant.app.domain.model.PointsBand
+import kg.ayant.app.domain.model.PointsReward
 import kg.ayant.app.domain.model.VenueCategory
 import java.util.Date
 
@@ -120,6 +122,101 @@ object HostForms {
             loyaltyGoal = fields.loyaltyGoal,
             loyaltyReward = fields.loyaltyReward.trim(),
             couponsEnabled = fields.couponsEnabled,
+        )
+    }
+
+    // MARK: Баллы САН
+
+    /**
+     * Поля редактора баллов САН (вкладка «Лояльность»). Отдельная структура:
+     * заведение правится целиком через [VenueFields], а конфиг баллов — своей
+     * формой, чтобы обычное сохранение заведения его не задевало.
+     * Зеркалит `HostForms.PointsFields`.
+     */
+    data class PointsFields(
+        val pointsEnabled: Boolean,
+        val pointsMode: String,            // "flat" | "bands" | "cashback"
+        val pointsFlat: Int,
+        val pointsBands: List<PointsBand>,
+        val cashbackPercent: Double,
+        val pointsRewards: List<PointsReward>,
+        val pointsExpiryMonths: Int,
+        val redeemMode: String,            // "staffScan" | "customerInitiated"
+        val earnCooldownMinutes: Int,
+    )
+
+    /** Поля редактора баллов из существующего заведения — см. [fields]. */
+    fun pointsFields(dto: HostVenueDTO): PointsFields = PointsFields(
+        pointsEnabled = dto.pointsEnabled, pointsMode = dto.pointsMode,
+        pointsFlat = dto.pointsFlat, pointsBands = dto.pointsBands,
+        cashbackPercent = dto.cashbackPercent, pointsRewards = dto.pointsRewards,
+        pointsExpiryMonths = dto.pointsExpiryMonths, redeemMode = dto.redeemMode,
+        earnCooldownMinutes = dto.earnCooldownMinutes,
+    )
+
+    /**
+     * Допустимые значения конфига баллов — те же ограничения, что у сервера
+     * (`functions/src/index.ts`) и админ-панели. Клиент режет их до записи,
+     * чтобы «50% кэшбэка» не уехали в Firestore и не сработал ночной алерт.
+     */
+    object PointsLimits {
+        val modes = listOf("flat", "bands", "cashback")
+        val redeemModes = listOf("staffScan", "customerInitiated")
+        const val maxPoints = PointsMath.MAX_POINTS_PER_EARN            // 10 000
+        const val maxCashbackPercent = PointsMath.MAX_CASHBACK_PERCENT  // 20
+        val expiryMonths = 1..24
+        /** 0 — без паузы (начисление на каждом скане), см. CLAUDE.md. */
+        val cooldownMinutes = 0..1440
+    }
+
+    /**
+     * Накладывает конфиг баллов на DTO заведения, приводя значения к серверным
+     * ограничениям. Всё остальное в DTO (id, статус модерации, карта штампов,
+     * контакты…) не трогается — это правка одной группы полей, а не заведения.
+     *
+     * Правила:
+     *  • неизвестный режим → `flat`, неизвестный способ списания → `staffScan`;
+     *  • `pointsFlat`, баллы диапазонов — 0…10 000; кэшбэк — 0…20 %;
+     *  • диапазоны сортируются по `maxAmount`, дубли по сумме отбрасываются
+     *    (остаётся первый) — сервер выбирает диапазон по индексу, порядок важен;
+     *  • названия наград тримятся, безымянные награды удаляются, стоимость ≥ 1,
+     *    для «money» коэффициент ≥ 1 (иначе балл стоил бы дешевле сома);
+     *  • срок сгорания 1…24 мес, пауза 0…1440 мин.
+     *
+     * Зеркалит `HostForms.applyPoints(to:fields:)` 1:1 — порядок проверок тот же.
+     */
+    fun applyPoints(dto: HostVenueDTO, fields: PointsFields): HostVenueDTO {
+        // Диапазоны: стабильная сортировка + дедупликация по верхней границе.
+        val seenAmounts = HashSet<Int>()
+        val bands = fields.pointsBands
+            .map { PointsBand(maxOf(it.maxAmount, 0), it.points.coerceIn(0, PointsLimits.maxPoints)) }
+            .filter { seenAmounts.add(it.maxAmount) }
+            .sortedBy { it.maxAmount }
+
+        val rewards = fields.pointsRewards.mapNotNull { r ->
+            val title = r.title.trim()
+            if (title.isEmpty()) return@mapNotNull null
+            val type = if (r.type == "money") "money" else "item"
+            r.copy(
+                title = title,
+                type = type,
+                cost = maxOf(r.cost, 1),
+                ratio = if (type == "money") (if (r.ratio.isFinite()) maxOf(r.ratio, 1.0) else 1.0) else r.ratio,
+            )
+        }
+
+        return dto.copy(
+            pointsEnabled = fields.pointsEnabled,
+            pointsMode = if (fields.pointsMode in PointsLimits.modes) fields.pointsMode else "flat",
+            redeemMode = if (fields.redeemMode in PointsLimits.redeemModes) fields.redeemMode else "staffScan",
+            pointsFlat = fields.pointsFlat.coerceIn(0, PointsLimits.maxPoints),
+            cashbackPercent = if (fields.cashbackPercent.isFinite())
+                fields.cashbackPercent.coerceIn(0.0, PointsLimits.maxCashbackPercent)
+            else 0.0,
+            pointsExpiryMonths = fields.pointsExpiryMonths.coerceIn(PointsLimits.expiryMonths),
+            earnCooldownMinutes = fields.earnCooldownMinutes.coerceIn(PointsLimits.cooldownMinutes),
+            pointsBands = bands,
+            pointsRewards = rewards,
         )
     }
 

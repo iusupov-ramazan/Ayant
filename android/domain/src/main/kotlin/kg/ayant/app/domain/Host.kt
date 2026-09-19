@@ -91,6 +91,12 @@ sealed interface HostIntent {
     ) : HostIntent
     data class TogglePause(val venueID: String) : HostIntent
     data class SetTodaySpecial(val venueID: String, val text: String) : HostIntent
+    /**
+     * Конфиг баллов САН с вкладки «Лояльность». Отдельно от [SaveVenue]: серверные
+     * ограничения накладывает `HostForms.applyPoints`, остальные поля заведения
+     * не трогаются. Зеркалит `HostIntent.savePointsConfig(venueID:fields:)`.
+     */
+    data class SavePointsConfig(val venueID: String, val fields: HostForms.PointsFields) : HostIntent
     data class DeleteVenue(val id: String) : HostIntent
     data class AddItem(
         val venueID: String, val name: String, val emoji: String,

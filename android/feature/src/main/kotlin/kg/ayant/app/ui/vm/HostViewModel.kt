@@ -4,8 +4,10 @@ import kg.ayant.app.domain.SystemClock
 import kg.ayant.app.domain.Clock
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
 import kg.ayant.app.domain.model.City
 import kg.ayant.app.domain.contract.AnalyticsService
+import kg.ayant.app.domain.contract.HostRepository
 import kg.ayant.app.domain.contract.PushService
 import kg.ayant.app.domain.HostState
 import kg.ayant.app.domain.HostIntent
@@ -15,6 +17,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kg.ayant.app.domain.model.AdCampaign
 import kg.ayant.app.domain.model.HostDealDTO
 import kg.ayant.app.domain.model.HostProfile
@@ -34,11 +37,17 @@ import java.util.UUID
  * DI: [analytics] is a constructor param with a production default; `@JvmOverloads`
  * keeps the `(Application)` constructor that `viewModel()` needs while letting tests
  * inject a fake.
+ *
+ * Синхронизации кабинета с сервером на Android по-прежнему нет (нет загрузки своих
+ * заведений, акций, профиля). Единственная запись наружу — [hostRepository] из
+ * [savePointsConfig]: конфиг баллов САН должен доехать до `venues/{id}`, иначе
+ * `scanCoupon` и админ-панель его не увидят.
  */
 class HostViewModel @JvmOverloads constructor(
     app: Application,
     private val analytics: AnalyticsService,
     private val push: PushService,
+    private val hostRepository: HostRepository,
     /** «Сейчас» — из [clock]: иначе время-зависимую логику не проверить тестом. */
     private val clock: Clock = SystemClock,
 ) : AndroidViewModel(app) {
@@ -54,16 +63,22 @@ class HostViewModel @JvmOverloads constructor(
     private var profile: HostProfile?
         get() = _state.value.profile
         set(v) { _state.update { it.copy(profile = v) } }
-    private val venues: MutableList<HostVenueDTO>
-        get() = _state.value.venues.toMutableList()
-    private val deals: MutableList<HostDealDTO>
-        get() = _state.value.deals.toMutableList()
-    private val campaigns: MutableList<AdCampaign>
-        get() = _state.value.campaigns.toMutableList()
 
-    private fun setVenues(v: List<HostVenueDTO>) { _state.update { it.copy(venues = v) } }
-    private fun setDeals(d: List<HostDealDTO>) { _state.update { it.copy(deals = d) } }
-    private fun setCampaigns(c: List<AdCampaign>) { _state.update { it.copy(campaigns = c) } }
+    /**
+     * Рабочие копии списков. Мутируются на месте, а в [state] публикуются из
+     * `persist*()` / [reload] — единственных мест, где список считается готовым.
+     *
+     * Раньше это были геттеры `_state.value.venues.toMutableList()`: каждый
+     * `venues.add(...)` правил одноразовую копию, и ни одно изменение (включая
+     * `reload()` после входа) до состояния не доезжало.
+     */
+    private val venues = mutableListOf<HostVenueDTO>()
+    private val deals = mutableListOf<HostDealDTO>()
+    private val campaigns = mutableListOf<AdCampaign>()
+
+    private fun publishVenues() { _state.update { it.copy(venues = venues.toList()) } }
+    private fun publishDeals() { _state.update { it.copy(deals = deals.toList()) } }
+    private fun publishCampaigns() { _state.update { it.copy(campaigns = campaigns.toList()) } }
 
     private var ownerID: String
         get() = _state.value.ownerID
@@ -83,6 +98,7 @@ class HostViewModel @JvmOverloads constructor(
             is HostIntent.SaveVenue -> saveVenue(intent.existing, intent.fields)
             is HostIntent.TogglePause -> togglePause(intent.venueID)
             is HostIntent.SetTodaySpecial -> setTodaySpecial(intent.venueID, intent.text)
+            is HostIntent.SavePointsConfig -> savePointsConfig(intent.venueID, intent.fields)
             is HostIntent.DeleteVenue -> deleteVenue(intent.id)
             is HostIntent.AddItem ->
                 addItem(intent.venueID, intent.name, intent.emoji, intent.kind, intent.imageURL)
@@ -178,6 +194,31 @@ class HostViewModel @JvmOverloads constructor(
         if (i >= 0) { venues[i] = venues[i].copy(todaySpecial = text.trim()); persistVenues() }
     }
 
+    /**
+     * Конфиг баллов САН из редактора «Лояльность». Ограничения (кэшбэк ≤ 20 %,
+     * пауза 0…1440 мин и т. д.) накладывает чистый `HostForms.applyPoints`;
+     * здесь — только запись. Остальные поля заведения не трогаются.
+     * Зеркалит `HostStore.savePointsConfig`.
+     */
+    private fun savePointsConfig(venueID: String, fields: HostForms.PointsFields) {
+        val i = venues.indexOfFirst { it.id == venueID }
+        if (i < 0) return
+        venues[i] = HostForms.applyPoints(venues[i], fields)
+        persistVenues()
+        remoteSaveVenue(venues[i])
+    }
+
+    /**
+     * Запись в Firestore — best-effort, как `remoteSaveVenue` на iOS: без входа
+     * правила отклонят запись, кэш на устройстве от этого не страдает.
+     */
+    private fun remoteSaveVenue(dto: HostVenueDTO) {
+        val owner = ownerID
+        viewModelScope.launch {
+            runCatching { hostRepository.saveVenue(dto, owner) }
+        }
+    }
+
     fun deleteVenue(id: String) {
         venues.removeAll { it.id == id }
         deals.removeAll { it.venueID == id }
@@ -270,6 +311,7 @@ class HostViewModel @JvmOverloads constructor(
         venues.clear(); venues.addAll(loadVenues())
         deals.clear(); deals.addAll(loadDeals())
         campaigns.clear(); campaigns.addAll(loadCampaigns())
+        publishVenues(); publishDeals(); publishCampaigns()
         pushToApp()
     }
 
@@ -280,9 +322,9 @@ class HostViewModel @JvmOverloads constructor(
     private fun persistProfile() {
         prefs.edit().putString(key("profile"), profile?.let { json.encodeToString(it) }).apply()
     }
-    private fun persistVenues() { prefs.edit().putString(key("venues"), json.encodeToString(venues.toList())).apply(); pushToApp() }
-    private fun persistDeals() { prefs.edit().putString(key("deals"), json.encodeToString(deals.toList())).apply(); pushToApp() }
-    private fun persistCampaigns() { prefs.edit().putString(key("campaigns"), json.encodeToString(campaigns.toList())).apply() }
+    private fun persistVenues() { publishVenues(); prefs.edit().putString(key("venues"), json.encodeToString(venues.toList())).apply(); pushToApp() }
+    private fun persistDeals() { publishDeals(); prefs.edit().putString(key("deals"), json.encodeToString(deals.toList())).apply(); pushToApp() }
+    private fun persistCampaigns() { publishCampaigns(); prefs.edit().putString(key("campaigns"), json.encodeToString(campaigns.toList())).apply() }
 
     // --- Load (kotlinx.serialization). Any legacy/corrupt payload degrades to empty. ---
 

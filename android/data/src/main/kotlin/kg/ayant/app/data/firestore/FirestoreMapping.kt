@@ -10,6 +10,7 @@ import kg.ayant.app.domain.model.Deal
 import kg.ayant.app.domain.model.DealStatus
 import kg.ayant.app.domain.model.DealType
 import kg.ayant.app.domain.model.HostReply
+import kg.ayant.app.domain.model.HostVenueDTO
 import kg.ayant.app.domain.model.LoyaltyCard
 import kg.ayant.app.domain.model.ModerationStatus
 import kg.ayant.app.domain.model.PointsBand
@@ -17,6 +18,7 @@ import kg.ayant.app.domain.model.PointsReward
 import kg.ayant.app.domain.model.Review
 import kg.ayant.app.domain.model.Venue
 import kg.ayant.app.domain.model.VenueCategory
+import kg.ayant.app.domain.model.VenueItem
 import kg.ayant.app.domain.model.VenuePointsCard
 import java.util.Date
 
@@ -122,6 +124,100 @@ private fun Map<*, *>.toPointsReward(): PointsReward? {
         bool(FS.PointsRewardField.ACTIVE) ?: true,
     )
 }
+
+// ── Хост-заведение → документ ────────────────────────────────────────────────
+
+/**
+ * Документ `venues/{id}` из DTO хоста. Зеркалит `HostVenueDTO.firestoreData(ownerID:)`.
+ *
+ * Конфиг баллов САН (`points*`, `cashbackPercent`, `redeemMode`,
+ * `earnCooldownMinutes`) ведёт сам хост с вкладки «Лояльность»
+ * (`HostIntent.SavePointsConfig` → `HostForms.applyPoints`); админ-панель правит
+ * те же поля по тем же именам. Пишется с `SetOptions.merge()`: поля, которых
+ * DTO не знает (рейтинг, счётчики сохранений, служебные), остаются нетронутыми.
+ */
+fun HostVenueDTO.toFirestoreMap(ownerID: String): Map<String, Any?> = mapOf(
+    FS.VenueDoc.NAME to name,
+    FS.VenueDoc.CATEGORY to FSKeys.categoryKey(category.rawValue),
+    FS.VenueDoc.DISTRICT to district,
+    FS.VenueDoc.ADDRESS to address,
+    FS.VenueDoc.PHONE to phone,
+    FS.VenueDoc.EMOJI to emoji,
+    FS.VenueDoc.GRADIENT_FROM to "#FF4D29",
+    FS.VenueDoc.GRADIENT_TO to "#FF8A1E",
+    FS.VenueDoc.CITY to City.BISHKEK.id,
+    FS.VenueDoc.LATITUDE to latitude,
+    FS.VenueDoc.LONGITUDE to longitude,
+    FS.VenueDoc.OPEN_HOUR to openHour,
+    FS.VenueDoc.CLOSE_HOUR to closeHour,
+    FS.VenueDoc.IS_VERIFIED to isVerified,
+    FS.VenueDoc.IS_PAUSED to isPaused,
+    FS.VenueDoc.OWNER_ID to ownerID,
+    FS.VenueDoc.PHOTO_EMOJIS to listOf(emoji),
+    FS.VenueDoc.STATUS to status,
+    FS.VenueDoc.ITEMS to items.map { it.toFirestoreMap() },
+    FS.VenueDoc.IMAGE_URL to imageURL,
+    FS.VenueDoc.WEEK_HOURS to weekHours.map { it.toFirestoreMap() },
+    FS.VenueDoc.PDF_MENU_URL to pdfMenuURL,
+    FS.VenueDoc.WHATSAPP to whatsapp,
+    FS.VenueDoc.INSTAGRAM to instagram,
+    FS.VenueDoc.TELEGRAM to telegram,
+    FS.VenueDoc.BRANCHES to branches.map { it.toFirestoreMap() },
+    // Date → Timestamp конвертирует SDK; null — поле не задано (iOS пишет NSNull).
+    FS.VenueDoc.BOOSTED_UNTIL to boostedUntil,
+    FS.VenueDoc.TODAY_SPECIAL to (todaySpecial ?: ""),
+    // Карта лояльности — её настраивает сам хост.
+    FS.VenueDoc.LOYALTY_ENABLED to loyaltyEnabled,
+    FS.VenueDoc.LOYALTY_GOAL to loyaltyGoal,
+    FS.VenueDoc.LOYALTY_REWARD to loyaltyReward,
+    FS.VenueDoc.COUPONS_ENABLED to couponsEnabled,
+    // Баллы САН — тот же контракт полей, что читает `scanCoupon` и админ-панель.
+    FS.VenueDoc.POINTS_ENABLED to pointsEnabled,
+    FS.VenueDoc.POINTS_MODE to pointsMode,
+    FS.VenueDoc.POINTS_FLAT to pointsFlat,
+    FS.VenueDoc.POINTS_BANDS to pointsBands.map { it.toFirestoreMap() },
+    FS.VenueDoc.CASHBACK_PERCENT to cashbackPercent,
+    FS.VenueDoc.POINTS_REWARDS to pointsRewards.map { it.toFirestoreMap() },
+    FS.VenueDoc.POINTS_EXPIRY_MONTHS to pointsExpiryMonths,
+    FS.VenueDoc.REDEEM_MODE to redeemMode,
+    FS.VenueDoc.EARN_COOLDOWN_MINUTES to earnCooldownMinutes,
+)
+
+private fun PointsBand.toFirestoreMap(): Map<String, Any?> = mapOf(
+    FS.PointsBandField.MAX_AMOUNT to maxAmount,
+    FS.PointsBandField.POINTS to points,
+)
+
+private fun PointsReward.toFirestoreMap(): Map<String, Any?> = mapOf(
+    FS.PointsRewardField.ID to id,
+    FS.PointsRewardField.TYPE to type,
+    FS.PointsRewardField.TITLE to title,
+    FS.PointsRewardField.COST to cost,
+    FS.PointsRewardField.RATIO to ratio,
+    FS.PointsRewardField.ACTIVE to active,
+)
+
+private fun Branch.toFirestoreMap(): Map<String, Any?> = mapOf(
+    FS.BranchField.ID to id,
+    FS.BranchField.ADDRESS to address,
+    FS.BranchField.LATITUDE to latitude,
+    FS.BranchField.LONGITUDE to longitude,
+    FS.BranchField.PHONE to phone,
+)
+
+private fun DayHours.toFirestoreMap(): Map<String, Any?> = mapOf(
+    FS.DayHoursField.CLOSED to closed,
+    FS.DayHoursField.OPEN to open,
+    FS.DayHoursField.CLOSE to close,
+)
+
+private fun VenueItem.toFirestoreMap(): Map<String, Any?> = mapOf(
+    FS.ItemField.ID to id,
+    FS.ItemField.NAME to name,
+    FS.ItemField.EMOJI to emoji,
+    FS.ItemField.KIND to kind,
+    FS.ItemField.IMAGE_URL to imageURL,
+)
 
 // ── Deal ─────────────────────────────────────────────────────────────────────
 

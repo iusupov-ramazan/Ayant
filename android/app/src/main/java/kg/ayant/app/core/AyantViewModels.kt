@@ -64,6 +64,7 @@ class AyantViewModels(private val app: Application) : ViewModelProvider.Factory 
                 app,
                 analytics = AppConfig.makeAnalyticsService(),
                 push = AppConfig.makePushService(),
+                hostRepository = AppConfig.makeHostRepository(),
             )
 
             // Без внешних зависимостей: состояние берут из хранилища устройства

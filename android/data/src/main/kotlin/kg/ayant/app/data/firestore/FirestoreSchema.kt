@@ -80,6 +80,11 @@ object FS {
         const val WEEK_HOURS = "weekHours"
         const val PDF_MENU_URL = "pdfMenuURL"
         const val PHOTO_EMOJIS = "photoEmojis"
+        /** Бренд-градиент карточки — пишет хост, читает админка/веб (клиент рисует свой). */
+        const val GRADIENT_FROM = "gradientFrom"
+        const val GRADIENT_TO = "gradientTo"
+        /** Объекты для отзывов (блюда/услуги) — массив `ItemField`. */
+        const val ITEMS = "items"
         const val OWNER_ID = "ownerID"
         const val STATUS = "status"
         const val IS_PAUSED = "isPaused"
@@ -93,7 +98,8 @@ object FS {
         const val LOYALTY_GOAL = "loyaltyGoal"
         const val LOYALTY_REWARD = "loyaltyReward"
         const val COUPONS_ENABLED = "couponsEnabled"
-        // Баллы САН — эти поля ведёт админ-панель.
+        // Баллы САН — правит хост с вкладки «Лояльность» (HostIntent.SavePointsConfig)
+        // и админ-панель по тем же именам; читает сканер и scanCoupon.
         const val POINTS_ENABLED = "pointsEnabled"
         const val POINTS_MODE = "pointsMode"
         const val POINTS_FLAT = "pointsFlat"
@@ -186,6 +192,15 @@ object FS {
         const val LATITUDE = "latitude"
         const val LONGITUDE = "longitude"
         const val PHONE = "phone"
+    }
+
+    /** Элемент массива `items` (объект для отзывов: блюдо/услуга). */
+    object ItemField {
+        const val ID = "id"
+        const val NAME = "name"
+        const val EMOJI = "emoji"
+        const val KIND = "kind"
+        const val IMAGE_URL = "imageURL"
     }
 
     /** Элемент массива `weekHours` (часы одного дня). */
@@ -391,6 +406,13 @@ object FSKeys {
         "cafe" to "Кафе", "coffee" to "Кофейня", "fastfood" to "Фастфуд",
         "restaurant" to "Ресторан", "teahouse" to "Чайхана", "bakery" to "Пекарня",
     )
+
+    /**
+     * Обратное: отображаемое имя → slug для записи. Пользовательская категория
+     * (не из встроенных) уезжает как есть — так же делает `FSKeys.key(for:)` на iOS.
+     */
+    fun categoryKey(displayName: String): String =
+        category.entries.firstOrNull { it.value == displayName }?.key ?: displayName
 
     const val DEAL_TYPE_DISCOUNT = "discount"
     const val DEAL_TYPE_PROMO = "promo"

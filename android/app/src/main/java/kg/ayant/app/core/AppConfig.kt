@@ -77,4 +77,9 @@ object AppConfig {
 
     fun makeCouponService(): CouponService =
         if (useFirebase) FirebaseCouponService() else MockCouponService()
+
+    /** Запись хост-заведения (конфиг баллов САН с вкладки «Лояльность»). Вне Firebase — заглушка. */
+    fun makeHostRepository(): kg.ayant.app.domain.contract.HostRepository =
+        if (useFirebase) kg.ayant.app.data.FirebaseHostRepository()
+        else kg.ayant.app.data.MockHostRepository()
 }
