@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="detail_coupon_used">Coupon used</string>
+    <string name="detail_coupon_locked_hint">Get the coupon to show the QR</string>
+
+    <string name="detail_report_sent_title">Report sent</string>
+    <string name="detail_report_sent_body">We will check the review. If it breaks the rules, it will be removed.</string>
+
+    <string name="detail_photo_report_title">Report photo</string>
+    <string name="detail_photo_report_thanks">Thanks, your report has been sent</string>
+
+    <string name="detail_pdf_title">Price list</string>
+    <string name="detail_pdf_error">Couldn’t open the menu</string>
+
+    <string name="detail_loyalty_stamp_hint">One stamp per visit: staff scans your card QR.</string>
+    <string name="detail_loyalty_rounds_hint">Rewards received: %1$d. One stamp per visit: staff scans your card QR.</string>
+
+    <string name="detail_review_item_label">Item</string>
+    <string name="detail_review_section_rating">Rating</string>
+    <string name="detail_review_section_text">Review</string>
+    <string name="detail_review_text_placeholder">Tell us about your experience…</string>
+    <string name="detail_review_section_photos">Photos (up to 3)</string>
+    <string name="detail_review_add_photo">Add photos (up to %1$d)</string>
+    <string name="detail_review_remove_photo">Remove photo</string>
+    <string name="detail_review_verified_visit">Verified visit</string>
+</resources>

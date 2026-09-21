@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Главная, «Заведения», Сохранённое, Поиск. Зеркалит строки HomeFeedView / AllVenuesView / FavoritesView / SearchView. -->
+<resources>
+    <!-- Главная: ряд «Заведения» -->
+    <string name="home_rail_venues">Заведения</string>
+    <string name="home_rail_all_count">Все · %1$d</string>
+    <string name="home_all_venues">Все заведения</string>
+    <string name="home_all_venues_a11y">Все заведения, %1$d</string>
+    <string name="home_empty_cat_body_fmt">В категории «%1$s» в городе %2$s пока нет акций.</string>
+    <string name="home_reset_filter">Сбросить фильтр</string>
+
+    <!-- Полный список заведений -->
+    <plurals name="venues_count">
+        <item quantity="one">%1$d заведение</item>
+        <item quantity="few">%1$d заведения</item>
+        <item quantity="many">%1$d заведений</item>
+        <item quantity="other">%1$d заведения</item>
+    </plurals>
+    <string name="all_venues_search_hint">Название, категория или район</string>
+    <string name="all_venues_clear_search">Очистить поиск</string>
+    <string name="all_venues_sort_rating">По рейтингу</string>
+    <string name="all_venues_sort_near">Ближе</string>
+    <string name="all_venues_empty_search_body">Попробуйте другое название, категорию или район.</string>
+    <string name="all_venues_empty_cat_title">Нет заведений в категории</string>
+    <string name="all_venues_empty_cat_body">В категории «%1$s» в городе %2$s пока нет заведений.</string>
+
+    <!-- Поиск: сортировка и строка фильтров -->
+    <string name="search_sort_best">Сначала лучшие</string>
+    <string name="search_sort_near">Сначала ближние</string>
+    <string name="search_sort_rating">Сначала с высоким рейтингом</string>
+    <string name="search_sort_discount">Сначала с большой скидкой</string>
+    <string name="search_sort_chip_best">Лучшие</string>
+    <string name="search_sort_chip_near">Ближние</string>
+    <string name="search_sort_chip_rating">Рейтинг</string>
+    <string name="search_sort_chip_discount">Скидка</string>
+    <string name="search_chip_category">Категория</string>
+    <string name="search_all_filters">Все фильтры</string>
+    <string name="search_load_more_pins">Показать ещё %1$d</string>
+    <string name="search_show_list">Показать список</string>
+    <string name="search_sheet_handle">Размер списка</string>
+    <string name="search_cluster_title">Заведения здесь</string>
+</resources>

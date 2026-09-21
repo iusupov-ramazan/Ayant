@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Оболочка приложения: вход, профиль, помощь, корневой гейт.
+     Ключи зеркалят строки из SAN/Localizable.xcstrings; общие ключи живут в strings.xml. -->
+<resources>
+    <!-- Auth: сброс пароля и подпись под кнопками -->
+    <string name="auth_forgot_password">Забыли пароль?</string>
+    <string name="auth_reset_hint_email">Введите почту выше — на неё придёт письмо для сброса пароля</string>
+    <string name="auth_reset_sent">Письмо для сброса пароля отправлено на %1$s</string>
+    <string name="auth_done_title">Готово</string>
+    <string name="auth_privacy_footer">Продолжая, вы принимаете %1$s</string>
+    <string name="auth_privacy_link">политику конфиденциальности</string>
+
+    <!-- Гость -->
+    <string name="guest_coupon">Войдите в аккаунт, чтобы получить купон.</string>
+    <string name="guest_profile_host">Гостям доступен только просмотр. Войдите, чтобы добавлять заведения, сохранять места и оставлять отзывы.</string>
+
+    <!-- Профиль -->
+    <string name="profile_referral_guest">Войдите в аккаунт, чтобы приглашать друзей и получать бонусы.</string>
+    <string name="profile_version_label">Версия</string>
+
+    <!-- Тосты корня приложения -->
+    <string name="toast_gift_received">🎁 Подарок получен — купон в «Мои купоны»!</string>
+    <string name="toast_gift_invalid">Этот подарок уже забрали или ссылка недействительна</string>
+
+    <!-- Помощь · О приложении -->
+    <string name="about_intro">Ayant — это единая лента событий твоего города и платформа для получения скидок. Мы убрали весь информационный шум, оставив только то, что действительно важно для пользователя.</string>
+    <string name="about_find_title">Что ты найдёшь внутри</string>
+    <string name="about_find_lead">Вся ключевая информация от заведений города собрана по системе **САН**:</string>
+    <string name="about_b1_title">С — Скидки:</string>
+    <string name="about_b1_text">актуальные снижения цен.</string>
+    <string name="about_b2_title">А — Акции:</string>
+    <string name="about_b2_text">специальные и ограниченные предложения.</string>
+    <string name="about_b3_title">Н — Новинки:</string>
+    <string name="about_b3_text">свежие поступления, новые меню и услуги.</string>
+    <string name="about_b4_title">Важные объявления:</string>
+    <string name="about_b4_text">изменения в графике работы и апдейты.</string>
+    <string name="about_find_footer">Также в профиле каждого заведения доступна вся справочная информация: точный адрес, контакты и ссылки на соцсети.</string>
+    <string name="about_bonus_title">Как копить и тратить бонусы</string>
+    <string name="about_bonus_lead">В приложении есть внутренняя система бонусов, которые можно собирать без лишних усилий:</string>
+    <string name="about_bonus_b1_title">В мини-игры:</string>
+    <string name="about_bonus_b1_text">играй прямо в приложении и получай за это бонусы.</string>
+    <string name="about_bonus_b2_title">За приглашение друзей:</string>
+    <string name="about_bonus_b2_text">делись реферальной ссылкой и копи бонусы вместе.</string>
+    <string name="about_bonus_spend">**На что их потратить?** Накопленные бонусы обмениваются на купоны, которые дают эксклюзивные скидки в заведениях-партнёрах.</string>
+    <string name="about_closing">Здесь нет спама, рекламы и лишних кнопок. Только САН, заведения и твоя выгода. Всё самое нужное — в одном приложении. Пользуйся!</string>
+    <string name="help_privacy_policy">Политика конфиденциальности</string>
+
+    <!-- Помощь · Вопросы и ответы -->
+    <string name="help_faq_q1">Что такое САН?</string>
+    <string name="help_faq_a1">Это основа нашего приложения. САН — это лента, где заведения публикуют только три типа новостей: Скидки, Акции и Новинки. Никакого спама, только самое главное.</string>
+    <string name="help_faq_q2">Зачем нужны игры в приложении?</string>
+    <string name="help_faq_a2">Это простой способ заработать бонусы. Вы играете в короткие мини-игры прямо внутри приложения, а мы начисляем за это бонусные баллы на ваш баланс.</string>
+    <string name="help_faq_q3">Как работает приглашение друзей (рефералка)?</string>
+    <string name="help_faq_a3">В своём профиле скопируйте уникальную ссылку и отправьте её другу. Как только он зарегистрируется, и вы, и ваш друг получите приветственные бонусы.</string>
+    <string name="help_faq_q4">На что я могу потратить накопленные бонусы?</string>
+    <string name="help_faq_a4">Бонусы можно обменять внутри приложения на купоны. Эти купоны дают скидки в заведениях-партнёрах.</string>
+    <string name="help_faq_q5">Как воспользоваться купоном в заведении?</string>
+    <string name="help_faq_a5">Выберите нужный купон, обменяйте на него свои бонусы и покажите экран смартфона с купоном сотруднику заведения (официанту, кассиру, администратору) перед оплатой заказа.</string>
+    <string name="help_faq_q6">Приложение бесплатное?</string>
+    <string name="help_faq_a6">Да, приложение полностью бесплатное для пользователей. Здесь нет скрытых подписок или платных функций.</string>
+    <string name="help_faq_q7">Что делать, если заведение отказывается принимать купон или информация в САН не совпадает с реальностью?</string>
+    <string name="help_faq_a7">Мы следим за актуальностью данных, но если вы столкнулись с такой проблемой — напишите нам в раздел «Поддержка», указав название заведения. Мы быстро во всём разберёмся.</string>
+
+    <!-- Помощь · Поддержка -->
+    <string name="support_intro">Не нашли ответ в FAQ? Напишите нам — поможем быстро.</string>
+    <string name="support_contact_us">Связаться с нами</string>
+    <string name="support_telegram_bot">Telegram-бот</string>
+    <string name="support_telegram_sub">ИИ-помощник — отвечает 24/7</string>
+    <string name="support_email_short">Email</string>
+    <string name="support_documents">Документы</string>
+
+    <!-- Город (пока только Бишкек) -->
+    <string name="city_bishkek">Бишкек</string>
+</resources>

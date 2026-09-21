@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="home_rail_venues">Venues</string>
+    <string name="home_rail_all_count">All · %1$d</string>
+    <string name="home_all_venues">All venues</string>
+    <string name="home_all_venues_a11y">All venues, %1$d</string>
+    <string name="home_empty_cat_body_fmt">No offers in “%1$s” in %2$s yet.</string>
+    <string name="home_reset_filter">Reset filter</string>
+
+    <plurals name="venues_count">
+        <item quantity="one">%1$d venue</item>
+        <item quantity="other">%1$d venues</item>
+    </plurals>
+    <string name="all_venues_search_hint">Name, category or district</string>
+    <string name="all_venues_clear_search">Clear search</string>
+    <string name="all_venues_sort_rating">By rating</string>
+    <string name="all_venues_sort_near">Nearest</string>
+    <string name="all_venues_empty_search_body">Try another name, category or district.</string>
+    <string name="all_venues_empty_cat_title">No venues in this category</string>
+    <string name="all_venues_empty_cat_body">No venues in “%1$s” in %2$s yet.</string>
+
+    <string name="search_sort_best">Best overall</string>
+    <string name="search_sort_near">Nearest first</string>
+    <string name="search_sort_rating">Highest rated first</string>
+    <string name="search_sort_discount">Biggest discount first</string>
+    <string name="search_sort_chip_best">Best</string>
+    <string name="search_sort_chip_near">Nearby</string>
+    <string name="search_sort_chip_rating">Rating</string>
+    <string name="search_sort_chip_discount">Discount</string>
+    <string name="search_chip_category">Category</string>
+    <string name="search_all_filters">All filters</string>
+    <string name="search_load_more_pins">Show %1$d more</string>
+    <string name="search_show_list">Show list</string>
+    <string name="search_sheet_handle">List size</string>
+    <string name="search_cluster_title">Venues here</string>
+</resources>

@@ -18,6 +18,11 @@ interface AuthService {
      */
     suspend fun signInGoogle(): AyantUser
     suspend fun continueAsGuest(): AyantUser
+    /**
+     * «Забыли пароль?» — письмо со ссылкой на сброс. Сессию не меняет.
+     * Mirrors `AuthService.sendPasswordReset(email:)` on iOS.
+     */
+    suspend fun sendPasswordReset(email: String)
     fun signOut()
     /**
      * Удаляет аккаунт целиком: данные в Firestore и запись в Firebase Auth.

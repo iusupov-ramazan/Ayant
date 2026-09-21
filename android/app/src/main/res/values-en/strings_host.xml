@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="host_onb_title">Connect your venue to Ayant</string>
+    <string name="host_onb_name_placeholder">For example, Sierra Coffee</string>
+    <string name="host_onb_phone_placeholder">+996 …</string>
+    <string name="host_onb_email_placeholder">you@example.com</string>
+    <string name="host_onb_note">After submission the venue goes to moderation. We usually review within a day.</string>
+    <string name="host_onb_first_title">Add your first venue?</string>
+    <string name="host_onb_first_body">You can add it now or later — from the “Venues” tab.</string>
+    <string name="host_onb_add_now">Add a venue now</string>
+    <string name="host_onb_later">I’ll do it later</string>
+
+    <string name="host_venue_plural_one">Venue</string>
+    <string name="host_venue_plural_few">Venues</string>
+    <string name="host_venue_plural_many">Venues</string>
+    <string name="host_stat_active_deals_lc">active deals</string>
+    <string name="host_sync_denied">The server rejected the save: this account has no rights to the venue. Data is visible only on this device.</string>
+    <string name="host_sync_network">No connection to the server. Changes are saved on this device and will be sent on the next refresh.</string>
+    <string name="host_sync_failed">Could not sync with the server.</string>
+    <string name="host_menu_duplicate">Duplicate</string>
+    <string name="host_period">Period</string>
+
+    <string name="host_special_placeholder_full">Up to 100 characters — leave empty to remove</string>
+    <string name="host_points_no_rewards">No rewards set up</string>
+    <string name="host_points_rewards_count">%1$d rewards</string>
+    <string name="host_points_scan_pause">Scan cooldown</string>
+    <string name="host_points_expiry_short">Expiry</string>
+    <string name="host_loyalty_enabled_explain">A guest gets a stamp for every coupon or deal redeemed with you. On stamp %1$d they automatically receive the coupon “%2$s”, which they show to you.</string>
+    <string name="host_loyalty_disabled_explain">Turn on the loyalty programme so guests come back: they collect stamps for visits and get a reward.</string>
+    <string name="host_loyalty_setup">Set up</string>
+    <string name="host_loyalty_turn_on">Turn on</string>
+    <string name="host_items_sub">Dishes and services guests will be able to rate separately.</string>
+    <string name="host_all_campaigns">All promotion campaigns</string>
+
+    <string name="host_cover_upload">Upload cover</string>
+    <string name="host_form_section_photo">Venue photo</string>
+    <string name="host_form_section_pdf">Price list / catalog (PDF)</string>
+    <string name="host_form_pdf_hint">A list of dishes or services. Guests will open it on the venue page.</string>
+    <string name="host_form_section_coupons">Coupons</string>
+    <string name="host_form_coupons_on_footer">Guests will be able to claim and redeem coupons for your deals. We recommend leaving this on — coupons noticeably increase footfall.</string>
+    <string name="host_form_coupons_off_footer">⚠️ Coupons are off — guests won’t see the claim button on your deals. We recommend turning them on: it brings in more guests.</string>
+    <string name="host_form_loyalty_off_footer">Turn it on so guests collect stamps for visits and get a reward.</string>
+    <string name="host_form_stamps_goal_n">Stamps until reward: %1$d</string>
+    <string name="host_form_manual_coords">Enter coordinates manually</string>
+    <string name="host_form_apply_monday_all">Apply Monday to all days</string>
+    <string name="host_form_footer_new">A new venue goes to moderation — usually within 24 hours.</string>
+    <string name="host_form_footer_edit">Changes are saved immediately; the publication status stays the same.</string>
+    <string name="host_form_whatsapp_full">WhatsApp (number, e.g. 996700123456)</string>
+    <string name="host_form_section_branch">Branch</string>
+    <string name="host_pdf_uploaded">PDF uploaded</string>
+    <string name="host_pdf_upload">Upload PDF</string>
+    <string name="host_pdf_replace">Replace PDF</string>
+    <string name="host_remove">Remove</string>
+    <string name="host_pdf_failed">Couldn’t upload the PDF</string>
+    <string name="host_photo_upload">Upload photo</string>
+    <string name="host_photo_failed">Photo upload error</string>
+    <string name="host_paste_link">Or paste a link</string>
+    <string name="host_map_title">Point on the map</string>
+
+    <string name="host_deal_title_placeholder">−30% on manti on weekdays</string>
+    <string name="host_deal_price_hint">Price — a whole number of som, 0 or more</string>
+    <string name="host_deal_discount_hint">Discount — a whole number from 1 to 99</string>
+    <string name="host_deal_need_offer_hint">For a discount, enter a new price or a percentage</string>
+    <string name="host_deal_details_placeholder">11:00–15:00 on all kinds of manty</string>
+    <string name="host_deal_terms_label">Terms</string>
+    <string name="host_deal_terms_hint">One per line — guests see them as a list</string>
+    <string name="host_deal_terms_placeholder">Every day until 12:00\nOne drink per guest</string>
+    <string name="host_deal_discount_label" formatted="false">Discount, %</string>
+    <string name="host_deal_photo_eyebrow">Photos</string>
+    <string name="host_deal_photo_add">Add photo</string>
+    <string name="host_deal_valid_label">Active</string>
+    <string name="host_deal_publication_label">Publication</string>
+    <string name="host_deal_draft_sub">A draft is not visible to guests</string>
+    <string name="host_deal_preview_eyebrow">How guests will see it</string>
+    <string name="host_deal_footer_draft">Drafts are hidden from guests — publish when ready.</string>
+    <string name="host_deal_footer_publish">The deal is published immediately, without moderation.</string>
+    <string name="host_deal_title_fallback">Deal title</string>
+
+    <string name="host_scanner_title">Coupon scanner</string>
+    <string name="host_camera_denied_title">No camera access</string>
+    <string name="host_camera_denied_body">Allow access in Settings to scan guests’ QR codes.</string>
+    <string name="host_open_settings">Open Settings</string>
+    <string name="host_scan_checking_long">Checking the code…</string>
+    <string name="host_manual_placeholder">AYANT-XXXXXX</string>
+    <string name="host_err_network">Network error. Please try again.</string>
+    <string name="host_err_loyalty_is_points">This venue awards points, not stamps — ask the guest to show the “My QR” code.</string>
+    <string name="host_err_key_reused">This code was already processed with another request. Scan the QR again.</string>
+    <string name="host_err_bad_reward">Invalid reward. Ask the guest to refresh the QR.</string>
+    <string name="host_err_internal">Server error. Try again in a minute.</string>
+    <string name="host_err_app_check">The app failed verification. Update it from Google Play.</string>
+    <string name="host_err_cooldown_long">This guest was awarded recently, try again later.</string>
+    <string name="host_result_stamp">+1 stamp ✓</string>
+    <string name="host_result_done">Done ✓</string>
+    <string name="host_result_coupon">Coupon redeemed ✓</string>
+    <string name="host_result_titled">“%1$s” ✓</string>
+    <string name="host_result_reward">Reward issued ✓</string>
+    <string name="host_result_points">+%1$d points ✓</string>
+    <string name="host_sub_coupon">Coupon redeemed.</string>
+    <string name="host_sub_stamp_total">Total on the card: %1$d of %2$d.</string>
+    <string name="host_sub_coupon_stamp">Coupon “%1$s” redeemed. %2$s</string>
+    <string name="host_sub_reward_issued">🎉 Card complete! The guest received the coupon “%1$s” — it is already in “My coupons”; it can be redeemed now or on the next visit.</string>
+
+    <string name="analytics_rewards_issued">Rewards issued</string>
+    <string name="analytics_stamps">Stamps issued</string>
+    <string name="analytics_points_earned">Points earned</string>
+    <string name="analytics_points_redeemed">Points spent</string>
+    <string name="analytics_empty_title">No data yet</string>
+    <string name="analytics_empty_body">Statistics build up from real guest actions: venue views, saves and scans at the till. Numbers will be small in the first weeks — that is normal.</string>
+
+    <string name="host_reviews_empty_title">No reviews yet</string>
+    <string name="host_reviews_empty_body">Share the venue to get your first reviews.</string>
+    <string name="host_quick_replies">Quick replies</string>
+
+    <string name="host_profile_under_review">Under review</string>
+    <string name="host_profile_has_check">You have the blue check.</string>
+    <string name="host_profile_info_placeholder">Name, phone, legal form, TIN…</string>
+    <string name="host_signout_body">You will return to the sign-in screen. Venues and statistics are kept.</string>
+    <string name="host_info_section_legal">Legal form and details</string>
+    <string name="host_info_legal_footer">This data is visible only to you and Ayant moderation — it helps you get verified faster.</string>
+    <string name="host_info_section_more">More</string>
+    <string name="host_info_about_short">About the business (briefly)</string>
+
+    <string name="host_promo_rate_boost">180 som/day</string>
+    <string name="host_promo_rate_push">240 som/day</string>
+    <string name="host_promo_headline_label">Push title (up to 60)</string>
+    <string name="host_promo_text_label">Push text (up to 120)</string>
+    <string name="host_promo_headline_placeholder">30% off today</string>
+    <string name="host_promo_text_placeholder">Come between 11 and 15</string>
+    <string name="host_promo_total">Total</string>
+    <string name="host_promo_launch">Launch campaign</string>
+    <string name="host_promo_preview">Preview</string>
+    <string name="host_promo_preview_hint">This is how guests will see you in the feed</string>
+    <string name="host_promo_ad_label">Ad</string>
+    <string name="host_promo_unlimited_price">Unlimited — %1$d som</string>
+    <string name="host_promo_unlimited">unlimited</string>
+    <string name="host_promo_days_one">day</string>
+    <string name="host_promo_days_few">days</string>
+    <string name="host_promo_days_many">days</string>
+    <string name="host_promo_search_venue">Search venue</string>
+</resources>

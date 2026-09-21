@@ -10,18 +10,15 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.outlined.BookmarkBorder
-import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextOverflow
@@ -43,14 +40,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
-import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -58,23 +52,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.geometry.isSpecified
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImagePainter
 import coil.compose.rememberAsyncImagePainter
 import kg.ayant.app.R
 import kg.ayant.app.core.badgeLabel
@@ -88,162 +76,34 @@ import kg.ayant.app.ui.theme.AyantTiming
 import kg.ayant.app.ui.theme.AyantTheme
 import kg.ayant.app.ui.theme.ayantPopOnSet
 import kg.ayant.app.ui.theme.ayantPressScale
-import kg.ayant.app.ui.theme.ayantRisoHatch
 import kg.ayant.app.ui.theme.gradientColors
 import kg.ayant.app.ui.theme.rememberReduceMotion
 import kotlin.math.roundToInt
 import kg.ayant.app.core.AppLanguage
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.Placeholder
+import androidx.compose.ui.text.PlaceholderVerticalAlign
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.appendInlineContent
+import androidx.compose.foundation.text.InlineTextContent
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpSize
+import kg.ayant.app.core.localizedName
+import kg.ayant.app.ui.theme.AyantRadius
+import kg.ayant.app.ui.theme.AyantShadow
+import kg.ayant.app.ui.theme.ayantShadow
 
-/**
- * Redesigned feed card (SCREENS.md G2). Mirrors `FeedCard.swift`.
- *
- * The defining change of the redesign: full-bleed, no corner radius, 10dp of
- * canvas between cards. Photo fills the frame; the text sits on top of a
- * four-stop scrim.
- *
- * The card is NOT a fixed height: it takes the proportions of the photo itself,
- * like an Instagram feed. The ratio is clamped to a corridor — otherwise a
- * panorama collapses into a strip and a very tall frame pushes everything else
- * off screen. We clamp the RATIO, not a height in dp, so the same card reads the
- * same on any screen width.
- */
-object AyantFeedCard {
-    /** Width / height. Smaller means a taller card. */
-    const val TALLEST_ASPECT = 0.63f
-    const val WIDEST_ASPECT = 0.95f
-    /** Until the photo has loaded (and when there is none) — the handoff ratio. */
-    const val PLACEHOLDER_ASPECT = 0.67f
-
-    /** Frame ratio, clamped into the corridor. */
-    fun aspect(width: Float, height: Float): Float =
-        if (width <= 0f || height <= 0f) PLACEHOLDER_ASPECT
-        else (width / height).coerceIn(TALLEST_ASPECT, WIDEST_ASPECT)
-}
-
-/**
- * Loads the photo once and reports both the painter and its real proportions.
- *
- * [rememberAsyncImagePainter] rather than plain [AsyncImage] because the card
- * height has to be known before the photo is drawn, and only the painter exposes
- * `intrinsicSize`. Coil's own cache means nothing is fetched twice.
- */
-@Composable
-private fun rememberFeedPhoto(imageUrl: String?): Pair<AsyncImagePainter?, Float> {
-    if (imageUrl.isNullOrEmpty()) return null to AyantFeedCard.PLACEHOLDER_ASPECT
-    val painter = rememberAsyncImagePainter(model = imageUrl)
-    val size = (painter.state as? AsyncImagePainter.State.Success)?.painter?.intrinsicSize
-    val aspect = if (size != null && size.isSpecified) {
-        AyantFeedCard.aspect(size.width, size.height)
-    } else {
-        AyantFeedCard.PLACEHOLDER_ASPECT
-    }
-    return painter to aspect
-}
-
-@Composable
-private fun FeedPhoto(painter: AsyncImagePainter?, gradient: List<Color>) {
-    Box(Modifier.fillMaxSize().background(Brush.linearGradient(gradient))) {
-        if (painter != null) {
-            // The frame is already in its own proportions, so `Crop` trims almost
-            // nothing — only at the edges of the ratio corridor.
-            Image(
-                painter = painter,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-            )
-        } else {
-            // Fallback: hatch + camera glyph + «ФОТО», the glyph at 44% height.
-            // A bias rather than a dp offset — the card height is no longer fixed.
-            Box(Modifier.fillMaxSize().ayantRisoHatch(alpha = 0.21f, stripe = 1.5.dp, period = 14.dp))
-            Column(
-                Modifier.fillMaxSize().wrapContentHeight(BiasAlignment.Vertical(-0.12f)),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(9.dp),
-            ) {
-                Icon(
-                    Icons.Filled.PhotoCamera, null,
-                    tint = Color.White.copy(alpha = 0.6f),
-                    modifier = Modifier.size(34.dp),
-                )
-                Text(
-                    stringResource(R.string.feed_photo_placeholder),
-                    fontSize = 10.5.sp, fontWeight = FontWeight.Black,
-                    letterSpacing = 2.sp, color = Color.White.copy(alpha = 0.6f),
-                )
-            }
-        }
-    }
-}
-
-/** Four-stop scrim. Never flatten it: the white text below rides on the bottom two stops. */
-@Composable
-private fun FeedScrim() {
-    val ink = Color(0xFF17130F)
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    0f to ink.copy(alpha = 0.28f),
-                    0.38f to ink.copy(alpha = 0.10f),
-                    0.70f to ink.copy(alpha = 0.74f),
-                    1f to ink.copy(alpha = 0.94f),
-                )
-            )
-    )
-}
-
-@Composable
-private fun FeedGlassChip(text: String, dotColor: Color? = null) {
-    Row(
-        Modifier
-            .clip(CircleShape)
-            .background(Color.White.copy(alpha = 0.14f))
-            .padding(horizontal = 12.dp, vertical = 7.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        if (dotColor != null) {
-            Box(Modifier.size(6.dp).clip(CircleShape).background(dotColor))
-        }
-        Text(text, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
-    }
-}
-
-@Composable
-private fun FeedSaveButton(isSaved: Boolean, onClick: () -> Unit) {
-    val interaction = remember { MutableInteractionSource() }
-    val shape = RoundedCornerShape(16.dp)
-    Box(
-        Modifier
-            .size(44.dp)
-            .ayantPopOnSet(isSaved)
-            .clip(shape)
-            .then(
-                if (isSaved) Modifier.background(AyantTheme.colors.accentGradient)
-                else Modifier.background(Color.White.copy(alpha = 0.18f))
-            )
-            .selectable(
-                selected = isSaved,
-                interactionSource = interaction,
-                indication = null,
-                role = Role.Button,
-                onClick = onClick,
-            )
-            .ayantPressScale(interaction, scale = 0.86f),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            if (isSaved) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-            contentDescription = stringResource(
-                if (isSaved) R.string.action_unsave else R.string.action_save
-            ),
-            tint = Color.White,
-            modifier = Modifier.size(19.dp),
-        )
-    }
-}
+// Карточка ленты после редизайна (SCREENS.md G2). Зеркалит `FeedCard.swift`.
+//
+// Карточка во всю ширину, без скруглений, между карточками 10dp канваса:
+// не «плитка в сетке», а пост. Старый вариант с фото на весь кадр и текстом
+// поверх скрима (`AyantFeedCard`, `FeedPhoto`, `FeedScrim`, стеклянные чипы)
+// удалён — как и на iOS, ниже только то, что рисуется сейчас.
 
 @Composable
 private fun DiscountBadge(text: String) {
@@ -821,3 +681,176 @@ fun Venue.earnRateLabel(): String? {
 private fun Double.percentText(): String =
     if (this == this.roundToInt().toDouble()) this.roundToInt().toString()
     else String.format(AppLanguage.locale, "%.1f", this)
+
+// MARK: - Ряд «Заведения» на главной
+
+/**
+ * Плитка заведения в ряду «Заведения» — постер: фото во всю карточку, тёмная
+ * подложка снизу, поверх — название, категория и район. Сверху пилюли
+ * «Открыто» и рейтинг, справа у текста — расстояние. Нарочно лёгкая — в ряду
+ * их дюжина: без размытий, только плоские полупрозрачные подложки.
+ * Зеркалит `FeedVenueTile` в `HomeFeedView.swift`.
+ */
+object FeedVenueTileSize {
+    /** Размер постера; такой же у хвостовой плитки «Все заведения →». */
+    val size = DpSize(176.dp, 212.dp)
+}
+
+@Composable
+fun FeedVenueTile(
+    venue: Venue,
+    rating: Double,
+    distanceKm: Double?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val c = AyantTheme.colors
+    val shape = RoundedCornerShape(AyantRadius.card)
+    val interaction = remember { MutableInteractionSource() }
+    Box(
+        modifier
+            .size(FeedVenueTileSize.size)
+            .ayantShadow(AyantShadow.Card, shape)
+            .clip(shape)
+            .border(0.5.dp, c.hairline, shape)
+            .clickable(interaction, null, onClick = onClick)
+            .ayantPressScale(interaction, 0.97f),
+    ) {
+        VenuePhoto(venue.imageURL, venue.gradientColors, Modifier.fillMaxSize())
+        // Подложка под текст: снизу вверх, до середины — прозрачная, чтобы
+        // фото не «тускнело» целиком.
+        Box(
+            Modifier.fillMaxSize().background(
+                Brush.verticalGradient(
+                    0.38f to Color.Transparent,
+                    0.66f to Color.Black.copy(alpha = 0.42f),
+                    1f to Color.Black.copy(alpha = 0.80f),
+                )
+            )
+        )
+        Row(
+            Modifier.fillMaxWidth().align(Alignment.TopStart).padding(10.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            if (venue.isOpenNow) {
+                TilePill {
+                    Box(Modifier.size(6.dp).clip(CircleShape).background(c.open))
+                    Text(stringResource(R.string.status_open))
+                }
+            }
+            Spacer(Modifier.weight(1f))
+            if (rating > 0) {
+                TilePill {
+                    Icon(Icons.Filled.Star, null, tint = Color.White, modifier = Modifier.size(9.dp))
+                    Text(rating.ratingText())
+                }
+            }
+        }
+        Column(
+            Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            // Печать верификации ВНУТРИ текста: переносится вместе с последним
+            // словом, а не висит отдельной колонкой при двух строках.
+            val verifiedID = "verified"
+            Text(
+                buildAnnotatedString {
+                    append(venue.name)
+                    if (venue.isVerified) { append(" "); appendInlineContent(verifiedID, "✓") }
+                },
+                inlineContent = mapOf(
+                    verifiedID to InlineTextContent(
+                        Placeholder(13.sp, 13.sp, PlaceholderVerticalAlign.TextCenter),
+                    ) { Icon(Icons.Filled.Verified, null, tint = Color(0xFF4DA3FF)) },
+                ),
+                fontSize = 15.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.3).sp,
+                lineHeight = 18.sp, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis,
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "${venue.category.localizedName()} · ${venue.district}",
+                    fontSize = 11.5.sp, fontWeight = FontWeight.Medium,
+                    color = Color.White.copy(alpha = 0.85f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                if (distanceKm != null) {
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        distanceKm.distanceText(),
+                        fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = Color.White, maxLines = 1,
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.20f))
+                            .padding(horizontal = 7.dp, vertical = 3.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** «Матовая» пилюля без размытия: плоская тёмная подложка одинаково читается на любом фото. */
+@Composable
+private fun TilePill(content: @Composable RowScope.() -> Unit) {
+    androidx.compose.runtime.CompositionLocalProvider(
+        androidx.compose.material3.LocalTextStyle provides androidx.compose.ui.text.TextStyle(
+            fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White,
+        ),
+    ) {
+        Row(
+            Modifier
+                .clip(CircleShape)
+                .background(Color.Black.copy(alpha = 0.38f))
+                .border(0.5.dp, Color.White.copy(alpha = 0.18f), CircleShape)
+                .padding(horizontal = 8.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            content = content,
+        )
+    }
+}
+
+/**
+ * Хвостовая плитка ряда «Заведения»: того же размера, что постер, ведёт в
+ * полный список. Зеркалит `FeedVenueMoreTile`.
+ */
+@Composable
+fun FeedVenueMoreTile(count: Int, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val c = AyantTheme.colors
+    val shape = RoundedCornerShape(AyantRadius.card)
+    val interaction = remember { MutableInteractionSource() }
+    val label = stringResource(R.string.home_all_venues_a11y, count)
+    Column(
+        modifier
+            .size(FeedVenueTileSize.size)
+            .clip(shape)
+            .background(c.surfaceMuted)
+            .border(0.5.dp, c.hairline, shape)
+            .semantics { contentDescription = label }
+            .clickable(interaction, null, onClick = onClick)
+            .ayantPressScale(interaction, 0.97f),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
+    ) {
+        Box(
+            Modifier
+                .size(56.dp)
+                .clip(CircleShape)
+                .background(c.surface)
+                .border(0.5.dp, c.hairline, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = c.ink, modifier = Modifier.size(26.dp))
+        }
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(
+                stringResource(R.string.home_all_venues),
+                fontSize = 14.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.25).sp, color = c.ink,
+            )
+            Text("$count", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = c.inkSoft)
+        }
+    }
+}
+
+/** Рейтинг по-русски — с десятичной запятой: «4,8». Зеркалит `sanRatingText`. */
+fun Double.ratingText(): String = String.format(AppLanguage.locale, "%.1f", this)

@@ -106,11 +106,13 @@ class HostViewModel @JvmOverloads constructor(
             is HostIntent.BoostVenue -> boostVenue(intent.id, intent.until)
             is HostIntent.SaveDeal -> saveDealForm(intent.existing, intent.fields)
             is HostIntent.SetDealStatus -> setDealStatus(intent.id, intent.status.name.lowercase())
+            is HostIntent.DuplicateDeal -> duplicateDeal(intent.id)
             is HostIntent.DeleteDeal -> deleteDeal(intent.id)
             is HostIntent.AddCampaign -> addCampaign(intent.campaign)
             is HostIntent.LaunchPush ->
                 launchPush(intent.headline, intent.body, intent.venueID, intent.dealID)
             is HostIntent.CancelCampaign -> cancelCampaign(intent.id)
+            is HostIntent.NoteScanSucceeded -> _state.update { it.copy(scansCompleted = it.scansCompleted + 1) }
         }
     }
 
@@ -259,6 +261,13 @@ class HostViewModel @JvmOverloads constructor(
         if (i >= 0) { deals[i] = deals[i].copy(statusRaw = statusRaw); persistDeals() }
     }
 
+    /** Копия черновиком: тот же DTO, новый id, « (копия)» в заголовке. Зеркалит `HostStore.duplicateDeal`. */
+    private fun duplicateDeal(id: String) {
+        val d = deals.firstOrNull { it.id == id } ?: return
+        deals.add(d.copy(id = newDealID(), title = d.title + " (копия)", statusRaw = "draft"))
+        persistDeals()
+    }
+
     fun deleteDeal(id: String) { deals.removeAll { it.id == id }; persistDeals() }
 
     // MARK: - Campaigns
@@ -287,14 +296,11 @@ class HostViewModel @JvmOverloads constructor(
 
     // MARK: - Analytics
 
-    /** Deterministic fallback used for instant display before/without backend data. */
-    fun stat(venueID: String, metric: String, days: Int): Int {
-        val seed = (venueID + metric).sumOf { it.code }
-        val base = mapOf("views" to 40, "dealTaps" to 12, "saves" to 6, "calls" to 3, "maps" to 4, "redemptions" to 5)[metric] ?: 5
-        return (seed % 7 + 1) * base * days / 7
-    }
-
-    /** Real stats from Firestore (empty map on error / no data). */
+    /**
+     * Сводка метрик за [days] дней через `AnalyticsService` (демо-ряды или
+     * Firestore — решает `AppConfig.useDemoAnalytics`). Пусто при ошибке.
+     * Зеркалит `AppStore.analyticsStats(venueID:days:)`.
+     */
     suspend fun statsRemote(venueID: String, days: Int): Map<String, Int> =
         runCatching { analytics.fetchStats(venueID, days) }.getOrDefault(emptyMap())
 

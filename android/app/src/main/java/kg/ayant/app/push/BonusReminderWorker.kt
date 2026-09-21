@@ -55,10 +55,21 @@ class BonusReminderWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, 
     }
 
     companion object {
+        private const val WORK_NAME = "ayant_bonus_reminder"
+
+        /**
+         * Напоминание — про глобальный кошелёк: пока он скрыт флагом релиза
+         * (`ReleaseFlags.GLOBAL_BONUS_WALLET`), пуш вёл бы в никуда — снимаем,
+         * как `NotificationManager.disable()` на iOS.
+         */
         fun schedule(context: Context) {
+            if (!kg.ayant.app.core.ReleaseFlags.GLOBAL_BONUS_WALLET) {
+                WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
+                return
+            }
             val request = PeriodicWorkRequestBuilder<BonusReminderWorker>(6, TimeUnit.HOURS).build()
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-                "ayant_bonus_reminder",
+                WORK_NAME,
                 androidx.work.ExistingPeriodicWorkPolicy.KEEP,
                 request,
             )

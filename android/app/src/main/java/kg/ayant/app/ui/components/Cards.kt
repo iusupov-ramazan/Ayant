@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Campaign
@@ -158,8 +157,12 @@ private fun AdBanner(trailing: String) {
     }
 }
 
-// MARK: - Compact venue row (Saved, cluster). Mirrors VenueCompactRow.
+// MARK: - Compact venue row («Заведения», кластер на карте). Mirrors VenueCompactRow.
 
+/**
+ * Без шеврона справа: на iOS строка — содержимое `NavigationLink` с plain-стилем,
+ * стрелки там нет. Нажатие вешает вызывающий (`clickable` на обёртке).
+ */
 @Composable
 fun VenueCompactRow(
     venue: Venue,
@@ -172,7 +175,7 @@ fun VenueCompactRow(
     val c = AyantTheme.colors
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 8.dp, horizontal = 4.dp),
+        modifier = modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 4.dp),
     ) {
         VenueAvatar(venue.gradientColors, venue.imageURL, 62)
         Column(Modifier.padding(start = 14.dp).weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -186,7 +189,6 @@ fun VenueCompactRow(
                 fontSize = 12.sp, color = c.inkSoft, maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
         }
-        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = c.inkSoft, modifier = Modifier.size(18.dp))
     }
 }
 

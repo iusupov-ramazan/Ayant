@@ -61,6 +61,22 @@ data class LoyaltyCard(
     val reward: String = "Награда за лояльность",
 )
 
+/**
+ * Штамп (или собранный круг), который гость ещё не видел. Живёт в состоянии
+ * `LoyaltyViewModel.pendingStamp`, пока экран «Начислено» не закрыт.
+ * Mirrors `LoyaltyStampEvent` in BonusModels.swift.
+ */
+data class LoyaltyStampEvent(
+    val id: String,
+    val venueID: String,
+    val venueName: String,
+    /** Штампов на карте после скана (0 — круг только что собран). */
+    val stamps: Int,
+    val goal: Int,
+    val rewardIssued: Boolean,
+    val reward: String,
+)
+
 /** САН points card (per venue). Mirrors VenuePointsCard. */
 data class VenuePointsCard(
     val venueID: String,

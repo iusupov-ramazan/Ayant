@@ -104,32 +104,38 @@ class FeedViewModel @JvmOverloads constructor(
         }
 
     fun load() {
-        viewModelScope.launch {
-            _loadError.value = null
-            send(FeedIntent.SetLoading)
-            try {
-                repoVenues = repository.fetchVenues()
-                repoDeals = repository.fetchDeals()
-            } catch (e: Exception) {
-                _loadError.value = e.localizedMessage
-                send(FeedIntent.SetFailure(AppError.Network))
-            }
-            // Никогда не показываем пустую ленту: бэкенд молчит → демо-данные.
-            if (repoVenues.isEmpty()) {
-                repoVenues = MockData.venues
-                repoDeals = MockData.deals
-            }
-            try {
-                repository.fetchRankingWeights()?.let { send(FeedIntent.SetWeights(RankingWeights.from(it))) }
-            } catch (_: Exception) { /* остаёмся на дефолтах */ }
-            // Отзывы здесь БОЛЬШЕ НЕ ГРУЗЯТСЯ. Раньше на этом месте выгружалась
-            // вся коллекция `reviews` ради двух чисел на карточке — рейтинга и
-            // счётчика. Теперь их пишет на документ заведения Cloud Function
-            // `aggregateReviewRating`, а сами отзывы подтягивает тот экран,
-            // которому они нужны: loadReviewsForVenue / ...ForVenues / ...ByAuthor.
-            mergeReviews()
-            recombine()
+        viewModelScope.launch { refresh() }
+    }
+
+    /**
+     * Та же загрузка, но ОЖИДАЕМАЯ — для pull-to-refresh, которому нужно знать,
+     * когда убрать индикатор. Зеркалит `await store.load()` в `.refreshable` на iOS.
+     */
+    suspend fun refresh() {
+        _loadError.value = null
+        send(FeedIntent.SetLoading)
+        try {
+            repoVenues = repository.fetchVenues()
+            repoDeals = repository.fetchDeals()
+        } catch (e: Exception) {
+            _loadError.value = e.localizedMessage
+            send(FeedIntent.SetFailure(AppError.Network))
         }
+        // Никогда не показываем пустую ленту: бэкенд молчит → демо-данные.
+        if (repoVenues.isEmpty()) {
+            repoVenues = MockData.venues
+            repoDeals = MockData.deals
+        }
+        try {
+            repository.fetchRankingWeights()?.let { send(FeedIntent.SetWeights(RankingWeights.from(it))) }
+        } catch (_: Exception) { /* остаёмся на дефолтах */ }
+        // Отзывы здесь БОЛЬШЕ НЕ ГРУЗЯТСЯ. Раньше на этом месте выгружалась
+        // вся коллекция `reviews` ради двух чисел на карточке — рейтинга и
+        // счётчика. Теперь их пишет на документ заведения Cloud Function
+        // `aggregateReviewRating`, а сами отзывы подтягивает тот экран,
+        // которому они нужны: loadReviewsForVenue / ...ForVenues / ...ByAuthor.
+        mergeReviews()
+        recombine()
     }
 
     /** Хост-сторона передаёт свои заведения/акции — они появляются в ленте. */

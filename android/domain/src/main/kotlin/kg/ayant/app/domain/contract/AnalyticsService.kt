@@ -13,7 +13,13 @@ object AnalyticsMetric {
     const val CALLS = "calls"
     const val MAPS = "maps"
     const val DEAL_TAPS = "dealTaps"
-    const val REDEMPTIONS = "redemptions"
+    const val REDEMPTIONS = "redemptions"   // купоны, погашенные в заведении
+    // Серверные события лояльности (пишут только Cloud Functions). Зеркалит
+    // `AnalyticsMetric` в ServiceContracts.swift.
+    const val STAMPS = "stamps"                 // выдано штампов
+    const val REWARDS_ISSUED = "rewardsIssued"  // заполненные карты + награды за баллы
+    const val POINTS_EARNED = "pointsEarned"    // начислено баллов (сумма)
+    const val POINTS_REDEEMED = "pointsRedeemed" // списано баллов (сумма)
 }
 
 interface AnalyticsService {

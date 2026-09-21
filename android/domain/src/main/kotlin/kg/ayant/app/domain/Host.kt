@@ -30,6 +30,12 @@ data class HostState(
     val deals: List<HostDealDTO> = emptyList(),
     val campaigns: List<AdCampaign> = emptyList(),
     val sync: SyncPhase = SyncPhase.Idle,
+    /**
+     * Сколько успешных сканов сделано за сессию. Экраны со статистикой
+     * перезагружаются, когда счётчик меняется: «Погашено купонов» должно
+     * вырасти сразу после скана, а не после ручного обновления.
+     */
+    val scansCompleted: Int = 0,
 ) {
     /** Кабинет заведён — профиль создан. */
     val hasAccount: Boolean get() = profile != null
@@ -108,6 +114,8 @@ sealed interface HostIntent {
     // Акции
     data class SaveDeal(val existing: HostDealDTO?, val fields: HostForms.DealFields) : HostIntent
     data class SetDealStatus(val id: String, val status: DealStatus) : HostIntent
+    /** Копия акции черновиком с суффиксом « (копия)». Зеркалит `.duplicateDeal(id:)`. */
+    data class DuplicateDeal(val id: String) : HostIntent
     data class DeleteDeal(val id: String) : HostIntent
 
     // Продвижение
@@ -116,4 +124,6 @@ sealed interface HostIntent {
         val headline: String, val body: String, val venueID: String, val dealID: String?,
     ) : HostIntent
     data class CancelCampaign(val id: String) : HostIntent
+    /** Сканер успешно начислил/погасил — статистику пора перечитать. */
+    data object NoteScanSucceeded : HostIntent
 }

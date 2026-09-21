@@ -32,7 +32,10 @@ object GuestGate {
     @StringRes val QR = R.string.guest_qr
     @StringRes val BONUSES = R.string.guest_bonuses
     @StringRes val GAME = R.string.guest_game
+    @StringRes val COUPON = R.string.guest_coupon
     @StringRes val REVIEW = R.string.guest_review
+    /** «Режим заведения» в профиле: одна фраза про всё, что закрыто гостю. */
+    @StringRes val PROFILE_HOST = R.string.guest_profile_host
 }
 
 /**

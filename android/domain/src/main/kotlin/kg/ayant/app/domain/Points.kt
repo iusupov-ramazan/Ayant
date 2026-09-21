@@ -3,6 +3,7 @@ package kg.ayant.app.domain
 import kg.ayant.app.domain.model.Venue
 import kg.ayant.app.domain.model.VenuePointsCard
 import kotlinx.coroutines.flow.Flow
+import java.util.Date
 
 /*
  * Фича «Баллы САН»: состояние, намерения и контракт данных.
@@ -21,6 +22,43 @@ data class RedeemReceipt(
 )
 
 /**
+ * Одна запись журнала `venuePoints/{card}/ledger` — пишет только сервер.
+ * Зеркалит `PointsLedgerEntry` в `Points.swift`.
+ */
+data class PointsLedgerEntry(
+    val id: String,
+    val kind: Kind,
+    /** Со знаком: начисление положительное, списание и сгорание — отрицательные. */
+    val points: Int,
+    val at: Date,
+    /** Сумма чека при начислении (кэшбэк/диапазоны); у фикса — null. */
+    val billAmount: Int? = null,
+    /** Награда при списании; название подставляет экран по конфигу заведения. */
+    val rewardID: String? = null,
+) {
+    enum class Kind(val raw: String) {
+        EARN("earn"), REDEEM("redeem"), EXPIRE("expire"), UNKNOWN("unknown");
+
+        companion object {
+            fun from(raw: String?): Kind = entries.firstOrNull { it.raw == raw } ?: UNKNOWN
+        }
+    }
+}
+
+/**
+ * Начисление, которое гость ещё не видел: snapshot-листенер принёс баланс
+ * больше прежнего. Живёт в состоянии, пока экран «Начислено» не закрыт
+ * ([PointsIntent.DismissEarn]). Зеркалит `PointsEarnEvent` в `Points.swift`.
+ */
+data class PointsEarnEvent(
+    val id: String,
+    val venueID: String,
+    val venueName: String,
+    val delta: Int,
+    val newBalance: Int,
+)
+
+/**
  * Всё состояние экрана баллов — одним значением.
  *
  * Composable — чистая функция от него: никаких «а если карточки ещё null, но
@@ -31,8 +69,18 @@ data class PointsState(
     val userID: String = "",
     val cards: LoadState<List<VenuePointsCard>> = LoadState.Idle,
     val redeem: RedeemPhase = RedeemPhase.Idle,
+    /**
+     * История по заведениям, новые сверху. Грузится по запросу экрана
+     * ([PointsIntent.LoadHistory]), а не вместе с картами: журнал длиннее и нужен реже.
+     */
+    val history: Map<String, LoadState<List<PointsLedgerEntry>>> = emptyMap(),
+    /** Непоказанное начисление. Пока не null, экран «Начислено» открыт. */
+    val pendingEarn: PointsEarnEvent? = null,
 ) {
     val isSignedIn: Boolean get() = userID.isNotEmpty()
+
+    fun history(venueID: String): LoadState<List<PointsLedgerEntry>> =
+        history[venueID] ?: LoadState.Idle
 
     fun card(venueID: String): VenuePointsCard? =
         cards.valueOrNull()?.firstOrNull { it.venueID == venueID }
@@ -74,6 +122,10 @@ sealed interface PointsIntent {
     ) : PointsIntent
     /** Закрыть результат/ошибку списания. */
     data object DismissRedeem : PointsIntent
+    /** Загрузить (или обновить) историю начислений и списаний по заведению. */
+    data class LoadHistory(val venueID: String) : PointsIntent
+    /** Гость закрыл экран «Начислено». */
+    data object DismissEarn : PointsIntent
 }
 
 /**
@@ -103,6 +155,18 @@ interface PointsRepository {
         pointsToSpend: Int,
         idempotencyKey: String,
     ): Result<RedeemReceipt>
+
+    /**
+     * Журнал карты `venuePoints/{userID}_{venueID}/ledger`, новые сверху, не
+     * больше [limit] записей. Зеркалит `PointsRepository.ledger` на iOS.
+     *
+     * Реализация по умолчанию отвечает ошибкой `ledger_unavailable`, а не пустым
+     * списком: пустой список экран показал бы как «операций пока нет», и это
+     * было бы ложью. `FirebasePointsRepository` / `MockPointsRepository`
+     * обязаны переопределить.
+     */
+    suspend fun ledger(userID: String, venueID: String, limit: Int): Result<List<PointsLedgerEntry>> =
+        Result.failure(AppErrorException(AppError.Server("ledger_unavailable")))
 }
 
 // MARK: - Одна механика лояльности на заведение
