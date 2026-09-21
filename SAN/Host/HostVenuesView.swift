@@ -97,12 +97,15 @@ struct HostVenuesView: View {
             .sanStatusBarCap(.sanHostHeader)
             .toolbar(.hidden, for: .navigationBar)
             .refreshable { host.send(.sync) }
-            .task(id: host.state.venues.count) { await loadViews() }
+            .task(id: "\(host.state.venues.count)-\(host.state.scansCompleted)") { await loadViews() }
             .navigationDestination(for: String.self) { id in
                 if let dto = host.state.venue(id: id) { HostVenueDetailView(venueID: dto.id) }
             }
             .navigationDestination(for: HostPromoteTarget.self) {
                 HostPromoteCreateView(venueID: $0.venueID)
+            }
+            .navigationDestination(for: HostInstagramTarget.self) {
+                HostInstagramView(venueID: $0.venueID)
             }
             .navigationDestination(for: HostQuickAction.self) { action in
                 switch action {
@@ -200,12 +203,12 @@ struct HostVenuesView: View {
         .background(Color.sanCanvas)
     }
 
-    private func tabButton(_ t: HostGridTab, icon: String, label: String, count: Int) -> some View {
+    private func tabButton(_ t: HostGridTab, icon: String, label: LocalizedStringKey, count: Int) -> some View {
         let active = gridTab == t
         return Button { select(t) } label: {
             HStack(spacing: 6) {
                 Image(systemName: icon).font(.system(size: 15, weight: .semibold))
-                (Text(L(label)) + Text(" \(count)"))
+                (Text(label) + Text(verbatim: " \(count)"))
                     .textCase(.uppercase)
                     .font(.golos(12.5, .heavy)).tracking(0.3)
             }
@@ -445,7 +448,7 @@ struct HostVenuesView: View {
         .accessibilityLabel("\(d.title), \(venue.name), \(LS(d.status.title))")
     }
 
-    private func addTile(_ label: String, aspect: CGFloat = 1,
+    private func addTile(_ label: LocalizedStringKey, aspect: CGFloat = 1,
                          action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Color.sanTileEmpty
@@ -455,7 +458,7 @@ struct HostVenuesView: View {
                         Image(systemName: "plus")
                             .font(.system(size: 20, weight: .bold))
                             .foregroundStyle(Color.sanAccentText)
-                        Text(L(label))
+                        Text(label)
                             .font(.golos(10.5, .heavy))
                             .foregroundStyle(Color.sanInkSoft)
                     }
@@ -579,9 +582,9 @@ struct HostVenuesView: View {
 
     private static func venuePlural(_ n: Int) -> String {
         let n10 = n % 10, n100 = n % 100
-        if n10 == 1 && n100 != 11 { return "Заведение" }
-        if (2...4).contains(n10) && !(12...14).contains(n100) { return "Заведения" }
-        return "Заведений"
+        if n10 == 1 && n100 != 11 { return LS("Заведение") }
+        if (2...4).contains(n10) && !(12...14).contains(n100) { return LS("Заведения") }
+        return LS("Заведений")
     }
 }
 
@@ -630,7 +633,7 @@ struct HostVenueStatsSheet: View {
         }
     }
 
-    private func metric(_ title: String, _ key: String, _ icon: String) -> some View {
+    private func metric(_ title: LocalizedStringKey, _ key: String, _ icon: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             SanIconTile(systemName: icon, size: 36)
             Text("\(stats[key] ?? 0)").font(.golos(26, .heavy)).foregroundStyle(Color.sanInk)
@@ -796,9 +799,9 @@ struct HostVenueDetailView: View {
                 }
             }
             HStack(spacing: 8) {
-                glassTile("\(PointsMath.effectiveCooldownMinutes(v.earnCooldownMinutes)) мин", "Пауза скана")
+                glassTile(LF("%lld мин", PointsMath.effectiveCooldownMinutes(v.earnCooldownMinutes)), "Пауза скана")
                 glassTile("\(v.pointsRewards.count)", "Награды")
-                glassTile("\(v.pointsExpiryMonths > 0 ? v.pointsExpiryMonths : 6) мес", "Сгорание")
+                glassTile(LF("%lld мес", v.pointsExpiryMonths > 0 ? v.pointsExpiryMonths : 6), "Сгорание")
             }
             .padding(.top, 16)
         }
@@ -897,6 +900,13 @@ struct HostVenueDetailView: View {
                 Button { activeSheet = .addDeal } label: { Label("Добавить", systemImage: "plus") }
                     .font(.caption.weight(.semibold))
             }
+            // Вход в импорт стоит ЗДЕСЬ, а не в общем списке действий внизу.
+            // Раньше это была строка «Посты из Instagram» среди «Изменить
+            // данные» и «Удалить заведение» — по ней было не понять, зачем
+            // жать и что произойдёт. Хост думает не «хочу инстаграм», а «надо
+            // добавить акцию», поэтому кнопка живёт в блоке предложений и
+            // называется действием, а не источником.
+            if ReleaseFlags.instagramImport { instagramImportRow(v) }
             let deals = host.state.deals(forVenue: v.id)
             if deals.isEmpty {
                 Text("Пока нет предложений. Добавьте, чтобы привлекать гостей.")
@@ -917,6 +927,51 @@ struct HostVenueDetailView: View {
             }
         }
         .padding(.horizontal, 16)
+    }
+
+    /// «Акция из поста Instagram» — состояние подключения видно до нажатия.
+    private func instagramImportRow(_ v: HostVenueDTO) -> some View {
+        let ig = host.state.instagram(venueID: v.id)
+        let username = ig.connection?.username ?? ""
+        return NavigationLink(value: HostInstagramTarget(venueID: v.id)) {
+            HStack(spacing: 12) {
+                Image(systemName: "camera.on.rectangle")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(Color.sanAccentText)
+                    .frame(width: 38, height: 38)
+                    .background(Color.sanAccent.opacity(0.12),
+                                in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Акция из поста Instagram")
+                        .font(.golos(14.5, .semibold)).foregroundStyle(Color.sanInk)
+                    // Подзаголовок отвечает ровно на вопрос «зачем жать сейчас».
+                    Text(ig.isConnected
+                         ? (username.isEmpty
+                            ? LS("Выберите пост — заголовок, описание и фото подставятся")
+                            : String(format: LS("@%@ — выберите пост, остальное заполнится само"), username))
+                         : LS("Подключите аккаунт — не придётся набирать вручную"))
+                        .font(.golos(12)).foregroundStyle(Color.sanInkSoft)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .multilineTextAlignment(.leading)
+                }
+                Spacer(minLength: 4)
+                if ig.isConnected {
+                    Circle().fill(Color.green).frame(width: 7, height: 7)
+                }
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color(hex: 0x9A9188))
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.sanSurface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Color.sanHairline, lineWidth: 0.5))
+        }
+        .buttonStyle(.plain)
+        // Слушатель подключения нужен уже здесь: иначе состояние («подключено /
+        // нет») стало бы известно только после перехода на экран.
+        .task { host.observeInstagram(venueID: v.id) }
     }
 
     private func dealCell(_ d: HostDealDTO, gradient: [Color]) -> some View {
@@ -1138,7 +1193,7 @@ struct HostVenueFormView: View {
         _branches = State(initialValue: existing?.branches ?? [])
         _loyaltyEnabled = State(initialValue: existing?.loyaltyEnabled ?? false)
         _loyaltyGoal = State(initialValue: existing?.loyaltyGoal ?? 6)
-        _loyaltyReward = State(initialValue: existing?.loyaltyReward ?? "Награда за лояльность")
+        _loyaltyReward = State(initialValue: existing?.loyaltyReward ?? LS("Награда за лояльность"))
         _couponsEnabled = State(initialValue: existing?.couponsEnabled ?? true)
         let wh = existing?.weekHours ?? []
         _weekHours = State(initialValue: wh.count == 7 ? wh : Venue.defaultWeek())
@@ -1480,6 +1535,9 @@ struct HostBranchFormView: View {
 struct HostDealFormView: View {
     let venueID: String
     let existing: HostDealDTO?
+    /// Импорт из инстаграма: подпись и фото поста. Заполняет форму при
+    /// создании; у правки существующей акции его нет.
+    let imported: InstagramImport?
     @EnvironmentObject private var host: HostStore
     @Environment(\.dismiss) private var dismiss
 
@@ -1498,20 +1556,29 @@ struct HostDealFormView: View {
     /// фраз проще набрать в одном поле, чем в трёх отдельных.
     @State private var termsText: String
 
-    init(venueID: String, existing: HostDealDTO?) {
+    init(venueID: String, existing: HostDealDTO?, imported: InstagramImport? = nil) {
         self.venueID = venueID
         self.existing = existing
-        _title = State(initialValue: existing?.title ?? "")
-        _details = State(initialValue: existing?.details ?? "")
-        _type = State(initialValue: existing?.type ?? .discount)
+        self.imported = imported
+        // Подпись поста разбирается на заголовок и описание (`InstagramCaption`):
+        // первая строка — витрина, остальное — текст. Ничего не теряется, хост
+        // правит это руками.
+        let parsed = imported.map { InstagramCaption.parse($0.caption) }
+        _title = State(initialValue: existing?.title ?? parsed?.title ?? "")
+        _details = State(initialValue: existing?.details ?? parsed?.details ?? "")
+        // «Новинка» — самый безобидный тип для поста: скидку и срок хост
+        // выставит сам, если это действительно акция.
+        _type = State(initialValue: existing?.type ?? (imported != nil ? .novelty : .discount))
         _emoji = State(initialValue: existing?.emoji ?? "🔥")
         _newPrice = State(initialValue: existing?.newPrice.map(String.init) ?? "")
         _discount = State(initialValue: existing?.discountPercent.map(String.init) ?? "")
         _hasEnd = State(initialValue: existing?.endDate != nil)
         _endDate = State(initialValue: existing?.endDate ?? Calendar.current.date(byAdding: .day, value: 14, to: .now)!)
-        _isDraft = State(initialValue: existing?.status == .draft)
-        _imageURL = State(initialValue: existing?.imageURL ?? "")
-        let imgs = existing?.imageURLs ?? []
+        // Импорт всегда открывается черновиком: пост писался для инстаграма —
+        // без срока и условий, — и уходить в ленту не глядя он не должен.
+        _isDraft = State(initialValue: existing?.status == .draft || (existing == nil && imported != nil))
+        _imageURL = State(initialValue: existing?.imageURL ?? imported?.imageURLs.first ?? "")
+        let imgs = existing?.imageURLs ?? imported?.imageURLs ?? []
         _imageURLs = State(initialValue: imgs.isEmpty ? [existing?.imageURL].compactMap { $0 }.filter { !$0.isEmpty } : imgs)
         _termsText = State(initialValue: (existing?.terms ?? []).joined(separator: "\n"))
     }
@@ -1684,6 +1751,11 @@ struct HostDealFormView: View {
         return ZStack(alignment: .bottomLeading) {
             LinearGradient(colors: gradient, startPoint: .topLeading, endPoint: .bottomTrailing)
             SanRisoHatch(opacity: 0.2, stripe: 1.5, period: 14)
+            // Первое загруженное фото — как в карточке ленты. Размер задаёт
+            // контейнер (`VenuePhoto` обрезает снимок сам).
+            if let photo = imageURLs.first(where: { !$0.isEmpty }) {
+                VenuePhoto(urlString: photo, gradient: gradient)
+            }
             LinearGradient(
                 stops: [.init(color: Color(hex: 0x17130F).opacity(0.94), location: 0),
                         .init(color: Color(hex: 0x17130F).opacity(0.74), location: 0.34),
@@ -1692,9 +1764,9 @@ struct HostDealFormView: View {
                 startPoint: .bottom, endPoint: .top)
 
             VStack(alignment: .leading, spacing: 0) {
-                Text(venue?.name ?? "Ваше заведение")
+                Text(venue?.name ?? LS("Ваше заведение"))
                     .font(.golos(13, .bold)).foregroundStyle(.white.opacity(0.9))
-                Text(title.isEmpty ? "Заголовок предложения" : title)
+                Text(title.isEmpty ? LS("Заголовок предложения") : title)
                     .sanText(22, .heavy, tracking: -1, lineHeight: 1.05)
                     .foregroundStyle(.white).lineLimit(2)
                     .padding(.top, 6)
@@ -1730,7 +1802,8 @@ struct HostDealFormView: View {
             venueID: venueID, type: type, title: title, details: details, emoji: emoji,
             newPrice: priceValue, discountPercent: discountValue,
             endDate: hasEnd ? endDate : nil, isDraft: isDraft, imageURLs: imageURLs,
-            terms: termsText.split(separator: "\n").map(String.init))))
+            terms: termsText.split(separator: "\n").map(String.init),
+            sourcePostID: imported?.postID)))
         dismiss()
     }
 }

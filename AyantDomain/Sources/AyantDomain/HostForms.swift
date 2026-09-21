@@ -92,16 +92,18 @@ public enum HostForms {
         public var isDraft: Bool
         public var imageURLs: [String]
         public var terms: [String]
+        /// id поста инстаграма, если акцию создают импортом.
+        public var sourcePostID: String?
 
         public init(venueID: String, type: DealType, title: String, details: String,
                     emoji: String, newPrice: Int?, discountPercent: Int?,
                     endDate: Date?, isDraft: Bool, imageURLs: [String],
-                    terms: [String] = []) {
+                    terms: [String] = [], sourcePostID: String? = nil) {
             self.venueID = venueID; self.type = type; self.title = title
             self.details = details; self.emoji = emoji
             self.newPrice = newPrice; self.discountPercent = discountPercent
             self.endDate = endDate; self.isDraft = isDraft; self.imageURLs = imageURLs
-            self.terms = terms
+            self.terms = terms; self.sourcePostID = sourcePostID
         }
     }
 
@@ -269,6 +271,10 @@ public enum HostForms {
             imageURLs: fields.imageURLs,
             // Пустые строки не сохраняем: пустой пункт условий — это буллет
             // в никуда.
-            terms: fields.terms.map(trim).filter { !$0.isEmpty })
+            terms: fields.terms.map(trim).filter { !$0.isEmpty },
+            // Связь с постом, как и `startDate`, переживает правку: потеряв её,
+            // кабинет перестанет помечать пост добавленным и предложит
+            // импортировать его второй раз.
+            sourcePostID: existing?.sourcePostID ?? fields.sourcePostID)
     }
 }

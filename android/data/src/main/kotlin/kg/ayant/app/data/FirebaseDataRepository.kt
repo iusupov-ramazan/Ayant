@@ -2,13 +2,17 @@ package kg.ayant.app.data
 
 import kg.ayant.app.domain.DataRepository
 import kg.ayant.app.domain.GiftInfo
+import kg.ayant.app.domain.model.AppSettings
 import kg.ayant.app.domain.model.Deal
 import kg.ayant.app.domain.model.Review
+import kg.ayant.app.domain.model.ReviewReportStatus
+import kg.ayant.app.domain.model.ReviewReport
 import kg.ayant.app.domain.model.Venue
 
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import com.google.firebase.Timestamp
 import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -84,6 +88,22 @@ class FirebaseDataRepository : DataRepository {
 
     override suspend fun deleteReview(id: String) {
         db.collection(FS.Collection.REVIEWS).document(id).delete().await()
+    }
+
+    // Жалоба на отзыв: детерминированный id ⇒ повторная жалоба того же
+    // человека не плодит записей в очереди модерации.
+    override suspend fun reportReview(report: ReviewReport) {
+        db.collection(FS.Collection.REVIEW_REPORTS).document(report.id).set(
+            mapOf(
+                FS.ReviewReportDoc.REVIEW_ID to report.reviewID,
+                FS.ReviewReportDoc.VENUE_ID to report.venueID,
+                FS.ReviewReportDoc.REPORTER_ID to report.reporterID,
+                FS.ReviewReportDoc.REASON to report.reason.slug,
+                FS.ReviewReportDoc.CREATED_AT to Timestamp(report.createdAt),
+                FS.ReviewReportDoc.STATUS to ReviewReportStatus.OPEN,
+            ),
+            SetOptions.merge(),
+        ).await()
     }
 
     override suspend fun updateReviewReply(reviewID: String, replyText: String?) {
@@ -174,6 +194,18 @@ class FirebaseDataRepository : DataRepository {
             (v as? Number)?.let { out[k] = it.toDouble() }
         }
         return out.ifEmpty { null }
+    }
+
+    override suspend fun fetchAppSettings(): AppSettings? {
+        val snap = db.collection(FS.Collection.CONFIG)
+            .document(FS.Document.APP_SETTINGS).get().await()
+        if (!snap.exists()) return null
+        val cooldown = (snap.get(FS.AppSettingsDoc.STAMP_COOLDOWN_MINUTES) as? Number)?.toInt()
+            ?: AppSettings.DEFAULT.stampCooldownMinutes
+        return AppSettings.of(
+            stampCooldownMinutes = cooldown,
+            adPlaceholderText = snap.getString(FS.AppSettingsDoc.AD_PLACEHOLDER_TEXT) ?: "",
+        )
     }
 
     private companion object {

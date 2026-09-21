@@ -2,54 +2,125 @@ import SwiftUI
 import AyantDomain
 import AyantFeatures
 
-// «Бонусы»: колода карт «Баллы САН» и карта штампов (SCREENS.md G6).
+// «Бонусы»: карусель карт «Баллы САН» и карт штампов (SCREENS.md G6).
 //
 // Три валюты в одном месте: баллы заведения (главное), карта штампов и
 // глобальные бонусы (нарочно подчинённые — они почти ничего не стоят).
 
-// MARK: - Колода карт баллов
+// MARK: - Карусель кошелька
 
-/// Стопка карт: верхняя развёрнута, остальные выглядывают снизу.
-/// `rel = (index - top + n) % n` — так колода «прокручивается» по кругу.
-struct WalletDeck: View {
-    let cards: [VenuePointsCard]
+/// Страница карусели: карта баллов заведения или карта штампов.
+///
+/// У одного заведения действует ровно одна механика (`LoyaltyKind`), но
+/// локальный кэш штампов переживает переключение на баллы, поэтому id
+/// страницы несёт префикс — иначе две страницы одного заведения совпали бы.
+enum WalletPage: Identifiable, Hashable {
+    case points(VenuePointsCard)
+    case stamps(LoyaltyCard)
+
+    var id: String {
+        switch self {
+        case .points(let card): return "points-\(card.venueID)"
+        case .stamps(let card): return "stamps-\(card.venueID)"
+        }
+    }
+}
+
+/// Горизонтальная карусель с прилипанием к карте: сначала все карты баллов,
+/// потом карты штампов. Следующая карта выглядывает справа — так сразу видно,
+/// что есть ещё. Раньше это была стопка со смещением, и её приходилось
+/// «прокручивать» тапами по выглядывающим краям — на ощупь это не читалось.
+struct WalletCarousel: View {
+    let pages: [WalletPage]
     let venues: [String: Venue]
-    var onOpen: (VenuePointsCard) -> Void
+    var onOpenPoints: (VenuePointsCard) -> Void
+    var onOpenStamps: (LoyaltyCard) -> Void
 
-    @State private var top = 0
+    /// id текущей страницы — им живут точки под каруселью.
+    @State private var current: String?
+    /// Подсказка «проведите» показывается до первого реального свайпа и больше
+    /// не возвращается — ключ переживает переустановку экрана, но не приложения.
+    @AppStorage("san.wallet.swipeHintSeen") private var swipeHintSeen = false
 
-    private static let step: CGFloat = 44
-    private static let scaleStep: CGFloat = 0.055
-    /// Показываем не больше четырёх — глубже стопка нечитаема, а высота сцены фиксирована.
-    private static let maxVisible = 4
+    /// Доля ширины контейнера под карту; остаток — «подглядывание» следующей.
+    private static let cardFraction: CGFloat = 0.86
+    private static let spacing: CGFloat = 12
 
-    private var stageHeight: CGFloat {
-        198 + Self.step * CGFloat(min(cards.count, Self.maxVisible) - 1)
+    private var currentIndex: Int {
+        pages.firstIndex { $0.id == current } ?? 0
     }
 
+    private var showsHint: Bool { pages.count > 1 && !swipeHintSeen }
+
     var body: some View {
-        ZStack(alignment: .top) {
-            ForEach(Array(cards.enumerated()), id: \.element.id) { index, card in
-                let rel = (index - top + cards.count) % cards.count
-                if rel < Self.maxVisible {
-                    WalletPointsCard(card: card, venue: venues[card.venueID], isFront: rel == 0)
-                        .offset(y: Self.step * CGFloat(rel))
-                        .scaleEffect(1 - Self.scaleStep * CGFloat(rel), anchor: .top)
-                        .zIndex(Double(cards.count - rel))
-                        .onTapGesture {
-                            if rel == 0 {
-                                onOpen(card)
-                            } else {
-                                SanHaptics.selection()
-                                withAnimation(.sanStandard(0.55)) { top = index }
+        VStack(spacing: 14) {
+            ScrollView(.horizontal) {
+                LazyHStack(alignment: .top, spacing: Self.spacing) {
+                    ForEach(pages) { page in
+                        pageView(page)
+                            .containerRelativeFrame(.horizontal) { length, _ in
+                                length * Self.cardFraction
                             }
-                        }
+                    }
                 }
+                .scrollTargetLayout()
+            }
+            .scrollTargetBehavior(.viewAligned)
+            .scrollPosition(id: $current)
+            .scrollClipDisabled()
+            .scrollIndicators(.hidden)
+            .contentMargins(.horizontal, SanMetrics.screenPadding)
+
+            if pages.count > 1 {
+                pageDots
+            }
+            if showsHint {
+                Text("Проведите, чтобы увидеть остальные карты")
+                    .font(.golos(12)).foregroundStyle(Color.sanInkSoft)
+                    .frame(maxWidth: .infinity)
+                    .transition(.opacity)
             }
         }
-        .frame(height: stageHeight)
-        .padding(.horizontal, 24)
-        .animation(.sanStandard(0.55), value: top)
+        .onChange(of: current) { old, new in
+            // Первое прилипание к первой карте — ещё не свайп: подсказку
+            // прячем, только когда пользователь долистал до другой страницы.
+            guard let new else { return }
+            if old != nil, old != new { SanHaptics.selection() }
+            if new != pages.first?.id, !swipeHintSeen {
+                withAnimation(.sanStandard(0.3)) { swipeHintSeen = true }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func pageView(_ page: WalletPage) -> some View {
+        switch page {
+        case .points(let card):
+            Button { onOpenPoints(card) } label: {
+                WalletPointsCard(card: card, venue: venues[card.venueID])
+            }
+            .buttonStyle(.sanPress(0.97))
+        case .stamps(let card):
+            Button { onOpenStamps(card) } label: {
+                WalletStampCard(card: card)
+            }
+            .buttonStyle(.sanPress(0.97))
+        }
+    }
+
+    /// Точки-страницы: текущая — вытянутая акцентная капсула.
+    private var pageDots: some View {
+        HStack(spacing: 6) {
+            ForEach(pages.indices, id: \.self) { i in
+                Capsule()
+                    .fill(i == currentIndex ? Color.sanAccent : Color.sanInk.opacity(0.18))
+                    .frame(width: i == currentIndex ? 18 : 6, height: 6)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .animation(.sanStandard(0.3), value: currentIndex)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Карта \(currentIndex + 1) из \(pages.count)")
     }
 }
 
@@ -132,8 +203,13 @@ struct WalletStampCard: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var appeared = false
 
-    /// Сетка 5×2 по макету; если цель другая — рисуем ровно `goal` кружков.
+    /// Ровно `goal` кружков (2…12) в один ряд: карта живёт в карусели рядом с
+    /// картой баллов и обязана быть той же высоты — сетка 5×2 делала её выше
+    /// и она наезжала на то, что под каруселью.
     private var goal: Int { max(card.goal, 1) }
+
+    /// Та же высота, что у `WalletPointsCard`.
+    static let height: CGFloat = 198
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -153,20 +229,24 @@ struct WalletStampCard: View {
                     .fixedSize()
             }
 
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 9), count: 5), spacing: 9) {
+            HStack(spacing: goal > 8 ? 5 : 8) {
                 ForEach(0..<goal, id: \.self) { i in
                     stamp(index: i, filled: i < card.stamps)
                 }
             }
-            .padding(.top, 18)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 16)
+
+            Spacer(minLength: 0)
 
             Text(stampHint)
-                .font(.golos(12.5, .semibold)).foregroundStyle(.white.opacity(0.94))
+                .font(.golos(12, .semibold)).foregroundStyle(.white.opacity(0.94))
+                .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 16)
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: Self.height)
         .background {
             let shape = RoundedRectangle(cornerRadius: SanRadius.hero, style: .continuous)
             shape.fill(LinearGradient.sanStampGradient)
@@ -185,15 +265,16 @@ struct WalletStampCard: View {
                                  : AnyShapeStyle(Color.white.opacity(0.26)))
             if filled {
                 Image(systemName: "checkmark")
-                    .font(.system(size: 12.5, weight: .heavy))
+                    .font(.system(size: goal > 8 ? 9 : 11.5, weight: .heavy))
                     .foregroundStyle(.white)
             } else {
                 Text("\(index + 1)")
-                    .font(.golos(12.5, .heavy))
+                    .font(.golos(goal > 8 ? 9 : 11.5, .heavy))
                     .foregroundStyle(.white.opacity(0.55))
             }
         }
         .aspectRatio(1, contentMode: .fit)
+        .frame(maxWidth: 36)
         // Каждый кружок «выстреливает» с шагом 50 мс (ANIMATIONS.md §4).
         .scaleEffect(appeared ? 1 : 0.6)
         .opacity(appeared ? 1 : 0)
@@ -202,16 +283,12 @@ struct WalletStampCard: View {
 
     private var stampHint: String {
         let left = max(0, goal - card.stamps)
-        if left == 0 { return "Круг собран — покажите карту сотруднику и заберите «\(card.reward)»." }
-        return "Ещё \(left) \(Self.visits(left)) — и «\(card.reward)» в подарок. Штампы ставит сотрудник, сканируя ваш QR."
+        // Коротко — карта фиксированной высоты, под подсказку две строки.
+        if left == 0 { return LF("Круг собран — купон «%@» уже в «Мои купоны».", card.reward) }
+        return LF("Ещё %lld %@ — и «%@» в подарок.", left, Self.visits(left), card.reward)
     }
 
-    private static func visits(_ n: Int) -> String {
-        let n10 = n % 10, n100 = n % 100
-        if n10 == 1 && n100 != 11 { return "визит" }
-        if (2...4).contains(n10) && !(12...14).contains(n100) { return "визита" }
-        return "визитов"
-    }
+    private static func visits(_ n: Int) -> String { LPlural(n, "визит", "визита", "визитов") }
 }
 
 // MARK: - Прогресс-бар
@@ -257,12 +334,13 @@ extension Venue {
         switch pointsMode {
         case "cashback":
             guard cashbackPercent > 0 else { return nil }
-            return "кэшбэк \(cashbackPercent.sanPercentText)%"
+            // `LS`, а не `String(localized:)`: последняя смотрит на язык системы.
+            return LF("кэшбэк %@%%", cashbackPercent.sanPercentText)
         case "bands":
-            return "по сумме чека"
+            return LS("по сумме чека")
         default:
             guard pointsFlat > 0 else { return nil }
-            return "\(pointsFlat) за визит"
+            return LF("%lld за визит", pointsFlat)
         }
     }
 }

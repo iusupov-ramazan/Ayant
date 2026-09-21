@@ -77,6 +77,7 @@ import java.util.UUID
 import kotlin.math.roundToInt
 import kg.ayant.app.domain.pointsActive
 import kg.ayant.app.domain.stampsActive
+import kg.ayant.app.core.AppLanguage
 
 /**
  * Scanner flow (SCREENS.md H13–H15). Mirrors `HostScannerView.swift` +
@@ -116,28 +117,8 @@ fun HostScannerScreen(
 
     val venue: HostVenueDTO? = hostState.venues.firstOrNull { it.id == venueID }
 
-    fun errorText(code: String?): String = when (code) {
-        "coupon_not_found" -> "Купон не найден."
-        "wrong_venue" -> "Этот код — для другого заведения."
-        "loyalty_off" -> "Карта лояльности у заведения выключена."
-        "already_used" -> "Купон уже был использован."
-        "not_owner" -> "У вас нет прав на это заведение."
-        "venue_not_found" -> "Заведение не найдено."
-        "no_token", "bad_token" -> "Требуется вход в аккаунт заведения."
-        "missing_params" -> "Пустой код купона."
-        "points_off" -> "Баллы САН у заведения выключены."
-        "cooldown" -> "Баллы этому гостю уже начислены недавно."
-        "missing_amount" -> "Введите сумму чека."
-        "bad_band" -> "Выберите диапазон суммы."
-        "no_points" -> "Начислять нечего (0 баллов)."
-        "bad_code" -> "Неверный QR-код."
-        "insufficient" -> "У гостя недостаточно баллов."
-        "reward_not_found" -> "Награда не найдена или отключена."
-        "redeem_not_allowed" -> "Списание баллов недоступно для этого заведения."
-        "below_min" -> "Слишком мало баллов для этой награды."
-        "missing_user" -> "Не удалось определить гостя."
-        else -> context.getString(R.string.host_scan_failed)
-    }
+    fun errorText(code: String?): String =
+        hostScanErrorText(context, code) { context.getString(R.string.host_scan_failed) }
 
     fun resetScan() {
         message = null; lastCode = ""; manualCode = ""; scanKey = ""
@@ -146,7 +127,7 @@ fun HostScannerScreen(
     fun submitScan(code: String, billAmount: Int?, bandIndex: Int?, billForReceipt: Int?) {
         busy = true; message = null
         val key = scanKey.ifEmpty { UUID.randomUUID().toString() }
-        val modeLabel = venue?.let { modeLabel(it) }
+        val modeLabel = venue?.let { modeLabel(context, it) }
         scope.launch {
             val token = authService.idToken() ?: ""
             val o = couponService.scanCoupon(code.trim(), venueID, token, billAmount, bandIndex, key)
@@ -167,7 +148,7 @@ fun HostScannerScreen(
 
     fun submitRedeem(code: String) {
         val parts = code.trim().split(":")
-        if (parts.size < 3) { success = false; message = "Неверный код награды."; return }
+        if (parts.size < 3) { success = false; message = context.getString(R.string.host_err_bad_reward_code); return }
         val u = parts[1]; val rid = parts[2]; val pts = parts.getOrNull(3)?.toIntOrNull() ?: 0
         busy = true; message = null
         // Ключ обязателен и здесь: без него повтор списал бы баллы дважды.
@@ -179,8 +160,7 @@ fun HostScannerScreen(
             success = o.ok
             message = when {
                 !o.ok -> errorText(o.errorCode)
-                o.somOff != null -> "Списано ${o.redeemed} баллов (−${o.somOff} сом). Остаток: ${o.balance}."
-                else -> "Списано ${o.redeemed} баллов. Остаток: ${o.balance}. Выдайте награду гостю."
+                else -> hostRedeemedText(context, o.redeemed, o.balance, o.somOff)
             }
         }
     }
@@ -188,7 +168,7 @@ fun HostScannerScreen(
     fun handle(raw: String) {
         val code = raw.trim()
         if (busy || message != null || pending != null || code.isEmpty() || code == lastCode) return
-        if (venueID.isBlank()) { success = false; message = "Выберите заведение"; return }
+        if (venueID.isBlank()) { success = false; message = context.getString(R.string.host_pick_venue_first); return }
         lastCode = code
         scanKey = UUID.randomUUID().toString()
         when {
@@ -507,7 +487,7 @@ private fun HostBillAmountScreen(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
-                                if (idx == bands.size - 1) "${band.maxAmount}+ сом" else "до ${band.maxAmount} сом",
+                                bandLabel(LocalContext.current, band.maxAmount, isLast = idx == bands.size - 1),
                                 fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = Color.White,
                             )
                             Spacer(Modifier.weight(1f))
@@ -802,15 +782,15 @@ data class EarnReceipt(
 )
 
 /** «Кэшбэк 5%» / «30 за визит» — строка квитанции. */
-private fun modeLabel(v: HostVenueDTO): String? = when (v.pointsMode) {
-    "cashback" -> if (v.cashbackPercent > 0) "Кэшбэк ${percent(v.cashbackPercent)}%" else null
-    "bands" -> "По сумме чека"
-    else -> if (v.pointsFlat > 0) "${v.pointsFlat} за визит" else null
+private fun modeLabel(context: android.content.Context, v: HostVenueDTO): String? = when (v.pointsMode) {
+    "cashback" -> if (v.cashbackPercent > 0) context.getString(R.string.host_mode_cashback_pct, percent(v.cashbackPercent)) else null
+    "bands" -> context.getString(R.string.host_mode_bands_sub)
+    else -> if (v.pointsFlat > 0) context.getString(R.string.host_mode_flat_visit, v.pointsFlat) else null
 }
 
 private fun percent(v: Double): String =
     if (v == v.roundToInt().toDouble()) v.roundToInt().toString()
-    else String.format("%.1f", v).replace('.', ',')
+    else String.format(AppLanguage.locale, "%.1f", v)
 
 private fun thousands(v: Int): String {
     val symbols = DecimalFormatSymbols().apply { groupingSeparator = ' ' }

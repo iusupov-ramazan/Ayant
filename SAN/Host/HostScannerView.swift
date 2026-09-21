@@ -183,7 +183,7 @@ struct HostScannerView: View {
             ForEach(venues) { v in Button(v.name) { venueID = v.id } }
         } label: {
             HStack {
-                Text(currentVenue?.name ?? "Выберите заведение")
+                Text(currentVenue?.name ?? LS("Выберите заведение"))
                     .font(.golos(15, .semibold)).foregroundStyle(.white)
                 Spacer()
                 Image(systemName: "chevron.up.chevron.down")
@@ -415,7 +415,7 @@ struct HostScannerView: View {
     private func handle(_ code: String) {
         let code = code.trimmingCharacters(in: .whitespaces)
         guard !processing, result == nil, pendingEarn == nil, !code.isEmpty, code != lastCode else { return }
-        guard !venueID.isEmpty else { result = .error("Выберите заведение"); return }
+        guard !venueID.isEmpty else { result = .error(LS("Выберите заведение")); return }
 
         // Ключ на распознанный QR — один, и он переживёт переход на экран суммы
         // и повторные тапы по кнопке начисления.
@@ -458,18 +458,20 @@ struct HostScannerView: View {
                     if out.ok && out.points {
                         // Баллы → полноэкранная квитанция (H15).
                         receipt = EarnReceipt(awarded: out.awarded, balance: out.balance,
-                                              guestLabel: "Гость",
+                                              guestLabel: LS("Гость"),
                                               billAmount: billForReceipt,
                                               modeLabel: modeLabel,
                                               replayed: out.replayed)
+                        host.send(.noteScanSucceeded)
                     } else {
                         result = out.ok ? .success(out) : .error(Self.message(for: out.errorCode))
+                        if out.ok { host.send(.noteScanSucceeded) }
                     }
                 }
             } catch {
                 await MainActor.run {
                     processing = false
-                    result = .error("Ошибка сети. Попробуйте ещё раз.")
+                    result = .error(LS("Ошибка сети. Попробуйте ещё раз."))
                     retryAction = {
                         submitScan(code: code, billAmount: billAmount, bandIndex: bandIndex,
                                    billForReceipt: billForReceipt)
@@ -482,7 +484,7 @@ struct HostScannerView: View {
     /// Списание баллов на награду. Код: AYANT-RDM:userID:rewardId[:points].
     private func submitRedeem(code: String) {
         let parts = code.split(separator: ":").map(String.init)
-        guard parts.count >= 3 else { result = .error("Неверный код награды."); return }
+        guard parts.count >= 3 else { result = .error(LS("Неверный код награды.")); return }
         let userID = parts[1], rewardId = parts[2]
         let pts = parts.count >= 4 ? (Int(parts[3]) ?? 0) : 0    // для money-награды
         processing = true
@@ -503,8 +505,9 @@ struct HostScannerView: View {
                                                                     idToken: token,
                                                                     idempotencyKey: key)
                 outcome = out.ok ? .redeemed(out) : .error(Self.message(for: out.errorCode))
+                if out.ok { host.send(.noteScanSucceeded) }
             } catch {
-                outcome = .error("Ошибка сети. Попробуйте ещё раз.")
+                outcome = .error(LS("Ошибка сети. Попробуйте ещё раз."))
                 networkFailed = true
             }
             await MainActor.run {
@@ -520,44 +523,46 @@ struct HostScannerView: View {
         switch v.pointsMode {
         case "cashback":
             guard v.cashbackPercent > 0 else { return nil }
-            return "Кэшбэк \(v.cashbackPercent.sanPercentText)%"
-        case "bands": return "По сумме чека"
+            return LF("Кэшбэк %@%%", v.cashbackPercent.sanPercentText)
+        case "bands": return LS("По сумме чека")
         default:
             guard v.pointsFlat > 0 else { return nil }
-            return "\(v.pointsFlat) за визит"
+            return LF("%lld за визит", v.pointsFlat)
         }
     }
 
+    // Тексты — через `LS`, а не литералами: функция возвращает `String`, и
+    // `Text(String)` каталог не смотрит. Ключи добавлены в каталог руками.
     private static func message(for code: String?) -> String {
         switch code {
-        case "coupon_not_found": return "Купон не найден."
-        case "wrong_venue":      return "Этот код — для другого заведения."
-        case "loyalty_off":      return "Карта лояльности у заведения выключена."
-        case "loyalty_is_points": return "Это заведение начисляет баллы, а не штампы — попросите гостя показать QR «Мой QR»."
-        case "already_used":     return "Купон уже был использован."
-        case "not_owner":        return "У вас нет прав на это заведение."
-        case "venue_not_found":  return "Заведение не найдено."
-        case "no_token", "bad_token": return "Требуется вход в аккаунт заведения."
-        case "missing_params":   return "Пустой код купона."
+        case "coupon_not_found": return LS("Купон не найден.")
+        case "wrong_venue":      return LS("Этот код — для другого заведения.")
+        case "loyalty_off":      return LS("Карта лояльности у заведения выключена.")
+        case "loyalty_is_points": return LS("Это заведение начисляет баллы, а не штампы — попросите гостя показать QR «Мой QR».")
+        case "already_used":     return LS("Купон уже был использован.")
+        case "not_owner":        return LS("У вас нет прав на это заведение.")
+        case "venue_not_found":  return LS("Заведение не найдено.")
+        case "no_token", "bad_token": return LS("Требуется вход в аккаунт заведения.")
+        case "missing_params":   return LS("Пустой код купона.")
         // Баллы САН
-        case "points_off":       return "Баллы САН у заведения выключены."
+        case "points_off":       return LS("Баллы САН у заведения выключены.")
         // Один код и для штампов, и для баллов — формулировка общая. Сервер
         // присылает `retryAfterSec`, но клиент его пока не разбирает.
-        case "cooldown":         return "Этому гостю уже начисляли недавно, попробуйте позже."
-        case "missing_amount":   return "Введите сумму чека."
-        case "bad_band":         return "Выберите диапазон суммы."
-        case "no_points":        return "Начислять нечего (0 баллов)."
-        case "bad_code":         return "Неверный QR-код."
-        case "insufficient":     return "У гостя недостаточно баллов."
-        case "reward_not_found": return "Награда не найдена или отключена."
-        case "redeem_not_allowed": return "Списание баллов недоступно для этого заведения."
-        case "below_min":        return "Слишком мало баллов для этой награды."
-        case "missing_user":     return "Не удалось определить гостя."
-        case "key_reused":       return "Этот код уже обрабатывался с другим запросом. Отсканируйте QR заново."
-        case "bad_reward":       return "Награда указана неверно. Попросите гостя обновить QR."
-        case "internal":         return "Ошибка на сервере. Попробуйте ещё раз через минуту."
-        case "app_check_failed": return "Приложение не прошло проверку. Обновите его из App Store."
-        default:                 return "Не удалось отсканировать код."
+        case "cooldown":         return LS("Этому гостю уже начисляли недавно, попробуйте позже.")
+        case "missing_amount":   return LS("Введите сумму чека.")
+        case "bad_band":         return LS("Выберите диапазон суммы.")
+        case "no_points":        return LS("Начислять нечего (0 баллов).")
+        case "bad_code":         return LS("Неверный QR-код.")
+        case "insufficient":     return LS("У гостя недостаточно баллов.")
+        case "reward_not_found": return LS("Награда не найдена или отключена.")
+        case "redeem_not_allowed": return LS("Списание баллов недоступно для этого заведения.")
+        case "below_min":        return LS("Слишком мало баллов для этой награды.")
+        case "missing_user":     return LS("Не удалось определить гостя.")
+        case "key_reused":       return LS("Этот код уже обрабатывался с другим запросом. Отсканируйте QR заново.")
+        case "bad_reward":       return LS("Награда указана неверно. Попросите гостя обновить QR.")
+        case "internal":         return LS("Ошибка на сервере. Попробуйте ещё раз через минуту.")
+        case "app_check_failed": return LS("Приложение не прошло проверку. Обновите его из App Store.")
+        default:                 return LS("Не удалось отсканировать код.")
         }
     }
 }
@@ -592,28 +597,28 @@ enum ScanResultUI {
     var title: String {
         switch self {
         case .success(let o):
-            if o.points { return o.awarded > 0 ? "+\(o.awarded) баллов ✓" : "Готово ✓" }
+            if o.points { return o.awarded > 0 ? LF("+%lld баллов ✓", o.awarded) : LS("Готово ✓") }
             // Штамп: крупно — что начислено ЗА ЭТОТ скан. Прежний заголовок
             // с итогом («2 из 6») после первого скана читался как двойной штамп.
-            if o.loyalty && !o.rewardIssued { return "+1 штамп ✓" }
-            return o.title.isEmpty ? "Купон погашен ✓" : "«\(o.title)» ✓"
+            if o.loyalty && !o.rewardIssued { return LS("+1 штамп ✓") }
+            return o.title.isEmpty ? LS("Купон погашен ✓") : "«\(o.title)» ✓"
         case .redeemed(let r):
-            return r.rewardTitle.isEmpty ? "Награда выдана ✓" : "«\(r.rewardTitle)» ✓"
+            return r.rewardTitle.isEmpty ? LS("Награда выдана ✓") : "«\(r.rewardTitle)» ✓"
         case .error(let m): return m
         }
     }
     var subtitle: String? {
         switch self {
         case .success(let o):
-            if o.points { return "Начислено \(o.awarded). Баланс гостя: \(o.balance) баллов." }
-            guard o.loyalty else { return "Купон погашен." }
-            if o.rewardIssued { return "🎉 Карта заполнена! Сегодня награда: «\(o.rewardTitle)» — выдайте гостю." }
+            if o.points { return LF("Начислено %lld. Баланс гостя: %lld баллов.", o.awarded, o.balance) }
+            guard o.loyalty else { return LS("Купон погашен.") }
+            if o.rewardIssued { return LF("🎉 Карта заполнена! Гостю выдан купон «%@» — он уже в «Мои купоны»; погасить можно сразу или в следующий визит.", o.rewardTitle) }
             // Итог — второй строкой: «2 из 6» — это всего на карте, не за скан.
-            let total = "Всего на карте: \(o.stamps) из \(o.goal)."
-            return o.title.isEmpty ? total : "Купон «\(o.title)» погашен. \(total)"
+            let total = LF("Всего на карте: %lld из %lld.", o.stamps, o.goal)
+            return o.title.isEmpty ? total : LF("Купон «%@» погашен. %@", o.title, total)
         case .redeemed(let r):
-            if let som = r.somOff { return "Списано \(r.redeemed) баллов (−\(som) сом). Остаток: \(r.balance)." }
-            return "Списано \(r.redeemed) баллов. Остаток: \(r.balance). Выдайте награду гостю."
+            if let som = r.somOff { return LF("Списано %lld баллов (−%lld сом). Остаток: %lld.", r.redeemed, som, r.balance) }
+            return LF("Списано %lld баллов. Остаток: %lld. Выдайте награду гостю.", r.redeemed, r.balance)
         case .error: return nil
         }
     }

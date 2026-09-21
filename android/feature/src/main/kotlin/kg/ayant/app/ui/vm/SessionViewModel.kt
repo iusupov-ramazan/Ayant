@@ -1,6 +1,7 @@
 package kg.ayant.app.ui.vm
 
 import android.app.Application
+import kg.ayant.app.domain.AuthValidation
 import kg.ayant.app.domain.contract.AuthService
 import kg.ayant.app.domain.model.AuthProvider
 import kg.ayant.app.domain.model.AyantUser
@@ -19,6 +20,17 @@ data class SessionState(
     val user: AyantUser? = null,
     val isWorking: Boolean = false,
     val errorMessage: String? = null,
+    /**
+     * Не-ошибка, о которой всё же надо сказать («письмо отправлено»).
+     * Отдельный канал: `errorMessage` показывается с заголовком «Ошибка».
+     */
+    val infoMessage: String? = null,
+    /**
+     * Адрес, на который ушло письмо для сброса пароля — экран собирает из него
+     * локализованную фразу сам (у `:feature` нет каталога строк).
+     * Сбрасывается вместе с `infoMessage`.
+     */
+    val passwordResetSentTo: String? = null,
 ) {
     val isSignedIn: Boolean get() = user != null
     val isGuest: Boolean get() = user?.provider == AuthProvider.GUEST
@@ -64,6 +76,9 @@ class SessionViewModel(
     val isSignedIn: Boolean get() = _state.value.isSignedIn
     val isGuest: Boolean get() = _state.value.isGuest
 
+    /** Закрыть «письмо отправлено» — оба поля снимаются вместе, как на iOS. */
+    fun clearInfo() { _state.update { it.copy(infoMessage = null, passwordResetSentTo = null) } }
+
     fun signInEmail(email: String, password: String) = run { service.signInEmail(email, password) }
     fun registerEmail(name: String, email: String, password: String) = run { service.registerEmail(name, email, password) }
     /** Real Google Sign-In (Credential Manager) when Firebase is on; mock otherwise. */
@@ -71,6 +86,18 @@ class SessionViewModel(
         service.signInGoogle()
     }
     fun continueAsGuest() = run { service.continueAsGuest() }
+
+    /**
+     * «Забыли пароль?». Сессию не меняет — только сообщает, что письмо ушло.
+     * Mirrors `SessionStore.sendPasswordReset(email:)`.
+     */
+    fun sendPasswordReset(email: String) {
+        val clean = AuthValidation.normalizedEmail(email)
+        perform {
+            service.sendPasswordReset(clean)
+            _state.update { it.copy(infoMessage = INFO_RESET_SENT, passwordResetSentTo = clean) }
+        }
+    }
 
     /**
      * Что нужно успеть сделать, ПОКА пользователь ещё авторизован: отписать
@@ -127,7 +154,7 @@ class SessionViewModel(
                 user = null
                 onFinish(null)
             } catch (e: Exception) {
-                val text = e.localizedMessage ?: "Не удалось удалить аккаунт"
+                val text = e.localizedMessage ?: ERROR_DELETE
                 errorMessage = text
                 onFinish(text)
             }
@@ -140,24 +167,38 @@ class SessionViewModel(
      * при залипшей сети на экране оставался вечный спиннер без ошибки и без
      * возможности повторить. Зеркалит `SessionStore.authTimeout` на iOS.
      */
-    private fun run(op: suspend () -> AyantUser) {
+    private fun run(op: suspend () -> AyantUser) = perform { applyUser(op()) }
+
+    /** Общая обвязка любой операции провайдера: спиннер, таймаут, текст ошибки. */
+    private fun perform(op: suspend () -> Unit) {
         isWorking = true
         errorMessage = null
         viewModelScope.launch {
             try {
-                val user = withTimeout(AUTH_TIMEOUT_MS) { op() }
-                applyUser(user)
+                withTimeout(AUTH_TIMEOUT_MS) { op() }
             } catch (e: TimeoutCancellationException) {
-                errorMessage = "Нет связи с сервером. Проверьте интернет."
+                errorMessage = ERROR_NETWORK
             } catch (e: Exception) {
-                errorMessage = e.localizedMessage ?: "Ошибка входа"
+                errorMessage = e.localizedMessage ?: ERROR_SIGN_IN
             }
             isWorking = false
         }
     }
 
-    private companion object {
-        const val AUTH_TIMEOUT_MS = 30_000L
+    companion object {
+        private const val AUTH_TIMEOUT_MS = 30_000L
+
+        /**
+         * Коды ошибок вместо текста: у `:feature` нет Android-ресурсов, поэтому
+         * в `errorMessage` кладём код, а экран переводит его через каталог
+         * (`sessionErrorText` в `core/L10n.kt`). Всё, что не код, — сообщение
+         * провайдера, показывается как есть.
+         */
+        const val ERROR_NETWORK = "error.network"
+        const val ERROR_SIGN_IN = "error.sign_in"
+        const val ERROR_DELETE = "error.delete"
+        /** Код «письмо для сброса пароля отправлено» — адрес лежит в `passwordResetSentTo`. */
+        const val INFO_RESET_SENT = "info.reset_sent"
     }
 
     private fun applyUser(u: AyantUser) {

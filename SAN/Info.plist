@@ -7,7 +7,7 @@
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Разреши доступ к локации, чтобы видеть расстояние до заведений рядом с тобой.</string>
+	<string>Ayant показывает расстояние до заведений рядом с вами.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Камера нужна, чтобы сканировать QR-коды купонов гостей и начислять штампы лояльности.</string>
 	<key>LSApplicationQueriesSchemes</key>

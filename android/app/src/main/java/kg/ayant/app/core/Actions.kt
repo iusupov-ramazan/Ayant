@@ -3,6 +3,7 @@ package kg.ayant.app.core
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import kg.ayant.app.R
 
 /** Deep-link URLs mirroring DeepLinkRouter (custom scheme + https). */
 object Links {
@@ -23,7 +24,7 @@ fun Context.shareText(text: String, subject: String? = null) {
         if (subject != null) putExtra(Intent.EXTRA_SUBJECT, subject)
         putExtra(Intent.EXTRA_TEXT, text)
     }
-    val chooser = Intent.createChooser(intent, subject ?: "Поделиться").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    val chooser = Intent.createChooser(intent, subject ?: AppLanguage.context.getString(R.string.action_share)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     runCatching { startActivity(chooser) }
 }
 

@@ -6,7 +6,7 @@
  * Реализует ровно ту поверхность admin SDK, которую используют денежные/
  * анти-чит функции (`index.js`): collection/doc/get/set/update/delete,
  * подколлекции (analytics/{v}/days/{day}), where(...).limit(...).get(),
- * add(), runTransaction(...) и FieldValue.increment.
+ * add(), batch(), runTransaction(...) и FieldValue.increment.
  *
  * Документы хранятся плоско по полному пути ("venues/v1",
  * "analytics/v1/days/2026-07-30"). Это НЕ полноценный Firestore — только
@@ -105,6 +105,21 @@ class FakeFirestore {
   // Удобный доступ к произвольному документу по полному пути (как db.doc в SDK).
   doc(path) {
     return new DocRef(this, path);
+  }
+
+  /**
+   * Пакетная запись (`deleteInChunks`, удаление аккаунта и подключений
+   * инстаграма). Тесты однопоточные, поэтому операции копятся и применяются
+   * на commit() — атомарность имитировать незачем, а порядок важен.
+   */
+  batch() {
+    const ops = [];
+    return {
+      set: (ref, data, opts) => { ops.push(() => ref.set(data, opts)); },
+      update: (ref, data) => { ops.push(() => ref.update(data)); },
+      delete: (ref) => { ops.push(() => ref.delete()); },
+      commit: async () => { for (const op of ops) await op(); },
+    };
   }
 
   async runTransaction(fn) {

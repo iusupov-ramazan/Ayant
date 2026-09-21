@@ -97,6 +97,8 @@ import kg.ayant.app.ui.theme.ayantGroupCard
 import kg.ayant.app.ui.vm.AppViewModel
 import kg.ayant.app.domain.HostIntent
 import kg.ayant.app.ui.vm.HostViewModel
+import kg.ayant.app.core.localizedName
+import kg.ayant.app.core.localizedTitle
 
 // MARK: - Onboarding
 
@@ -130,14 +132,14 @@ fun CategoryDropdown(selected: VenueCategory, onSelect: (VenueCategory) -> Unit)
     var expanded by remember { mutableStateOf(false) }
     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
         OutlinedTextField(
-            value = selected.rawValue, onValueChange = {}, readOnly = true,
+            value = selected.localizedName(), onValueChange = {}, readOnly = true,
             label = { Text(stringResource(R.string.filter_category)) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
             modifier = Modifier.menuAnchor().fillMaxWidth(),
         )
         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             VenueCategory.all.forEach { cat ->
-                DropdownMenuItem(text = { Text(cat.rawValue) }, onClick = { onSelect(cat); expanded = false })
+                DropdownMenuItem(text = { Text(cat.localizedName()) }, onClick = { onSelect(cat); expanded = false })
             }
         }
     }
@@ -559,7 +561,7 @@ private fun HostVenueTile(
                 Spacer(Modifier.width(5.dp))
                 Column {
                     TileText(v.name, 11.sp, FontWeight.Black, Color.White)
-                    TileText("${v.category.rawValue} · ${v.district}", 9.5.sp,
+                    TileText("${v.category.localizedName()} · ${v.district}", 9.5.sp,
                         FontWeight.Bold, Color.White.copy(alpha = 0.86f))
                 }
             }
@@ -678,7 +680,7 @@ private fun ModerationTag(statusName: String) {
 private fun DiscountBadge(d: HostDealDTO) {
     val c = AyantTheme.colors
     Text(
-        d.discountPercent?.let { "−$it%" } ?: d.type.title,
+        d.discountPercent?.let { "−$it%" } ?: d.type.localizedTitle(),
         fontSize = 11.sp, fontWeight = FontWeight.Black, color = Color.White, maxLines = 1,
         modifier = Modifier
             .clip(RoundedCornerShape(8.dp))

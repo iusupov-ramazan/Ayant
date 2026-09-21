@@ -53,6 +53,17 @@ export interface VenueDoc {
   pointsExpiryMonths?: Numeric;
 }
 
+/**
+ * config/appSettings — глобальные настройки из админ-панели («Настройки»).
+ * Зеркало `AppSettings.swift` / `AppSettings.kt`: имена полей — контракт.
+ */
+export interface AppSettingsDoc {
+  /** Пауза между штампами лояльности, мин. Явный 0 = без паузы. Пусто → 15. */
+  stampCooldownMinutes?: Numeric;
+  /** Текст рекламного плейсхолдера (читают только клиенты). */
+  adPlaceholderText?: string;
+}
+
 /** coupons/{id} — купон акции (погашается один раз). */
 export interface CouponDoc {
   code?: string;
@@ -114,4 +125,33 @@ export interface PushCampaignDoc {
 /** Значение времени Firestore: Timestamp (.toMillis()) либо ещё не сериализованное. */
 export interface FirestoreTimestampLike {
   toMillis?: () => number;
+}
+
+/**
+ * igAccounts/{ownerID}_{venueID} — подключённый инстаграм заведения.
+ *
+ * ЗАКРЫТАЯ коллекция: `allow read, write: if false` в правилах. Здесь лежит
+ * токен доступа, и клиенту он не нужен ни при каких обстоятельствах — за
+ * постами он ходит через наши функции. Публичная часть (имя аккаунта, статус)
+ * продублирована в `igConnections`, её хост читает напрямую.
+ */
+export interface IgAccountDoc {
+  ownerID?: string;
+  venueID?: string;
+  igUserID?: string;
+  username?: string;
+  accessToken?: string;
+  /** Момент протухания длинного токена (60 дней с выдачи/обновления). */
+  tokenExpiresAt?: FirestoreTimestampLike | Date;
+  lastRefreshAt?: FirestoreTimestampLike | Date;
+  connectedAt?: FirestoreTimestampLike | Date;
+  /** Обновление токена не удалось — нужен повторный вход хоста. */
+  needsReauth?: boolean;
+}
+
+/** igAuthStates/{nonce} — одноразовый state OAuth (защита от CSRF). */
+export interface IgAuthStateDoc {
+  ownerID?: string;
+  venueID?: string;
+  createdAt?: FirestoreTimestampLike | Date;
 }

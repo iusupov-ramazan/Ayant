@@ -8,6 +8,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kg.ayant.app.domain.contract.CouponService
 import kg.ayant.app.domain.model.LoyaltyCard
+import kg.ayant.app.domain.model.LoyaltyStampEvent
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import org.json.JSONArray
@@ -28,6 +29,14 @@ class LoyaltyViewModel @JvmOverloads constructor(
     /** Карты одним значением состояния — по тем же причинам, что и купоны. */
     private val _cards = MutableStateFlow<List<LoyaltyCard>>(emptyList())
     val cards: StateFlow<List<LoyaltyCard>> = _cards.asStateFlow()
+    /**
+     * Непоказанный штамп (см. `PointsState.pendingEarn` у баллов). Живёт до
+     * [dismissStamp], не до перерисовки экрана. Mirrors `LoyaltyStore.pendingStamp`.
+     */
+    private val _pendingStamp = MutableStateFlow<LoyaltyStampEvent?>(null)
+    val pendingStamp: StateFlow<LoyaltyStampEvent?> = _pendingStamp.asStateFlow()
+    /** Был ли уже первый снимок: первая загрузка — не «начисление». */
+    private var hasBaseline = false
     var userID: String = ""
         private set
 
@@ -73,12 +82,33 @@ class LoyaltyViewModel @JvmOverloads constructor(
         }
     }
 
+    /**
+     * Снимок с сервера поверх известных карт; рост штампов или собранный круг
+     * у уже известной карты — событие для экрана «Начислено».
+     */
     private fun merge(fetched: List<LoyaltyCard>) {
-        val map = LinkedHashMap<String, LoyaltyCard>()
-        _cards.value.forEach { map[it.venueID] = it }
+        val before = _cards.value.associateBy { it.venueID }
+        val map = LinkedHashMap<String, LoyaltyCard>(before)
         fetched.forEach { map[it.venueID] = it }   // backend is source of truth
+        if (hasBaseline && _pendingStamp.value == null) {
+            for (c in fetched) {
+                val was = before[c.venueID] ?: continue
+                val completed = c.completedRounds > was.completedRounds
+                if (!completed && c.stamps <= was.stamps) continue
+                _pendingStamp.value = LoyaltyStampEvent(
+                    id = "${c.venueID}-${c.completedRounds}-${c.stamps}",
+                    venueID = c.venueID, venueName = c.venueName,
+                    stamps = c.stamps, goal = maxOf(c.goal, 1),
+                    rewardIssued = completed, reward = c.reward,
+                )
+                break
+            }
+        }
+        hasBaseline = true
         put(map.values.sortedByDescending { it.stamps })
     }
+
+    fun dismissStamp() { _pendingStamp.value = null }
 
     fun card(venueID: String): LoyaltyCard? = _cards.value.firstOrNull { it.venueID == venueID }
 
@@ -105,6 +135,8 @@ class LoyaltyViewModel @JvmOverloads constructor(
     fun resetForNewUser() {
         stopObserving()
         _cards.value = emptyList()
+        _pendingStamp.value = null
+        hasBaseline = false
         userID = ""
         prefs.edit().clear().apply()
     }

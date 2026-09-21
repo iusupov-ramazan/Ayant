@@ -72,6 +72,22 @@ service cloud.firestore {
       allow delete: if isAdmin() || (isSignedIn() && resource.data.authorID == uid());
     }
 
+    // ── Жалобы на отзывы ─────────────────────────────────────────────────
+    // Guidelines 1.2: механизм жалоб на пользовательский контент.
+    //
+    // Создать может любой вошедший (в том числе анонимный гость) и только от
+    // своего имени; id документа детерминированный — {reviewID}_{reporterID},
+    // поэтому повторная жалоба перезаписывает свою же, а не засоряет очередь.
+    // Читает и закрывает ТОЛЬКО админ: жалоба — это донос, её не должны видеть
+    // ни автор отзыва, ни владелец заведения.
+    match /reviewReports/{id} {
+      allow read, update, delete: if isAdmin();
+      allow create: if isSignedIn()
+                    && request.resource.data.reporterID == uid()
+                    && request.resource.data.reviewID is string
+                    && request.resource.data.venueID is string;
+    }
+
     // ── Push-кампании ────────────────────────────────────────────────────
     // Хост создаёт кампанию по своему заведению ("pending"). Одобряет только
     // админ (status → approved/rejected); рассылку делает Cloud Function.
@@ -144,6 +160,29 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // ── Instagram заведения ──────────────────────────────────────────────
+    // igAccounts держит ТОКЕН ДОСТУПА к инстаграму заведения — клиенту он не
+    // нужен ни для чего: за постами хост ходит через Cloud Functions по своему
+    // Firebase-токену. Поэтому документ закрыт целиком, а не «только на запись»:
+    // утёкший токен — это чужой аккаунт в чужих руках, правилами не откатишь.
+    match /igAccounts/{id} {
+      allow read, write: if false;
+    }
+
+    // Публичная половина того же подключения: имя аккаунта, дата, флаг
+    // «нужен повторный вход». Её хост слушает снапшотом, чтобы кабинет
+    // обновился сразу после возврата из браузера. Пишут только функции.
+    match /igConnections/{id} {
+      allow read:  if isSignedIn() && resource.data.ownerID == uid();
+      allow write: if false;
+    }
+
+    // Одноразовый `state` OAuth. Читаемый клиентом state — это возможность
+    // привязать свой инстаграм к чужому заведению, поэтому закрыт полностью.
+    match /igAuthStates/{nonce} {
+      allow read, write: if false;
+    }
+
     // ── Служебные документы (ops) ────────────────────────────────────────
     // Пульсы задач и алерты целостности баллов (reconcileVenuePoints).
     // Пишет только Cloud Function (admin SDK обходит правила); читает админ —
@@ -162,8 +201,16 @@ service cloud.firestore {
     // ── Погашения купонов ────────────────────────────────────────────────
     // Пользователь создаёт документ (id = uid_dealID). Счётчик и пометку
     // "counted" делает Cloud Function (admin SDK обходит правила).
+    // Документ привязан к автору: userID — это uid вызывающего, а id — ровно
+    // uid_dealID (так его пишут оба клиента: FirebaseServices.logRedemption /
+    // FirebaseDataRepository.logRedemption). Иначе любой вошедший мог бы
+    // накрутить «Погашено» чужому заведению через countRedemption.
     match /redemptions/{id} {
-      allow create: if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.userID == uid()
+        && request.resource.data.dealID is string
+        && request.resource.data.venueID is string
+        && id == uid() + '_' + request.resource.data.dealID;
       allow read, update, delete: if false;
     }
 

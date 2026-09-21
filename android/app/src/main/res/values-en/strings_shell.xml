@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="auth_forgot_password">Forgot password?</string>
+    <string name="auth_reset_hint_email">Enter your email above — the password reset email will be sent there</string>
+    <string name="auth_reset_sent">A password reset email has been sent to %1$s</string>
+    <string name="auth_done_title">Done</string>
+    <string name="auth_privacy_footer">By continuing you accept the %1$s</string>
+    <string name="auth_privacy_link">privacy policy</string>
+
+    <string name="guest_coupon">Sign in to get the coupon.</string>
+    <string name="guest_profile_host">Guests can only browse. Sign in to add venues, save places and leave reviews.</string>
+
+    <string name="profile_referral_guest">Sign in to invite friends and earn bonuses.</string>
+    <string name="profile_version_label">Version</string>
+
+    <string name="toast_gift_received">🎁 Gift received — the coupon is in “My coupons”!</string>
+    <string name="toast_gift_invalid">This gift has already been claimed or the link is invalid</string>
+
+    <string name="about_intro">Ayant is a single feed of what is happening in your city and a platform for getting discounts. We removed all the noise and kept only what really matters to you.</string>
+    <string name="about_find_title">What you’ll find inside</string>
+    <string name="about_find_lead">All the key information from the city’s venues, organised by the **SAN** system:</string>
+    <string name="about_b1_title">S — Sales:</string>
+    <string name="about_b1_text">current price drops.</string>
+    <string name="about_b2_title">A — Promos:</string>
+    <string name="about_b2_text">special and limited offers.</string>
+    <string name="about_b3_title">N — New:</string>
+    <string name="about_b3_text">fresh arrivals, new menus and services.</string>
+    <string name="about_b4_title">Important announcements:</string>
+    <string name="about_b4_text">schedule changes and updates.</string>
+    <string name="about_find_footer">Each venue’s profile also has all the reference information: exact address, contacts and social links.</string>
+    <string name="about_bonus_title">How to collect and spend bonuses</string>
+    <string name="about_bonus_lead">The app has its own bonus system you can collect without any extra effort:</string>
+    <string name="about_bonus_b1_title">Mini-games:</string>
+    <string name="about_bonus_b1_text">play right in the app and get bonuses for it.</string>
+    <string name="about_bonus_b2_title">Inviting friends:</string>
+    <string name="about_bonus_b2_text">share your referral link and collect bonuses together.</string>
+    <string name="about_bonus_spend">**What can you spend them on?** Collected bonuses are exchanged for coupons that give exclusive discounts at partner venues.</string>
+    <string name="about_closing">No spam, no ads and no extra buttons. Just SAN, venues and your savings. Everything you need in one app. Enjoy!</string>
+    <string name="help_privacy_policy">Privacy policy</string>
+
+    <string name="help_faq_q1">What is SAN?</string>
+    <string name="help_faq_a1">It is the core of our app. SAN is a feed where venues publish only three kinds of news: Sales, Promos and New items. No spam, only what matters.</string>
+    <string name="help_faq_q2">Why are there games in the app?</string>
+    <string name="help_faq_a2">It is an easy way to earn bonuses. You play short mini-games right inside the app, and we credit bonus points to your balance.</string>
+    <string name="help_faq_q3">How does inviting friends (referrals) work?</string>
+    <string name="help_faq_a3">Copy your unique link in your profile and send it to a friend. As soon as they sign up, both you and your friend get welcome bonuses.</string>
+    <string name="help_faq_q4">What can I spend my bonuses on?</string>
+    <string name="help_faq_a4">Bonuses can be exchanged for coupons inside the app. These coupons give discounts at partner venues.</string>
+    <string name="help_faq_q5">How do I use a coupon at a venue?</string>
+    <string name="help_faq_a5">Choose the coupon you want, exchange your bonuses for it and show the coupon screen to a venue employee (waiter, cashier, administrator) before paying.</string>
+    <string name="help_faq_q6">Is the app free?</string>
+    <string name="help_faq_a6">Yes, the app is completely free for users. There are no hidden subscriptions or paid features.</string>
+    <string name="help_faq_q7">What if a venue refuses to accept a coupon, or the information in SAN doesn’t match reality?</string>
+    <string name="help_faq_a7">We keep the data up to date, but if you run into such a problem, write to us in the “Support” section with the venue name. We will sort it out quickly.</string>
+
+    <string name="support_intro">Didn’t find an answer in the FAQ? Write to us — we’ll help quickly.</string>
+    <string name="support_contact_us">Contact us</string>
+    <string name="support_telegram_bot">Telegram bot</string>
+    <string name="support_telegram_sub">AI assistant — answers 24/7</string>
+    <string name="support_email_short">Email</string>
+    <string name="support_documents">Documents</string>
+
+    <!-- Город (пока только Бишкек) -->
+    <string name="city_bishkek">Bishkek</string>
+</resources>

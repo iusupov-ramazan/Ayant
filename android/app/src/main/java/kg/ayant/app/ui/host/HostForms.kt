@@ -55,6 +55,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kg.ayant.app.R
+import kg.ayant.app.core.localizedKindTitle
+import kg.ayant.app.core.localizedName
+import kg.ayant.app.core.localizedTitle
 import androidx.compose.foundation.text.KeyboardOptions
 import kg.ayant.app.domain.model.HostDealDTO
 import kg.ayant.app.domain.HostForms
@@ -115,7 +118,7 @@ fun HostVenueDetailScreen(venueID: String, host: HostViewModel, onBack: () -> Un
                 Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(v.name, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = c.ink)
-                        Text("${v.category.rawValue} · ${v.district}", fontSize = 12.sp, color = c.inkSoft)
+                        Text("${v.category.localizedName()} · ${v.district}", fontSize = 12.sp, color = c.inkSoft)
                     }
                     Text(if (v.isPaused) stringResource(R.string.host_paused) else stringResource(R.string.host_active), fontSize = 12.sp, color = c.inkSoft)
                     Switch(checked = !v.isPaused, onCheckedChange = { host.send(HostIntent.TogglePause(v.id)) })
@@ -165,7 +168,7 @@ fun HostVenueDetailScreen(venueID: String, host: HostViewModel, onBack: () -> Un
                         Text(item.emoji, fontSize = 22.sp)
                         Column(Modifier.padding(start = 10.dp).weight(1f)) {
                             Text(item.name, fontSize = 14.sp, color = c.ink)
-                            Text(item.kindTitle, fontSize = 11.sp, color = c.inkSoft)
+                            Text(item.localizedKindTitle(), fontSize = 11.sp, color = c.inkSoft)
                         }
                         IconButton(onClick = { host.send(HostIntent.DeleteItem(v.id, item.id)) }) { Icon(Icons.Filled.Delete, stringResource(R.string.action_delete), tint = Color(0xFFD32F2F)) }
                     }
@@ -246,6 +249,7 @@ private fun kg.ayant.app.domain.model.DealStatus.title() = when (this) {
 @Composable
 fun HostVenueForm(host: HostViewModel, existing: HostVenueDTO?, onDismiss: () -> Unit) {
     val c = AyantTheme.colors
+    val context = LocalContext.current
     var name by remember { mutableStateOf(existing?.name ?: "") }
     var category by remember { mutableStateOf(existing?.category ?: VenueCategory.CAFE) }
     var district by remember { mutableStateOf(existing?.district ?: "") }
@@ -264,7 +268,7 @@ fun HostVenueForm(host: HostViewModel, existing: HostVenueDTO?, onDismiss: () ->
     var couponsEnabled by remember { mutableStateOf(existing?.couponsEnabled ?: true) }
     var loyaltyEnabled by remember { mutableStateOf(existing?.loyaltyEnabled ?: false) }
     var loyaltyGoal by remember { mutableStateOf((existing?.loyaltyGoal ?: 6).toString()) }
-    var loyaltyReward by remember { mutableStateOf(existing?.loyaltyReward ?: "Награда за лояльность") }
+    var loyaltyReward by remember { mutableStateOf(existing?.loyaltyReward ?: context.getString(R.string.loyalty_reward_default)) }
     var showMapPicker by remember { mutableStateOf(false) }
     var showBranchForm by remember { mutableStateOf(false) }
     var hoursExpanded by remember { mutableStateOf(false) }
@@ -473,9 +477,9 @@ fun HostDealForm(host: HostViewModel, venueID: String, existing: HostDealDTO?, o
     ) {
         Field(title, { title = it }, stringResource(R.string.deal_form_title))
         Box {
-            Field(type.title, {}, stringResource(R.string.deal_form_type), enabled = false, modifier = Modifier.clickable { typeMenu = true })
+            Field(type.localizedTitle(), {}, stringResource(R.string.deal_form_type), enabled = false, modifier = Modifier.clickable { typeMenu = true })
             DropdownMenu(expanded = typeMenu, onDismissRequest = { typeMenu = false }) {
-                DealType.entries.forEach { t -> DropdownMenuItem(text = { Text(t.title) }, onClick = { type = t; typeMenu = false }) }
+                DealType.entries.forEach { t -> DropdownMenuItem(text = { Text(t.localizedTitle()) }, onClick = { type = t; typeMenu = false }) }
             }
         }
         Field(emoji, { emoji = it }, stringResource(R.string.venue_form_emoji))
@@ -545,17 +549,8 @@ fun HostScannerDialog(host: HostViewModel, fixedVenueID: String?, onDismiss: () 
     var pendingPtsCode by remember { mutableStateOf<String?>(null) }   // ждём сумму/диапазон для баллов
     var pendingMode by remember { mutableStateOf("flat") }
 
-    fun pointsError(code: String?): String = when (code) {
-        "points_off" -> "Баллы САН у заведения выключены."
-        "cooldown" -> "Баллы этому гостю уже начислены недавно."
-        "missing_amount" -> "Введите сумму чека."
-        "bad_band" -> "Выберите диапазон суммы."
-        "no_points" -> "Начислять нечего (0 баллов)."
-        "insufficient" -> "У гостя недостаточно баллов."
-        "reward_not_found" -> "Награда не найдена или отключена."
-        "redeem_not_allowed" -> "Списание баллов недоступно для этого заведения."
-        "below_min" -> "Слишком мало баллов для этой награды."
-        else -> context.getString(R.string.host_scan_error, code ?: context.getString(R.string.host_scan_failed))
+    fun pointsError(code: String?): String = hostScanErrorText(context, code) {
+        context.getString(R.string.host_scan_error, code ?: context.getString(R.string.host_scan_failed))
     }
 
     fun submitScan(scanned: String, billAmount: Int?, bandIndex: Int?) {
@@ -568,7 +563,7 @@ fun HostScannerDialog(host: HostViewModel, fixedVenueID: String?, onDismiss: () 
             success = o.ok
             result = when {
                 !o.ok -> pointsError(o.errorCode)
-                o.points -> "Начислено ${o.awarded}. Баланс гостя: ${o.balance} баллов."
+                o.points -> context.getString(R.string.host_awarded_balance, o.awarded, o.balance)
                 o.loyalty -> context.getString(R.string.host_scan_stamp, o.stamps, o.goal) + if (o.rewardIssued) context.getString(R.string.host_scan_reward_suffix, o.rewardTitle) else ""
                 else -> context.getString(R.string.host_scan_redeemed, o.title)
             }
@@ -578,7 +573,7 @@ fun HostScannerDialog(host: HostViewModel, fixedVenueID: String?, onDismiss: () 
 
     fun submitRedeem(scanned: String) {
         val parts = scanned.trim().split(":")
-        if (parts.size < 3) { success = false; result = "Неверный код награды."; return }
+        if (parts.size < 3) { success = false; result = context.getString(R.string.host_err_bad_reward_code); return }
         val u = parts[1]; val rid = parts[2]; val pts = parts.getOrNull(3)?.toIntOrNull() ?: 0
         busy = true; result = null
         scope.launch {
@@ -587,8 +582,7 @@ fun HostScannerDialog(host: HostViewModel, fixedVenueID: String?, onDismiss: () 
             success = o.ok
             result = when {
                 !o.ok -> pointsError(o.errorCode)
-                o.somOff != null -> "Списано ${o.redeemed} баллов (−${o.somOff} сом). Остаток: ${o.balance}."
-                else -> "Списано ${o.redeemed} баллов. Остаток: ${o.balance}. Выдайте награду гостю."
+                else -> hostRedeemedText(context, o.redeemed, o.balance, o.somOff)
             }
             busy = false
         }
@@ -649,21 +643,21 @@ fun HostScannerDialog(host: HostViewModel, fixedVenueID: String?, onDismiss: () 
         var billText by remember(pendingPtsCode) { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { pendingPtsCode = null },
-            title = { Text("Баллы САН") },
+            title = { Text(stringResource(R.string.points_title)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Сумма чека гостя", fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.host_bill_guest), fontWeight = FontWeight.SemiBold)
                     if (pendingMode == "cashback") {
-                        Field(billText, { billText = it }, "Сумма, сом")
+                        Field(billText, { billText = it }, stringResource(R.string.host_bill_amount_som))
                     } else {
                         val bands = venue?.pointsBands ?: emptyList()
                         bands.forEachIndexed { idx, band ->
-                            val label = if (idx == bands.size - 1) "${band.maxAmount}+ сом" else "до ${band.maxAmount} сом"
+                            val label = bandLabel(context, band.maxAmount, isLast = idx == bands.size - 1)
                             TextButton(onClick = { val cc = pendingPtsCode!!; pendingPtsCode = null; submitScan(cc, null, idx) }) {
                                 Text("$label  →  +${band.points}")
                             }
                         }
-                        if (bands.isEmpty()) Text("Диапазоны не настроены.", fontSize = 13.sp, color = c.inkSoft)
+                        if (bands.isEmpty()) Text(stringResource(R.string.host_bands_not_configured), fontSize = 13.sp, color = c.inkSoft)
                     }
                 }
             },
@@ -671,7 +665,7 @@ fun HostScannerDialog(host: HostViewModel, fixedVenueID: String?, onDismiss: () 
                 if (pendingMode == "cashback") {
                     val amt = billText.toIntOrNull() ?: 0
                     TextButton(enabled = amt > 0, onClick = { val cc = pendingPtsCode!!; pendingPtsCode = null; submitScan(cc, amt, null) }) {
-                        Text("Начислить")
+                        Text(stringResource(R.string.host_award))
                     }
                 }
             },

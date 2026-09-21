@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="auth_forgot_password">Сырсөздү унуттуңузбу?</string>
+    <string name="auth_reset_hint_email">Жогоруга почтаңызды киргизиңиз — сырсөздү калыбына келтирүү каты ага келет</string>
+    <string name="auth_reset_sent">Сырсөздү калыбына келтирүү каты %1$s дарегине жөнөтүлдү</string>
+    <string name="auth_done_title">Даяр</string>
+    <string name="auth_privacy_footer">Улантуу менен сиз %1$s кабыл аласыз</string>
+    <string name="auth_privacy_link">купуялык саясатын</string>
+
+    <string name="guest_coupon">Купон алуу үчүн аккаунтка кириңиз.</string>
+    <string name="guest_profile_host">Коноктор көрө гана алышат. Мекеме кошуу, жайларды сактоо жана пикир калтыруу үчүн кириңиз.</string>
+
+    <string name="profile_referral_guest">Досторду чакырып, бонус алуу үчүн аккаунтка кириңиз.</string>
+    <string name="profile_version_label">Версия</string>
+
+    <string name="toast_gift_received">🎁 Белек алынды — купон «Менин купондорум» бөлүмүндө!</string>
+    <string name="toast_gift_invalid">Бул белек мурда алынган же шилтеме жараксыз</string>
+
+    <string name="about_intro">Ayant — шаарыңдын окуяларынын бирдиктүү тасмасы жана арзандатуу алуу платформасы. Биз бардык маалымат ызы-чуусун алып салып, колдонуучу үчүн чын эле маанилүүсүн гана калтырдык.</string>
+    <string name="about_find_title">Ичинде эмнени табасың</string>
+    <string name="about_find_lead">Шаардын мекемелеринен келген бардык негизги маалымат **САН** системасы боюнча чогултулган:</string>
+    <string name="about_b1_title">С — Арзандатуулар:</string>
+    <string name="about_b1_text">актуалдуу баа төмөндөтүүлөр.</string>
+    <string name="about_b2_title">А — Акциялар:</string>
+    <string name="about_b2_text">атайын жана чектелген сунуштар.</string>
+    <string name="about_b3_title">Н — Жаңылыктар:</string>
+    <string name="about_b3_text">жаңы келгендер, жаңы менюлар жана кызматтар.</string>
+    <string name="about_b4_title">Маанилүү кулактандыруулар:</string>
+    <string name="about_b4_text">иш графигиндеги өзгөрүүлөр жана жаңыртуулар.</string>
+    <string name="about_find_footer">Ошондой эле ар бир мекеменин профилинде бардык маалымдама маалымат бар: так дареги, байланыштары жана соцтармактарга шилтемелери.</string>
+    <string name="about_bonus_title">Бонустарды кантип топтоп, жумшоо керек</string>
+    <string name="about_bonus_lead">Тиркемеде ашыкча аракетсиз топтой турган ички бонус системасы бар:</string>
+    <string name="about_bonus_b1_title">Мини-оюндарда:</string>
+    <string name="about_bonus_b1_text">түз эле тиркемеде ойноп, ал үчүн бонус ал.</string>
+    <string name="about_bonus_b2_title">Досторду чакырганы үчүн:</string>
+    <string name="about_bonus_b2_text">реферал шилтемеңди бөлүшүп, бонусту чогуу топто.</string>
+    <string name="about_bonus_spend">**Аларды эмнеге жумшаса болот?** Топтолгон бонустар өнөктөш мекемелерде эксклюзивдүү арзандатуу берген купондорго алмаштырылат.</string>
+    <string name="about_closing">Бул жерде спам, жарнама жана ашыкча баскычтар жок. Болгону САН, мекемелер жана сенин пайдаң. Эң керектүүсүнүн баары — бир тиркемеде. Колдон!</string>
+    <string name="help_privacy_policy">Купуялык саясаты</string>
+
+    <string name="help_faq_q1">САН деген эмне?</string>
+    <string name="help_faq_a1">Бул биздин тиркеменин негизи. САН — мекемелер үч гана түрдөгү жаңылыктарды жарыялаган тасма: Арзандатуулар (Скидки), Акциялар жана Жаңылыктар (Новинки). Спам жок, эң негизгиси гана.</string>
+    <string name="help_faq_q2">Тиркемедеги оюндар эмне үчүн керек?</string>
+    <string name="help_faq_a2">Бул бонус табуунун жөнөкөй жолу. Сиз түз эле тиркеменин ичинде кыска мини-оюндарды ойнойсуз, биз болсо ал үчүн балансыңызга бонус упайларын чегеребиз.</string>
+    <string name="help_faq_q3">Досторду чакыруу (реферал) кантип иштейт?</string>
+    <string name="help_faq_a3">Профилиңизден уникалдуу шилтемени көчүрүп, досуңузга жөнөтүңүз. Ал катталары менен сиз да, досуңуз да саламдашуу бонустарын аласыздар.</string>
+    <string name="help_faq_q4">Топтолгон бонустарды эмнеге жумшасам болот?</string>
+    <string name="help_faq_a4">Бонустарды тиркеменин ичинде купондорго алмаштырса болот. Бул купондор өнөктөш мекемелерде арзандатуу берет.</string>
+    <string name="help_faq_q5">Мекемеде купонду кантип колдонсо болот?</string>
+    <string name="help_faq_a5">Керектүү купонду тандап, ага бонустарыңызды алмаштырыңыз жана заказды төлөөдөн мурун купон бар экранды мекеменин кызматкерине (официантка, кассирге, администраторго) көрсөтүңүз.</string>
+    <string name="help_faq_q6">Тиркеме акысызбы?</string>
+    <string name="help_faq_a6">Ооба, тиркеме колдонуучулар үчүн толугу менен акысыз. Бул жерде жашыруун жазылуулар же акы төлөнүүчү функциялар жок.</string>
+    <string name="help_faq_q7">Мекеме купонду кабыл алуудан баш тартса же САНдагы маалымат чындыкка дал келбесе эмне кылуу керек?</string>
+    <string name="help_faq_a7">Биз маалыматтардын актуалдуулугун көзөмөлдөйбүз, бирок мындай көйгөйгө туш болсоңуз — мекеменин аталышын көрсөтүп, «Колдоо» бөлүмүнө жазыңыз. Баарын тез чечебиз.</string>
+
+    <string name="support_intro">FAQ'дан жооп таппадыңызбы? Бизге жазыңыз — тез жардам беребиз.</string>
+    <string name="support_contact_us">Биз менен байланышуу</string>
+    <string name="support_telegram_bot">Telegram-бот</string>
+    <string name="support_telegram_sub">ЖИ-жардамчы — 24/7 жооп берет</string>
+    <string name="support_email_short">Email</string>
+    <string name="support_documents">Документтер</string>
+
+    <!-- Город (пока только Бишкек) -->
+    <string name="city_bishkek">Бишкек</string>
+</resources>

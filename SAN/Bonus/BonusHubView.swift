@@ -7,7 +7,7 @@ import AyantFeatures
 struct ShareURL: Identifiable { let id = UUID(); let url: URL; let title: String }
 
 /// «Бонусы» (SCREENS.md G6) — один дом для всех трёх валют лояльности:
-/// колода карт «Баллы САН», карта штампов и глобальные бонусы (нарочно
+/// карусель карт «Баллы САН» и штампов, и глобальные бонусы (нарочно
 /// подчинённые: их почти невозможно накопить, и это by design).
 struct BonusHubView: View {
     @EnvironmentObject private var bonus: BonusEngine
@@ -25,6 +25,7 @@ struct BonusHubView: View {
     @State private var pendingGift: Reward?
     @State private var giftShare: ShareURL?
     @State private var openedCard: VenuePointsCard?
+    @State private var openedStampCard: LoyaltyCard?
 
     /// Заведения по id — картам нужны градиент, категория и конфиг наград.
     private var venuesByID: [String: Venue] {
@@ -32,9 +33,17 @@ struct BonusHubView: View {
     }
 
     private var pointsCards: [VenuePointsCard] { points.state.sortedCards }
-    /// Самая «живая» карта штампов — та, где штампов больше.
-    private var stampCard: LoyaltyCard? {
-        loyalty.cards.filter { $0.stamps > 0 }.max { $0.stamps < $1.stamps } ?? loyalty.cards.first
+    /// Карты штампов, которым есть что показать: со штампами или заведения,
+    /// где штампы — действующая механика. Пустые карты заведений, которые
+    /// перешли на баллы, остаются в «Все карты», но карусель не засоряют.
+    private var stampCards: [LoyaltyCard] {
+        loyalty.cards.filter { card in
+            card.stamps > 0 || (venuesByID[card.venueID]?.stampsActive ?? false)
+        }
+    }
+    /// Порядок карусели: сначала баллы (главное), потом штампы.
+    private var walletPages: [WalletPage] {
+        pointsCards.map(WalletPage.points) + stampCards.map(WalletPage.stamps)
     }
 
     var body: some View {
@@ -47,20 +56,19 @@ struct BonusHubView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 headerRow
-                if !pointsCards.isEmpty {
-                    WalletDeck(cards: pointsCards, venues: venuesByID) { openedCard = $0 }
-                        .padding(.horizontal, -SanMetrics.screenPadding)
-                } else {
+                if walletPages.isEmpty {
                     emptyPointsCard
-                }
-                if let stampCard {
-                    section("Карта лояльности") {
-                        WalletStampCard(card: stampCard)
-                    }
+                } else {
+                    WalletCarousel(pages: walletPages, venues: venuesByID,
+                                   onOpenPoints: { openedCard = $0 },
+                                   onOpenStamps: { openedStampCard = $0 })
+                        // Карусель на всю ширину экрана — отступ возвращает
+                        // `contentMargins` внутри, чтобы следующая карта выглядывала.
+                        .padding(.horizontal, -SanMetrics.screenPadding)
                 }
                 // Глобальный кошелёк (награды, подарки, игры) выключен на
                 // релиз: он локальный и без записи в Firestore. Без него
-                // хаб — колода баллов, карта штампов и строка в купоны.
+                // хаб — карусель баллов и штампов и строка в купоны.
                 if ReleaseFlags.globalBonusWallet {
                     rewardsSection
                     gamesSection
@@ -76,11 +84,21 @@ struct BonusHubView: View {
         .sanScreenBackground()
         .sanStatusBarCap()
         .toolbar(.hidden, for: .navigationBar)
+        .task { if ReleaseFlags.globalBonusWallet { await coupons.loadRewards() } }
         .navigationDestination(item: $openedCard) { card in
             if let venue = venuesByID[card.venueID] {
                 VenuePointsScreen(venue: venue)
             } else {
                 VenuePointsListView()
+            }
+        }
+        // Карта штампов ведёт туда же, куда и баннер на странице заведения;
+        // если заведения нет в каталоге — в общий список карт.
+        .navigationDestination(item: $openedStampCard) { card in
+            if let venue = venuesByID[card.venueID] {
+                VenueLoyaltyScreen(venue: venue)
+            } else {
+                LoyaltyView()
             }
         }
     }
@@ -201,7 +219,7 @@ struct BonusHubView: View {
                 .sanCard(padding: 0, radius: SanRadius.card)
             }
             .buttonStyle(.sanPress(0.97))
-            // Колода показывает не все карты — ссылки на полные списки остаются.
+            // Карусель показывает не все карты штампов — ссылки на полные списки остаются.
             HStack(spacing: 10) {
                 listLink("Все баллы", "star.circle.fill") { VenuePointsListView() }
                 listLink("Все карты", "creditcard.fill") { LoyaltyView() }
@@ -223,17 +241,6 @@ struct BonusHubView: View {
         .sanCard(padding: 0, radius: SanRadius.hero)
     }
 
-    private func section<Content: View>(_ title: LocalizedStringKey,
-                                        @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(title)
-                .textCase(.uppercase)
-                .sanEyebrowText()
-                .foregroundStyle(Color(hex: 0x9A9188))
-            content()
-        }
-    }
-
     // MARK: Потратить бонусы
 
     private var rewardsSection: some View {
@@ -252,10 +259,19 @@ struct BonusHubView: View {
                 }
                 .buttonStyle(.sanPress(0.94))
             }
-            ForEach(Array(CouponStore.catalog.enumerated()), id: \.element.id) { index, reward in
-                rewardRow(reward).sanRise(index, stagger: 0.07, duration: 0.5)
+            if coupons.rewards.isEmpty {
+                // Партнёров ещё нет. Показывать награды без заведения нельзя:
+                // купон по такой награде сотрудник не погасит.
+                Text("Награды появятся, когда подключатся заведения-партнёры. Бонусы копятся — тратить их будет на что.")
+                    .font(.golos(13.5)).foregroundStyle(Color.sanInkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.vertical, 2)
+            } else {
+                ForEach(Array(coupons.rewards.enumerated()), id: \.element.id) { index, reward in
+                    rewardRow(reward).sanRise(index, stagger: 0.07, duration: 0.5)
+                }
             }
-            // Ссылки на полные списки остаются — колода показывает не все карты.
+            // Ссылки на полные списки остаются — карусель показывает не все карты штампов.
             HStack(spacing: 10) {
                 listLink("Все баллы", "star.circle.fill") { VenuePointsListView() }
                 listLink("Все карты", "creditcard.fill") { LoyaltyView() }
@@ -292,7 +308,13 @@ struct BonusHubView: View {
                 Text(L(reward.title)).font(.golos(14.5, .bold)).tracking(-0.2)
                     .foregroundStyle(Color.sanInk)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("\(reward.cost) бонусов").font(.golos(12.5)).foregroundStyle(Color.sanInkSoft)
+                // Где гасить — часть самой награды: без заведения купон
+                // некуда предъявить, и человек должен видеть куда идти.
+                Text(reward.venueName.isEmpty
+                     ? "\(reward.cost) бонусов"
+                     : "\(reward.cost) бонусов · \(reward.venueName)")
+                    .font(.golos(12.5)).foregroundStyle(Color.sanInkSoft)
+                    .lineLimit(1)
             }
             Spacer(minLength: 8)
             Menu {
@@ -321,6 +343,14 @@ struct BonusHubView: View {
             HStack(spacing: 10) {
                 SanSectionHeader("Играй и копи бонусы")
                 SanHairline().frame(maxWidth: .infinity)
+                // Дневной потолок — часть правил игры, а не сюрприз: без этой
+                // строки человек доходит до лимита и думает, что игра сломалась.
+                Text(bonus.remainingGameplayToday > 0
+                     ? "сегодня ещё \(bonus.remainingGameplayToday)"
+                     : "на сегодня всё")
+                    .font(.golos(11.5, .semibold))
+                    .foregroundStyle(Color.sanInkSoft)
+                    .fixedSize()
             }
             // Игры начисляют бонусы в кошелёк аккаунта, поэтому гостю закрыты —
             // иначе он «зарабатывает» в запись, которая исчезнет вместе с выходом.
@@ -342,7 +372,7 @@ struct BonusHubView: View {
         .padding(.top, 4)
     }
 
-    private func gameTile(emoji: String, title: String, subtitle: String,
+    private func gameTile(emoji: String, title: LocalizedStringKey, subtitle: LocalizedStringKey,
                           gradient: [Color]) -> some View {
         HStack(spacing: 12) {
             RoundedRectangle(cornerRadius: 14, style: .continuous)

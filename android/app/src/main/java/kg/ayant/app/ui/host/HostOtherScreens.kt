@@ -61,6 +61,8 @@ import kg.ayant.app.domain.HostIntent
 import kg.ayant.app.ui.vm.HostViewModel
 import kg.ayant.app.ui.vm.SessionViewModel
 import java.util.Date
+import kg.ayant.app.core.localizedTitle
+import kg.ayant.app.core.legalFormTitle
 
 // MARK: - Promote
 
@@ -117,13 +119,13 @@ private fun CampaignCard(c0: AdCampaign, host: HostViewModel) {
     Column(Modifier.fillMaxWidth().ayantCard(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(c0.kind.title, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = c.ink)
+                Text(c0.kind.localizedTitle(), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = c.ink)
                 Text(hostState.venue(c0.venueID)?.name ?: stringResource(R.string.venue_section), fontSize = 13.sp, color = c.inkSoft)
             }
             val col = if (status.isLive) c.open else c.inkSoft
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clip(RoundedCornerShape(50)).background(col.copy(alpha = 0.14f)).padding(horizontal = 9.dp, vertical = 5.dp)) {
                 Box(Modifier.size(6.dp).clip(CircleShape).background(col))
-                Text(" ${status.title}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = col)
+                Text(" ${status.localizedTitle()}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = col)
             }
         }
         val days = maxOf(1, ((Date().time - c0.startAt.time) / 86_400_000L).toInt())
@@ -205,7 +207,7 @@ private fun HostPromoteCreateDialog(host: HostViewModel, onDismiss: () -> Unit) 
                     spend = if (boost) price(duration) else 100,
                 )))
                 if (boost) host.send(HostIntent.BoostVenue(venueID, end)) else {
-                    val vname = hostState.venue(venueID)?.name ?: "заведение"
+                    val vname = hostState.venue(venueID)?.name ?: context.getString(R.string.venue_fallback_name)
                     host.send(HostIntent.LaunchPush(
                         headline = headline.ifBlank { vname },
                         body = body.ifBlank { context.getString(R.string.promote_push_default_body, vname) },
@@ -605,11 +607,11 @@ fun HostProfileScreen(host: HostViewModel, session: SessionViewModel, onExitHost
         }
         Row(Modifier.fillMaxWidth().ayantCard(padding = 16), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(64.dp).clip(RoundedCornerShape(18.dp)).background(c.accentGradient), contentAlignment = Alignment.Center) {
-                Text((p?.businessName ?: "Б").take(1).uppercase(), fontSize = 28.sp, fontWeight = FontWeight.Black, color = Color.White)
+                Text((p?.businessName?.ifEmpty { null } ?: stringResource(R.string.host_avatar_fallback)).take(1).uppercase(), fontSize = 28.sp, fontWeight = FontWeight.Black, color = Color.White)
             }
             Column(Modifier.padding(start = 14.dp)) {
                 Text(p?.businessName?.ifEmpty { stringResource(R.string.hprofile_your_business) } ?: stringResource(R.string.hprofile_your_business), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = c.ink)
-                Text(p?.verification?.title ?: stringResource(R.string.hprofile_unverified), fontSize = 13.sp, color = c.inkSoft)
+                Text(p?.verification?.localizedTitle() ?: stringResource(R.string.hprofile_unverified), fontSize = 13.sp, color = c.inkSoft)
             }
         }
 
@@ -692,10 +694,10 @@ private fun HostBusinessInfoDialog(host: HostViewModel, onDismiss: () -> Unit) {
                 OutlinedTextField(phone, { phone = it }, label = { Text(stringResource(R.string.venue_form_phone)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(email, { email = it }, label = { Text(stringResource(R.string.hprofile_email)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 Box {
-                    OutlinedField(stringResource(R.string.hprofile_legal_form), legalForm.ifEmpty { stringResource(R.string.hprofile_not_specified) }) { formMenu = true }
+                    OutlinedField(stringResource(R.string.hprofile_legal_form), legalFormTitle(legalForm)) { formMenu = true }
                     androidx.compose.material3.DropdownMenu(expanded = formMenu, onDismissRequest = { formMenu = false }) {
                         listOf("", "ИП", "ООО", "Самозанятый").forEach { f ->
-                            androidx.compose.material3.DropdownMenuItem(text = { Text(f.ifEmpty { stringResource(R.string.hprofile_not_specified) }) }, onClick = { legalForm = f; formMenu = false })
+                            androidx.compose.material3.DropdownMenuItem(text = { Text(legalFormTitle(f)) }, onClick = { legalForm = f; formMenu = false })
                         }
                     }
                 }

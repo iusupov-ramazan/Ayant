@@ -32,7 +32,8 @@ class BonusViewModel @JvmOverloads constructor(
     val goalSeconds = 30 * 60
     val rewardPerGoal = 1
     private val dailyGoalCap = 4
-    private val dailyGameplayCap = 3
+    /** Не больше 3 бонусов в день с мини-игр — экраны игр показывают потолок в правилах. */
+    val dailyGameplayCap = 3
     private val idleTimeoutMs = 25_000L
 
     // Кошелёк и прогресс — StateFlow: без Compose-состояния во ViewModel (§4 спеки).

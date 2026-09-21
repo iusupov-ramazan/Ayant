@@ -11,7 +11,10 @@ public final class HostStore: ObservableObject {
 
     private weak var appStore: AppStore?
     private let repo: HostRepository
+    private let instagram: InstagramService
     private let clock: Clock
+    /// Слушатели подключения инстаграма — по одному на заведение.
+    private var igConnectionTasks: [String: Task<Void, Never>] = [:]
 
     /// ВНИМАНИЕ: ключи читают уже установленные приложения. Переименование =
     /// потеря кабинета хоста (заведения, акции, профиль) на устройстве.
@@ -47,8 +50,9 @@ public final class HostStore: ObservableObject {
         get { state.ownerID } set { state.ownerID = newValue }
     }
 
-    public init(repo: HostRepository, clock: Clock = SystemClock()) {
+    public init(repo: HostRepository, instagram: InstagramService, clock: Clock = SystemClock()) {
         self.repo = repo
+        self.instagram = instagram
         self.clock = clock
         profile = decode(Key.profile)
         venueDTOs = decodeList(Key.venues)
@@ -93,7 +97,113 @@ public final class HostStore: ObservableObject {
         case .launchPush(let headline, let body, let venueID, let dealID):
             launchPush(headline: headline, body: body, venueID: venueID, dealID: dealID)
         case .cancelCampaign(let id):        cancelCampaign(id: id)
+        case .noteScanSucceeded:             state.scansCompleted += 1
+
+        case .connectInstagram(let venueID):     connectInstagram(venueID: venueID)
+        case .instagramConnected(let venueID):   instagramConnected(venueID: venueID)
+        case .syncInstagram(let venueID):        Task { await syncInstagram(venueID: venueID) }
+        case .importInstagramPost(let venueID, let postID):
+            Task { await importInstagramPost(venueID: venueID, postID: postID) }
+        case .disconnectInstagram(let venueID):  disconnectInstagram(venueID: venueID)
         }
+    }
+
+    // MARK: - Instagram
+
+    /// Результат импорта поста — его забирает форма акции. Заполняется
+    /// `importInstagramPost` и обнуляется, когда форма его прочитала.
+    @Published public private(set) var pendingImport: InstagramImport?
+
+    public func consumeImport() -> InstagramImport? {
+        defer { pendingImport = nil }
+        return pendingImport
+    }
+
+    private func updateIG(_ venueID: String, _ change: (inout InstagramVenueState) -> Void) {
+        var ig = state.instagram[venueID] ?? InstagramVenueState()
+        change(&ig)
+        state.instagram[venueID] = ig
+    }
+
+    /// Открывает слушателя подключения. Зовётся при открытии экрана заведения;
+    /// повторный вызов ничего не делает — задача уже висит.
+    public func observeInstagram(venueID: String) {
+        // `isCancelled == false` мало: поток мог ЗАВЕРШИТЬСЯ сам (пустой ownerID
+        // — подписка сразу закрывается), а запись в словаре осталась бы и
+        // навсегда заблокировала повторную подписку. Экран тогда молча висит в
+        // состоянии «не подключено», хотя аккаунт подключён. Поэтому задача
+        // вычищает себя сама, а живой считается только незавершённая.
+        if let existing = igConnectionTasks[venueID], !existing.isCancelled { return }
+        guard !ownerID.isEmpty else { return }   // до входа подписываться не на что
+        let owner = ownerID
+        igConnectionTasks[venueID] = Task { [weak self, instagram] in
+            for await connection in instagram.connection(ownerID: owner, venueID: venueID) {
+                guard let self, !Task.isCancelled else { return }
+                self.updateIG(venueID) { $0.connection = connection }
+            }
+            self?.igConnectionTasks[venueID] = nil
+        }
+    }
+
+    public func stopObservingInstagram(venueID: String) {
+        igConnectionTasks.removeValue(forKey: venueID)?.cancel()
+    }
+
+    private func connectInstagram(venueID: String) {
+        updateIG(venueID) { $0.sync = .syncing }
+        Task { [weak self, instagram] in
+            do {
+                let url = try await instagram.authURL(venueID: venueID)
+                self?.updateIG(venueID) { $0.authURL = url; $0.sync = .idle }
+            } catch {
+                self?.updateIG(venueID) { $0.sync = .failed(Self.appError(from: error)) }
+            }
+        }
+    }
+
+    /// Вернулись из браузера: гасим ссылку и сразу тянем посты — хост нажал
+    /// «подключить» ради них, отдельная кнопка после входа была бы лишним шагом.
+    private func instagramConnected(venueID: String) {
+        updateIG(venueID) { $0.authURL = nil }
+        observeInstagram(venueID: venueID)
+        Task { await syncInstagram(venueID: venueID) }
+    }
+
+    private func syncInstagram(venueID: String) async {
+        updateIG(venueID) { $0.sync = .syncing }
+        do {
+            let posts = try await instagram.media(venueID: venueID, limit: 25)
+            // Сервер отдал посты — значит аккаунт подключён, что бы ни думал
+            // слушатель. Он может отставать или не доехать вовсе (правила,
+            // офлайн), и тогда экран прятал бы уже загруженные посты за
+            // «Подключить Instagram». Данные важнее метаданных о них.
+            updateIG(venueID) {
+                $0.posts = posts
+                $0.sync = .idle
+                if $0.connection == nil {
+                    $0.connection = InstagramConnection(username: "", connectedAt: clock.now)
+                }
+            }
+        } catch {
+            // Уже показанные посты не стираем — ошибка это фаза поверх них.
+            updateIG(venueID) { $0.sync = .failed(Self.appError(from: error)) }
+        }
+    }
+
+    private func importInstagramPost(venueID: String, postID: String) async {
+        updateIG(venueID) { $0.importing = postID }
+        do {
+            let result = try await instagram.importPost(venueID: venueID, postID: postID)
+            pendingImport = result
+            updateIG(venueID) { $0.importing = nil; $0.sync = .idle }
+        } catch {
+            updateIG(venueID) { $0.importing = nil; $0.sync = .failed(Self.appError(from: error)) }
+        }
+    }
+
+    private func disconnectInstagram(venueID: String) {
+        updateIG(venueID) { $0 = InstagramVenueState() }
+        Task { [instagram] in try? await instagram.disconnect(venueID: venueID) }
     }
 
 
@@ -115,6 +225,10 @@ public final class HostStore: ObservableObject {
         let newOwner = id ?? ""
         guard newOwner != ownerID else { return }
         ownerID = newOwner
+        for (_, task) in igConnectionTasks { task.cancel() }
+        igConnectionTasks.removeAll()
+        state.instagram.removeAll()
+        pendingImport = nil
         reloadFromCache()
     }
 

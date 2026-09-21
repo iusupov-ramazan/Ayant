@@ -201,7 +201,7 @@ enum WalletService {
         guard let url = comps.url else { return }
         // Эндпоинт требует Firebase ID-токен (карту можно сгенерировать только на
         // свой userID) — прикладываем Authorization перед запросом.
-        fetchPass(url, addTo: onError, notReady: "Apple Wallet скоро — карта ещё настраивается на сервере.")
+        fetchPass(url, addTo: onError, notReady: LS("Apple Wallet скоро — карта ещё настраивается на сервере."))
     }
 
     /// Общий загрузчик .pkpass: тянет ID-токен, шлёт авторизованный запрос и
@@ -209,7 +209,7 @@ enum WalletService {
     private static func fetchPass(_ url: URL, addTo onError: @escaping (String) -> Void, notReady: String) {
         Task {
             guard let token = await AppConfig.makeAuthService().idToken(), !token.isEmpty else {
-                await MainActor.run { onError("Войдите, чтобы добавить в Apple Wallet.") }
+                await MainActor.run { onError(LS("Войдите, чтобы добавить в Apple Wallet.")) }
                 return
             }
             var req = URLRequest(url: url)
@@ -238,7 +238,7 @@ enum WalletService {
             .init(name: "venue", value: coupon.venueName),
         ]
         guard let url = comps.url else { return }
-        fetchPass(url, addTo: onError, notReady: "Apple Wallet скоро — купоны ещё настраиваются на сервере.")
+        fetchPass(url, addTo: onError, notReady: LS("Apple Wallet скоро — купоны ещё настраиваются на сервере."))
     }
 
     static func topVC() -> UIViewController? {

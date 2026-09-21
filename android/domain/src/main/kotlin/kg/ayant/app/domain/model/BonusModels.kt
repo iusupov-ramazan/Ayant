@@ -8,7 +8,33 @@ data class Reward(
     val title: String,
     val cost: Int,
     val emoji: String,
-)
+    /**
+     * Заведение-партнёр, которое гасит награду.
+     *
+     * Без него награда бесполезна: `scanCoupon` сверяет `coupon.venueID` с
+     * заведением сканера и отвечает `wrong_venue`. Поэтому награды без
+     * партнёра не показываются (см. [isRedeemable]).
+     */
+    val venueID: String = "",
+    val venueName: String = "",
+) {
+    /** Награду можно предъявить в заведении. Без партнёра — нельзя. */
+    val isRedeemable: Boolean get() = venueID.isNotEmpty()
+}
+
+/**
+ * Встроенный список наград — ШАБЛОН, а не то, что видит пользователь:
+ * у наград здесь нет партнёра. Реальный каталог приходит из
+ * `config/globalRewards`. Зеркалит `CouponCatalog`.
+ */
+object CouponCatalog {
+    val builtIn = listOf(
+        Reward("disc10", "−10% к любой акции", 100, "🏷️"),
+        Reward("coffee", "Бесплатный кофе у партнёра", 300, "☕️"),
+        Reward("dessert", "Десерт в подарок", 400, "🍰"),
+        Reward("vip", "VIP-доступ к новинкам", 500, "⭐️"),
+    )
+}
 
 /** Coupon earned/claimed by the user (shown to staff). Mirrors Coupon. */
 data class Coupon(
@@ -33,6 +59,22 @@ data class LoyaltyCard(
     val completedRounds: Int = 0,
     val goal: Int = 6,
     val reward: String = "Награда за лояльность",
+)
+
+/**
+ * Штамп (или собранный круг), который гость ещё не видел. Живёт в состоянии
+ * `LoyaltyViewModel.pendingStamp`, пока экран «Начислено» не закрыт.
+ * Mirrors `LoyaltyStampEvent` in BonusModels.swift.
+ */
+data class LoyaltyStampEvent(
+    val id: String,
+    val venueID: String,
+    val venueName: String,
+    /** Штампов на карте после скана (0 — круг только что собран). */
+    val stamps: Int,
+    val goal: Int,
+    val rewardIssued: Boolean,
+    val reward: String,
 )
 
 /** САН points card (per venue). Mirrors VenuePointsCard. */

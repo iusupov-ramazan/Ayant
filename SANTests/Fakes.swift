@@ -143,3 +143,87 @@ final class FakeHostRepository: HostRepository {
     func queuePushCampaign(headline: String, body: String, city: String,
                            category: String?, venueID: String, dealID: String?, ownerID: String) async throws {}
 }
+
+/// Баллы САН: карты и журнал из памяти, списание — локально.
+@MainActor
+final class FakePointsRepository: PointsRepository {
+    var cards: [VenuePointsCard] = []
+    var ledger: [String: [PointsLedgerEntry]] = [:]
+    var ledgerError: AppError?
+    var redeemError: AppError?
+    var ledgerRequests = 0
+
+    /// Живой поток: тест «присылает» новые снимки через `emit`, как это делал бы
+    /// snapshot-листенер Firestore после скана сотрудником.
+    private var continuation: AsyncStream<Result<[VenuePointsCard], AppError>>.Continuation?
+
+    nonisolated func cards(userID: String) -> AsyncStream<Result<[VenuePointsCard], AppError>> {
+        AsyncStream { continuation in
+            Task { @MainActor in
+                self.continuation = continuation
+                continuation.yield(.success(userID.isEmpty ? [] : self.cards))
+            }
+        }
+    }
+
+    func emit(_ cards: [VenuePointsCard]) {
+        self.cards = cards
+        continuation?.yield(.success(cards))
+    }
+
+    func redeem(venueID: String, userID: String, rewardID: String,
+                pointsToSpend: Int, idempotencyKey: String) async -> Result<RedeemReceipt, AppError> {
+        if let redeemError { return .failure(redeemError) }
+        return .success(RedeemReceipt(redeemed: max(pointsToSpend, 1), balance: 0, rewardTitle: "Тест"))
+    }
+
+    func ledger(userID: String, venueID: String, limit: Int) async -> Result<[PointsLedgerEntry], AppError> {
+        ledgerRequests += 1
+        if let ledgerError { return .failure(ledgerError) }
+        return .success(Array((ledger[venueID] ?? []).prefix(limit)))
+    }
+}
+
+/// Instagram заведения: программируемый дубль.
+///
+/// Посты задаются тестом, ошибки — через `failure`. Счётчики вызовов нужны,
+/// чтобы проверять то, чего не видно в состоянии: например, что при
+/// отключённом аккаунте в сеть вообще не ходили.
+final class FakeInstagramService: InstagramService {
+    var posts: [InstagramPost] = []
+    var connectionValue: InstagramConnection?
+    var failure: AppError?
+    private(set) var mediaCalls = 0
+    private(set) var importedPosts: [String] = []
+    private(set) var disconnected: [String] = []
+
+    func authURL(venueID: String) async throws -> URL {
+        if let failure { throw failure }
+        return URL(string: "https://instagram.test/authorize?venue=\(venueID)")!
+    }
+
+    func media(venueID: String, limit: Int) async throws -> [InstagramPost] {
+        mediaCalls += 1
+        if let failure { throw failure }
+        return posts
+    }
+
+    func importPost(venueID: String, postID: String) async throws -> InstagramImport {
+        importedPosts.append(postID)
+        if let failure { throw failure }
+        guard let post = posts.first(where: { $0.id == postID }) else { throw AppError.notFound }
+        return InstagramImport(postID: post.id,
+                               imageURLs: ["https://cdn.ayant.test/\(post.id).jpg"],
+                               caption: post.caption, permalink: post.permalink)
+    }
+
+    func disconnect(venueID: String) async throws { disconnected.append(venueID) }
+
+    func connection(ownerID: String, venueID: String) -> AsyncStream<InstagramConnection?> {
+        let value = connectionValue
+        return AsyncStream { continuation in
+            continuation.yield(value)
+            continuation.finish()
+        }
+    }
+}

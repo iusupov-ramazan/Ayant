@@ -14,6 +14,12 @@ public final class SessionStore: ObservableObject {
     /// Не-ошибка, о которой всё же надо сказать («письмо отправлено»).
     /// Отдельный канал: `errorMessage` показывается с заголовком «Ошибка».
     @Published public var infoMessage: String?
+    /// Адрес, на который ушло письмо для сброса пароля — UI собирает из него
+    /// локализованную фразу сам (пакет каталога переводов не видит).
+    /// Сбрасывается вместе с `infoMessage`.
+    @Published public var passwordResetSentTo: String? {
+        didSet { if passwordResetSentTo == nil, infoMessage != nil { infoMessage = nil } }
+    }
 
     private let service: AuthService
     private var currentNonce: String?
@@ -71,6 +77,9 @@ public final class SessionStore: ObservableObject {
         let clean = AuthValidation.normalizedEmail(email)
         perform {
             try await self.service.sendPasswordReset(email: clean)
+            // Пакет не знает про каталог переводов приложения: отдаём адрес
+            // отдельно, чтобы UI собрал локализованную фразу сам.
+            self.passwordResetSentTo = clean
             self.infoMessage = "Письмо для сброса пароля отправлено на \(clean)"
         }
     }

@@ -20,6 +20,8 @@ enum Direction {
 
 struct SnakeGameView: View {
     @EnvironmentObject private var bonus: BonusEngine
+    /// Текст водяного знака берётся из настроек панели (`AppStore.settings`).
+    @EnvironmentObject private var store: AppStore
     @StateObject private var bridge = SnakeBridge()
     @Environment(\.dismiss) private var dismiss
     /// Сколько бонусов РЕАЛЬНО начислил `BonusEngine` за последнюю партию —
@@ -32,7 +34,9 @@ struct SnakeGameView: View {
                 header
 
                 GeometryReader { geo in
-                    SpriteView(scene: bridge.makeScene(size: geo.size), options: [.allowsTransparency])
+                    SpriteView(scene: bridge.makeScene(size: geo.size,
+                                                       watermark: store.settings.adPlaceholderText),
+                               options: [.allowsTransparency])
                 }
                 .aspectRatio(15.0 / 20.0, contentMode: .fit)
                 .overlay { if bridge.isOver { gameOverOverlay } }
@@ -97,10 +101,12 @@ final class SnakeBridge: ObservableObject {
 
     private var scene: SnakeScene?
 
-    func makeScene(size: CGSize) -> SnakeScene {
-        if let scene { return scene }
+    func makeScene(size: CGSize, watermark: String) -> SnakeScene {
+        // Настройки могут приехать после первого кадра — обновляем текст на живой сцене.
+        if let scene { scene.watermarkText = watermark; return scene }
         let s = SnakeScene(size: size)
         s.scaleMode = .resizeFill
+        s.watermarkText = watermark
         s.onScoreChange = { [weak self] in self?.score = $0 }
         s.onGameOver = { [weak self] final in
             self?.finalScore = final
@@ -122,5 +128,6 @@ final class SnakeBridge: ObservableObject {
 #Preview {
     NavigationStack { SnakeGameView() }
         .environmentObject(AyantStores.bonus())
+        .environmentObject(AyantStores.app())
         .tint(.sanAccent)
 }

@@ -17,6 +17,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import kg.ayant.app.R
+import kg.ayant.app.core.ReleaseFlags
 import kg.ayant.app.ui.theme.AyantMetrics
 import kg.ayant.app.ui.theme.AyantTheme
 
@@ -35,7 +36,19 @@ enum class GuestTab(val route: String, val labelRes: Int, val icon: ImageVector)
     Search("search", R.string.tab_search, Icons.Filled.Search),
     Qr("myqr", R.string.title_my_qr, Icons.Filled.QrCode),
     Wallet("bonus", R.string.tab_wallet, Icons.Filled.CreditCard),
-    Profile("profile", R.string.tab_profile, Icons.Filled.Person),
+    Profile("profile", R.string.tab_profile, Icons.Filled.Person);
+
+    /**
+     * Показана ли вкладка на панели. «Поиск» спрятан флагом релиза
+     * (`ReleaseFlags.SEARCH_TAB`) — кейс остаётся, чтобы включить обратно одним
+     * флагом, как `GuestTab.search` на iOS.
+     */
+    val isVisible: Boolean get() = this != Search || ReleaseFlags.SEARCH_TAB
+
+    companion object {
+        /** Вкладки на панели, в порядке показа. */
+        val visible: List<GuestTab> get() = entries.filter { it.isVisible }
+    }
 }
 
 @Composable
@@ -45,7 +58,7 @@ fun AyantTabBar(
 ) {
     val c = AyantTheme.colors
     NavigationBar(containerColor = c.canvas) {
-        GuestTab.entries.forEach { tab ->
+        GuestTab.visible.forEach { tab ->
             val label = stringResource(tab.labelRes)
             NavigationBarItem(
                 selected = currentRoute == tab.route,

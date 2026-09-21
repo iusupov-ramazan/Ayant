@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="home_rail_venues">Мекемелер</string>
+    <string name="home_rail_all_count">Баары · %1$d</string>
+    <string name="home_all_venues">Бардык мекемелер</string>
+    <string name="home_all_venues_a11y">Бардык мекемелер, %1$d</string>
+    <string name="home_empty_cat_body_fmt">%2$s шаарында «%1$s» категориясында азырынча акциялар жок.</string>
+    <string name="home_reset_filter">Чыпканы алып салуу</string>
+
+    <plurals name="venues_count">
+        <item quantity="one">%1$d мекеме</item>
+        <item quantity="other">%1$d мекеме</item>
+    </plurals>
+    <string name="all_venues_search_hint">Аталышы, категориясы же району</string>
+    <string name="all_venues_clear_search">Издөөнү тазалоо</string>
+    <string name="all_venues_sort_rating">Рейтинг боюнча</string>
+    <string name="all_venues_sort_near">Жакыныраак</string>
+    <string name="all_venues_empty_search_body">Башка аталышты, категорияны же районду издеп көрүңүз.</string>
+    <string name="all_venues_empty_cat_title">Бул категорияда мекемелер жок</string>
+    <string name="all_venues_empty_cat_body">%2$s шаарында «%1$s» категориясында азырынча мекемелер жок.</string>
+
+    <string name="search_sort_best">Алгач эң мыктылары</string>
+    <string name="search_sort_near">Алгач жакындары</string>
+    <string name="search_sort_rating">Алгач рейтинги жогорулары</string>
+    <string name="search_sort_discount">Алгач чоң арзандатуулары</string>
+    <string name="search_sort_chip_best">Мыктылары</string>
+    <string name="search_sort_chip_near">Жакындары</string>
+    <string name="search_sort_chip_rating">Рейтинг</string>
+    <string name="search_sort_chip_discount">Арзандатуу</string>
+    <string name="search_chip_category">Категория</string>
+    <string name="search_all_filters">Бардык чыпкалар</string>
+    <string name="search_load_more_pins">Дагы %1$d көрсөтүү</string>
+    <string name="search_show_list">Тизмени көрсөтүү</string>
+    <string name="search_sheet_handle">Тизменин өлчөмү</string>
+    <string name="search_cluster_title">Бул жердеги мекемелер</string>
+</resources>

@@ -1,5 +1,6 @@
 package kg.ayant.app.ui.auth
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.AlertDialog
@@ -11,8 +12,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import kg.ayant.app.R
 import kg.ayant.app.ui.vm.SessionViewModel
 
 /**
@@ -22,13 +25,17 @@ import kg.ayant.app.ui.vm.SessionViewModel
  * ([GuestAuthSheet]), и после входа корень пересобирается под новый аккаунт.
  */
 object GuestGate {
-    const val SAVE_VENUE = "Гостям доступен только просмотр. Войдите, чтобы сохранять места."
-    const val SAVE_DEAL = "Гостям доступен только просмотр. Войдите, чтобы сохранять предложения."
-    const val LIKE = "Войдите, чтобы отмечать предложения — они переедут с вами на другое устройство."
-    const val QR = "Личный QR привязан к аккаунту: по нему заведение начисляет баллы. Войдите или создайте аккаунт."
-    const val BONUSES = "Баллы, купоны и карты лояльности копятся в аккаунте. Войдите или создайте аккаунт."
-    const val GAME = "Награды за игру начисляются в аккаунт. Войдите или создайте аккаунт."
-    const val REVIEW = "Отзывы привязаны к аккаунту. Войдите или создайте аккаунт, чтобы оценивать блюда и услуги."
+    // Ресурсы, а не строки: текст берётся из каталога на языке приложения.
+    @StringRes val SAVE_VENUE = R.string.guest_save_venue
+    @StringRes val SAVE_DEAL = R.string.guest_save_deal
+    @StringRes val LIKE = R.string.guest_like
+    @StringRes val QR = R.string.guest_qr
+    @StringRes val BONUSES = R.string.guest_bonuses
+    @StringRes val GAME = R.string.guest_game
+    @StringRes val COUPON = R.string.guest_coupon
+    @StringRes val REVIEW = R.string.guest_review
+    /** «Режим заведения» в профиле: одна фраза про всё, что закрыто гостю. */
+    @StringRes val PROFILE_HOST = R.string.guest_profile_host
 }
 
 /**
@@ -38,7 +45,7 @@ object GuestGate {
  * входа и терял место, где стоял. Теперь показываем [GuestAuthSheet].
  */
 @Composable
-fun GuestAlert(session: SessionViewModel, message: String, onDismiss: () -> Unit) {
+fun GuestAlert(session: SessionViewModel, @StringRes message: Int, onDismiss: () -> Unit) {
     var showAuth by remember { mutableStateOf(false) }
 
     if (showAuth) {
@@ -48,11 +55,11 @@ fun GuestAlert(session: SessionViewModel, message: String, onDismiss: () -> Unit
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            TextButton(onClick = { showAuth = true }) { Text("Войти или создать аккаунт") }
+            TextButton(onClick = { showAuth = true }) { Text(stringResource(R.string.guest_sign_in_or_create)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Не сейчас") } },
-        title = { Text("Нужен аккаунт") },
-        text = { Text(message) },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.onb_not_now)) } },
+        title = { Text(stringResource(R.string.guest_need_account)) },
+        text = { Text(stringResource(message)) },
     )
 }
 

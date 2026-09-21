@@ -9,6 +9,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,6 +27,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.RateReview
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -36,27 +38,39 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kg.ayant.app.R
 import kg.ayant.app.ui.theme.AyantMotion
 import kg.ayant.app.ui.theme.AyantTheme
+import kg.ayant.app.ui.theme.ayantRise
 import kg.ayant.app.ui.theme.ayantScreenEnter
 import kg.ayant.app.ui.theme.rememberReduceMotion
 import kotlin.math.roundToInt
 
 /**
- * «Начисление» (SCREENS.md G5). Mirrors `PointsEarnedView.swift`.
+ * «Начисление» (SCREENS.md G5) — момент, ради которого гость сканирует снова.
+ * Mirrors `PointsEarnedView.swift`.
  *
- * IMPORTANT: no number here is computed on the client. The screen appears when
- * the `venuePoints` snapshot listener delivers a new balance, and the counter
- * animates *to* whatever the server (`scanCoupon`) wrote.
+ * ВАЖНО: ни одно число здесь не считается на клиенте. Экран показывается, когда
+ * snapshot-листенер принёс новый баланс, и анимирует счётчик *к* тому
+ * значению, которое записал сервер (`scanCoupon`).
  */
+
+/** Что именно начислили: баллы или штамп. Экран один — язык у обоих один. */
+sealed interface EarnedContent {
+    data class Points(val delta: Int, val newBalance: Int) : EarnedContent
+    data class Stamp(val stamps: Int, val goal: Int, val rewardIssued: Boolean, val reward: String) : EarnedContent
+}
+
+/** Совместимость: начисление баллов. */
 @Composable
 fun PointsEarnedScreen(
     delta: Int,
@@ -64,9 +78,54 @@ fun PointsEarnedScreen(
     venueSubtitle: String,
     newBalance: Int,
     onDone: () -> Unit,
+    onReview: (() -> Unit)? = null,
+) = PointsEarnedScreen(
+    content = EarnedContent.Points(delta = delta, newBalance = newBalance),
+    venueName = venueName, venueSubtitle = venueSubtitle, onDone = onDone, onReview = onReview,
+)
+
+/**
+ * @param onReview «Оставить отзыв» — только когда у гостя ещё нет отзыва об
+ *   этом заведении (`null` — кнопки нет).
+ */
+@Composable
+fun PointsEarnedScreen(
+    content: EarnedContent,
+    venueName: String,
+    venueSubtitle: String,
+    onDone: () -> Unit,
+    onReview: (() -> Unit)? = null,
 ) {
     val c = AyantTheme.colors
     val reduceMotion = rememberReduceMotion()
+
+    val delta = when (content) {
+        is EarnedContent.Points -> content.delta
+        is EarnedContent.Stamp -> 1
+    }
+    val newBalance = when (content) {
+        is EarnedContent.Points -> content.newBalance
+        is EarnedContent.Stamp -> content.stamps
+    }
+    val headline = when (content) {
+        is EarnedContent.Points -> stringResource(R.string.host_points_awarded)
+        is EarnedContent.Stamp ->
+            if (content.rewardIssued) stringResource(R.string.earned_card_full)
+            else stringResource(R.string.earned_stamp_headline)
+    }
+    val footnote = when (content) {
+        is EarnedContent.Points -> stringResource(R.string.points_earned_note)
+        is EarnedContent.Stamp ->
+            if (content.rewardIssued) stringResource(R.string.earned_stamp_footnote_issued, content.reward)
+            else stringResource(
+                R.string.earned_stamp_footnote_left,
+                pluralStringResource(R.plurals.stamps_count, content.goal, content.goal), content.reward,
+            )
+    }
+    val balanceLabel = when (content) {
+        is EarnedContent.Points -> stringResource(R.string.points_new_balance)
+        is EarnedContent.Stamp -> stringResource(R.string.earned_stamps_of, content.goal)
+    }
 
     val disc = remember { Animatable(if (reduceMotion) 1f else 0f) }
     val counter = remember { Animatable(if (reduceMotion) 1f else 0f) }
@@ -76,7 +135,7 @@ fun PointsEarnedScreen(
     }
     LaunchedEffect(Unit) {
         if (reduceMotion) return@LaunchedEffect
-        // Ease-out cubic over 1 s (ANIMATIONS.md §9).
+        // Счётчик — ease-out cubic, 1 с (ANIMATIONS.md §9).
         counter.animateTo(1f, tween(1000, easing = CubicBezierEasing(0.33f, 1f, 0.68f, 1f)))
     }
     val shownDelta = (delta * counter.value).roundToInt()
@@ -96,40 +155,37 @@ fun PointsEarnedScreen(
                 "+$shownDelta",
                 fontSize = 70.sp, fontWeight = FontWeight.Black,
                 letterSpacing = (-3.6).sp, lineHeight = 70.sp,
-                // Gradient-masked text: the brush paints the glyphs.
+                // Градиентный текст: кисть красит глифы.
                 style = androidx.compose.ui.text.TextStyle(brush = c.accentGradient),
             )
             Spacer(Modifier.height(12.dp))
-            Text(
-                "Баллы начислены", fontSize = 24.sp, fontWeight = FontWeight.Black,
-                letterSpacing = (-1).sp, color = c.ink,
-            )
+            Text(headline, fontSize = 24.sp, fontWeight = FontWeight.Black, letterSpacing = (-1).sp, color = c.ink)
             Spacer(Modifier.height(8.dp))
             Text("$venueName · $venueSubtitle", fontSize = 14.5.sp, color = c.inkSoft)
 
             Spacer(Modifier.height(26.dp))
+            // Новый баланс
             Row(
                 Modifier
                     .widthIn(max = 300.dp)
                     .fillMaxWidth()
+                    .ayantRise(3, staggerMs = 90, durationMs = 600)
                     .clip(RoundedCornerShape(24.dp))
                     .background(c.surface)
+                    .border(0.5.dp, c.hairline, RoundedCornerShape(24.dp))
                     .padding(horizontal = 20.dp, vertical = 18.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("Новый баланс", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = c.inkSoft)
+                Text(balanceLabel, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = c.inkSoft)
                 Spacer(Modifier.weight(1f))
-                Text(
-                    "$shownBalance", fontSize = 24.sp, fontWeight = FontWeight.Black,
-                    letterSpacing = (-0.9).sp, color = c.ink,
-                )
+                Text("$shownBalance", fontSize = 24.sp, fontWeight = FontWeight.Black, letterSpacing = (-0.9).sp, color = c.ink)
             }
 
             Spacer(Modifier.height(14.dp))
             Text(
-                "Баллы копятся у этого заведения и тратятся у него же.",
-                fontSize = 13.sp, color = Color(0xFF9A9188),
-                textAlign = TextAlign.Center, modifier = Modifier.widthIn(max = 280.dp),
+                footnote, fontSize = 13.sp, color = Color(0xFF9A9188),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.widthIn(max = 280.dp).ayantRise(4, staggerMs = 90, durationMs = 600),
             )
 
             Spacer(Modifier.height(26.dp))
@@ -137,17 +193,39 @@ fun PointsEarnedScreen(
                 Modifier
                     .widthIn(max = 300.dp)
                     .fillMaxWidth()
+                    .ayantRise(5, staggerMs = 90, durationMs = 600)
                     .clip(RoundedCornerShape(19.dp))
                     .background(c.accentGradient)
                     .clickable(onClick = onDone)
                     .padding(vertical = 17.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text("Отлично", fontSize = 16.5.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Text(stringResource(R.string.action_great), fontSize = 16.5.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            }
+
+            // Момент, когда гость доволен, — лучший для отзыва: он только что
+            // побывал в заведении и получил за это награду.
+            if (onReview != null) {
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    Modifier
+                        .ayantRise(6, staggerMs = 90, durationMs = 600)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(c.accent.copy(alpha = 0.12f))
+                        .clickable(onClick = onReview)
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Icon(Icons.Filled.RateReview, null, tint = c.accentText, modifier = Modifier.size(16.dp))
+                    Text(stringResource(R.string.earned_review), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = c.accentText)
+                }
             }
         }
     }
 }
+
+// MARK: Кольца + галочка
 
 @Composable
 private fun Burst(discProgress: Float, reduceMotion: Boolean) {
@@ -199,7 +277,9 @@ private fun Ring(color: Color, delayMs: Int) {
     )
 }
 
-/** 14 particles, 45 ms stagger, falling 220dp while rotating 320°. */
+// MARK: Конфетти
+
+/** 14 частиц, шаг 45 мс, падают на 220dp с поворотом на 320°. */
 @Composable
 private fun Confetti() {
     val colors = listOf(

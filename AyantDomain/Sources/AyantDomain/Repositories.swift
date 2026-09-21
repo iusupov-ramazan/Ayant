@@ -32,6 +32,9 @@ public protocol DataRepository {
     func deleteReview(id: String) async throws
     /// Ответ владельца — обновляет поле hostReply в документе отзыва.
     func updateReviewReply(reviewID: String, reply: HostReply?) async throws
+    /// Жалоба на отзыв (Guidelines 1.2). Идемпотентна: повторная жалоба того же
+    /// человека перезаписывает свою же запись — см. `ReviewReport.id`.
+    func reportReview(_ report: ReviewReport) async throws
     /// Погашение купона (серверный счётчик + анти-абуз). Детерминированный id.
     func logRedemption(userID: String, dealID: String, venueID: String) async throws
     /// Запись реферала: пригласивший → приглашённый.
@@ -48,12 +51,15 @@ public protocol DataRepository {
     /// Опубликованные веса ранжирования (config/rankingWeights). nil → дефолты
     /// `RankingWeights`. Ключи — как у тренера (W_RATING, …). См. ml/README.md.
     func fetchRankingWeights() async throws -> [String: Double]?
+    /// Глобальные настройки из панели (config/appSettings). nil → `AppSettings.default`.
+    func fetchAppSettings() async throws -> AppSettings?
 }
 
 /// Дефолт: веса не опубликованы (стабы/старые реализации остаются на `.default`).
 /// Только `FirebaseDataRepository` реально читает config/rankingWeights.
 extension DataRepository {
     public func fetchRankingWeights() async throws -> [String: Double]? { nil }
+    public func fetchAppSettings() async throws -> AppSettings? { nil }
 }
 
 /// Данные забранного подарочного купона.

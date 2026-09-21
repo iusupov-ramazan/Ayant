@@ -39,6 +39,58 @@ public final class PointsStore: ObservableObject {
         case .redeem(let venueID, let rewardID, let points):
             redeem(venueID: venueID, rewardID: rewardID, pointsToSpend: points)
         case .dismissRedeem:         state.redeem = .idle
+        case .loadHistory(let venueID): loadHistory(venueID: venueID)
+        case .dismissEarn:           state.pendingEarn = nil
+        }
+    }
+
+    // MARK: - Начисление
+
+    /// Балансы из ПРЕДЫДУЩЕГО снимка. `nil` до первого снимка: первая загрузка —
+    /// не начисление, а просто карты, которые уже были.
+    private var knownBalances: [String: Int]?
+
+    /// Сравнивает снимок с предыдущим и поднимает событие на рост баланса.
+    /// Раньше это делал экран «Мой QR» своим `@State`: событие жило в нём и
+    /// пропадало вместе с перерисовкой вкладки. Теперь оно в состоянии стора
+    /// и снимается только `dismissEarn`; второе начисление, пришедшее пока
+    /// экран открыт, не затирает первое.
+    private func detectEarn(in cards: [VenuePointsCard]) {
+        let now = Dictionary(cards.map { ($0.venueID, $0.balance) }, uniquingKeysWith: { a, _ in a })
+        defer { knownBalances = now }
+        guard let known = knownBalances, state.pendingEarn == nil else { return }
+        for card in cards {
+            guard let was = known[card.venueID], card.balance > was else { continue }
+            state.pendingEarn = PointsEarnEvent(
+                id: "\(card.venueID)-\(card.balance)-\(Int(clock.now.timeIntervalSince1970))",
+                venueID: card.venueID, venueName: card.venueName,
+                delta: card.balance - was, newBalance: card.balance)
+            return
+        }
+    }
+
+    // MARK: - История
+
+    /// Сколько записей журнала тянем за раз: хватает на месяцы визитов, а
+    /// пагинации у экрана пока нет.
+    public static let historyLimit = 100
+
+    private func loadHistory(venueID: String) {
+        guard state.isSignedIn else { state.history[venueID] = .loaded([]); return }
+        if state.history(for: venueID).value == nil { state.history[venueID] = .loading }
+        let userID = state.userID
+        Task { [repository] in
+            let result = await repository.ledger(userID: userID, venueID: venueID, limit: Self.historyLimit)
+            switch result {
+            case .success(let entries): state.history[venueID] = .loaded(entries)
+            case .failure(let error):
+                // Уже показанную историю не стираем из-за моргнувшей сети.
+                if let known = state.history(for: venueID).value {
+                    state.history[venueID] = .loaded(known)
+                } else {
+                    state.history[venueID] = .failed(error)
+                }
+            }
         }
     }
 
@@ -50,6 +102,8 @@ public final class PointsStore: ObservableObject {
         observation?.cancel()
         state.userID = userID
 
+        knownBalances = nil
+        state.pendingEarn = nil
         guard !userID.isEmpty else {
             state.cards = .loaded([])
             return
@@ -60,7 +114,9 @@ public final class PointsStore: ObservableObject {
             for await result in repository.cards(userID: userID) {
                 if Task.isCancelled { return }
                 switch result {
-                case .success(let cards): state.cards = .loaded(cards)
+                case .success(let cards):
+                    state.cards = .loaded(cards)
+                    detectEarn(in: cards)
                 case .failure(let error):
                     // Уже показанные карты не стираем: сеть моргнула — пусть
                     // гость видит последний известный баланс, а не пустой экран.
@@ -98,7 +154,9 @@ public final class PointsStore: ObservableObject {
             case .success(let receipt):
                 pendingRedeemKey[attemptID] = nil      // попытка закрыта, дальше — новая
                 state.redeem = .done(receipt)
-                // Баланс приедет сам snapshot-листенером; ничего не перезапрашиваем.
+                // Баланс приедет сам snapshot-листенером; журнал — по запросу,
+                // поэтому его обновляем, если экран его уже показывал.
+                if state.history(for: venueID).value != nil { loadHistory(venueID: venueID) }
             case .failure(let error):
                 // Ключ НЕ сбрасываем: повтор должен уйти с тем же ключом.
                 state.redeem = .failed(error)

@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import kg.ayant.app.R
+import kg.ayant.app.core.localizedTitle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -59,6 +60,7 @@ import kg.ayant.app.ui.theme.ayantGroupCard
 import kg.ayant.app.ui.vm.AppViewModel
 import kg.ayant.app.ui.vm.SessionViewModel
 import androidx.compose.ui.platform.LocalContext
+import kg.ayant.app.core.sessionErrorText
 
 @Composable
 fun ProfileScreen(
@@ -179,7 +181,7 @@ fun ProfileScreen(
                 // Гостю «Ты ещё не оставил ни одного отзыва» читается как
                 // приглашение, которое никуда не ведёт: писать отзывы он не может.
                 Box(Modifier.fillMaxWidth().ayantGroupCard().padding(16.dp)) {
-                    Text(kg.ayant.app.ui.auth.GuestGate.REVIEW, fontSize = 15.sp, color = c.inkSoft)
+                    Text(stringResource(kg.ayant.app.ui.auth.GuestGate.REVIEW), fontSize = 15.sp, color = c.inkSoft)
                 }
             } else if (reviews.isEmpty()) {
                 Box(Modifier.fillMaxWidth().ayantGroupCard().padding(16.dp)) {
@@ -294,7 +296,7 @@ fun ProfileScreen(
         AlertDialog(
             onDismissRequest = { deleteError = null },
             title = { Text(stringResource(R.string.account_delete_failed)) },
-            text = { Text(error) },
+            text = { Text(sessionErrorText(error)) },
             confirmButton = { TextButton(onClick = { deleteError = null }) { Text(stringResource(R.string.action_ok)) } },
         )
     }
@@ -317,7 +319,7 @@ private fun LanguageRow() {
     val context = LocalContext.current
     var open by remember { mutableStateOf(false) }
     val current = kg.ayant.app.core.LocaleUtil.currentLang(context)
-    val currentTitle = when (current) { "en" -> "English"; "ky" -> "Кыргызча"; else -> "Русский" }
+    val currentTitle = when (current) { "en" -> stringResource(R.string.lang_en); "ky" -> stringResource(R.string.lang_ky); else -> stringResource(R.string.lang_ru) }
     Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically) {
         AyantIconTile(Icons.Filled.Language, size = 34)
         Text(stringResource(R.string.setting_language), fontSize = 16.sp, color = c.ink, modifier = Modifier.padding(start = 12.dp))
@@ -325,7 +327,7 @@ private fun LanguageRow() {
         Box {
             Text(currentTitle, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = c.accentText, modifier = Modifier.clickable { open = true })
             androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                listOf("ru" to "Русский", "en" to "English", "ky" to "Кыргызча").forEach { (code, title) ->
+                listOf("ru" to stringResource(R.string.lang_ru), "en" to stringResource(R.string.lang_en), "ky" to stringResource(R.string.lang_ky)).forEach { (code, title) ->
                     androidx.compose.material3.DropdownMenuItem(text = { Text(title) }, onClick = {
                         open = false
                         kg.ayant.app.core.LocaleUtil.setLang(context, code)
@@ -347,10 +349,10 @@ private fun ThemeRow(theme: kg.ayant.app.ui.vm.ThemeViewModel) {
         Text(stringResource(R.string.setting_theme), fontSize = 16.sp, color = c.ink, modifier = Modifier.padding(start = 12.dp))
         Spacer(Modifier.weight(1f))
         Box {
-            Text(themeMode.title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = c.accentText, modifier = Modifier.clickable { open = true })
+            Text(themeMode.localizedTitle(), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = c.accentText, modifier = Modifier.clickable { open = true })
             androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
                 kg.ayant.app.ui.vm.AppTheme.entries.forEach { t ->
-                    androidx.compose.material3.DropdownMenuItem(text = { Text(t.title) }, onClick = { theme.set(t); open = false })
+                    androidx.compose.material3.DropdownMenuItem(text = { Text(t.localizedTitle()) }, onClick = { theme.set(t); open = false })
                 }
             }
         }

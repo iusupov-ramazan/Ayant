@@ -7,11 +7,13 @@ import kg.ayant.app.domain.asAppError
 import kg.ayant.app.domain.AppError
 import kg.ayant.app.domain.Clock
 import kg.ayant.app.domain.LoadState
+import kg.ayant.app.domain.PointsEarnEvent
 import kg.ayant.app.domain.PointsIntent
 import kg.ayant.app.domain.PointsRepository
 import kg.ayant.app.domain.PointsState
 import kg.ayant.app.domain.RedeemPhase
 import kg.ayant.app.domain.SystemClock
+import kg.ayant.app.domain.model.VenuePointsCard
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -58,6 +60,77 @@ class PointsViewModel @JvmOverloads constructor(
             is PointsIntent.Stop -> stopObserving()
             is PointsIntent.Redeem -> redeem(intent.venueID, intent.rewardID, intent.pointsToSpend)
             is PointsIntent.DismissRedeem -> _state.update { it.copy(redeem = RedeemPhase.Idle) }
+            is PointsIntent.LoadHistory -> loadHistory(intent.venueID)
+            is PointsIntent.DismissEarn -> _state.update { it.copy(pendingEarn = null) }
+        }
+    }
+
+    // ── Начисление ───────────────────────────────────────────────────────────
+
+    /**
+     * Балансы из ПРЕДЫДУЩЕГО снимка. `null` до первого снимка: первая загрузка —
+     * не начисление, а просто карты, которые уже были.
+     */
+    private var knownBalances: Map<String, Int>? = null
+
+    /**
+     * Сравнивает снимок с предыдущим и поднимает событие на рост баланса.
+     * Раньше это делал экран «Мой QR» своим `remember`: событие жило в нём и
+     * пропадало вместе с перерисовкой вкладки. Теперь оно в состоянии VM и
+     * снимается только [PointsIntent.DismissEarn]; второе начисление, пришедшее
+     * пока экран открыт, не затирает первое. Зеркалит `PointsStore.detectEarn`.
+     */
+    private fun detectEarn(cards: List<VenuePointsCard>) {
+        val now = cards.associate { it.venueID to it.balance }
+        val known = knownBalances
+        knownBalances = now
+        if (known == null || _state.value.pendingEarn != null) return
+        for (card in cards) {
+            val was = known[card.venueID] ?: continue
+            if (card.balance <= was) continue
+            _state.update {
+                it.copy(
+                    pendingEarn = PointsEarnEvent(
+                        id = "${card.venueID}-${card.balance}-${clock.nowMs / 1000}",
+                        venueID = card.venueID, venueName = card.venueName,
+                        delta = card.balance - was, newBalance = card.balance,
+                    )
+                )
+            }
+            return
+        }
+    }
+
+    // ── История ──────────────────────────────────────────────────────────────
+
+    private fun loadHistory(venueID: String) {
+        val current = _state.value
+        if (!current.isSignedIn) {
+            _state.update { it.copy(history = it.history + (venueID to LoadState.Loaded(emptyList()))) }
+            return
+        }
+        if (current.history(venueID).valueOrNull() == null) {
+            _state.update { it.copy(history = it.history + (venueID to LoadState.Loading)) }
+        }
+        val userID = current.userID
+        viewModelScope.launch {
+            val result = repository.ledger(userID, venueID, HISTORY_LIMIT)
+            result.fold(
+                onSuccess = { entries ->
+                    _state.update { it.copy(history = it.history + (venueID to LoadState.Loaded(entries))) }
+                },
+                onFailure = { error ->
+                    // Уже показанную историю не стираем из-за моргнувшей сети.
+                    val known = _state.value.history(venueID).valueOrNull()
+                    _state.update {
+                        it.copy(
+                            history = it.history + (venueID to
+                                if (known != null) LoadState.Loaded(known)
+                                else LoadState.Failed(error.asAppError()))
+                        )
+                    }
+                },
+            )
         }
     }
 
@@ -69,6 +142,8 @@ class PointsViewModel @JvmOverloads constructor(
         observation?.cancel()
         _state.update { it.copy(userID = userID) }
 
+        knownBalances = null
+        _state.update { it.copy(pendingEarn = null) }
         if (userID.isEmpty()) {
             _state.update { it.copy(cards = LoadState.Loaded(emptyList())) }
             return
@@ -80,7 +155,10 @@ class PointsViewModel @JvmOverloads constructor(
         observation = viewModelScope.launch {
             repository.cards(userID).collect { result ->
                 result.fold(
-                    onSuccess = { cards -> _state.update { it.copy(cards = LoadState.Loaded(cards)) } },
+                    onSuccess = { cards ->
+                        _state.update { it.copy(cards = LoadState.Loaded(cards)) }
+                        detectEarn(cards)
+                    },
                     onFailure = { error ->
                         // Уже показанные карты не стираем: сеть моргнула — пусть
                         // гость видит последний известный баланс, а не пустой экран.
@@ -122,7 +200,9 @@ class PointsViewModel @JvmOverloads constructor(
                 onSuccess = { receipt ->
                     pendingRedeemKeys.remove(attemptID)   // попытка закрыта, дальше — новая
                     _state.update { it.copy(redeem = RedeemPhase.Done(receipt)) }
-                    // Баланс приедет сам snapshot-листенером; ничего не перезапрашиваем.
+                    // Баланс приедет сам snapshot-листенером; журнал — по запросу,
+                    // поэтому его обновляем, если экран его уже показывал.
+                    if (_state.value.history(venueID).valueOrNull() != null) loadHistory(venueID)
                 },
                 onFailure = { error ->
                     // Ключ НЕ сбрасываем: повтор должен уйти с тем же ключом.
@@ -138,5 +218,13 @@ class PointsViewModel @JvmOverloads constructor(
     override fun onCleared() {
         stopObserving()
         super.onCleared()
+    }
+
+    companion object {
+        /**
+         * Сколько записей журнала тянем за раз: хватает на месяцы визитов, а
+         * пагинации у экрана пока нет. Mirrors `PointsStore.historyLimit`.
+         */
+        const val HISTORY_LIMIT = 100
     }
 }

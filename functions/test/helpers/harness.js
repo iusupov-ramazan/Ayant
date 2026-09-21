@@ -26,10 +26,13 @@ function makeHarness({ tokens = {} } = {}) {
       messagingCalls.push(m);
       return "msg-id";
     },
-    sendEachForMulticast: async (m) => ({
-      successCount: (m.tokens || []).length,
-      responses: (m.tokens || []).map(() => ({ success: true })),
-    }),
+    sendEachForMulticast: async (m) => {
+      messagingCalls.push(m);
+      return {
+        successCount: (m.tokens || []).length,
+        responses: (m.tokens || []).map(() => ({ success: true })),
+      };
+    },
   };
   const auth = {
     verifyIdToken: async (token) => {
@@ -118,6 +121,13 @@ function makeRes() {
     return res;
   };
   res.getHeader = (k) => res.headers[String(k).toLowerCase()];
+  // Редирект (instagramAuthCallback возвращает браузер в приложение).
+  res.redirect = (code, url) => {
+    res.statusCode = code;
+    res.redirectedTo = url;
+    finish();
+    return res;
+  };
   res.end = () => {
     finish();
     return res;

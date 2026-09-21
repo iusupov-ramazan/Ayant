@@ -14,20 +14,25 @@ import { setGlobalOptions } from "firebase-functions/v2";
 import { onDocumentCreated, onDocumentWritten } from "firebase-functions/v2/firestore";
 import { onRequest } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
+import { defineSecret } from "firebase-functions/params";
 import { initializeApp } from "firebase-admin/app";
 import { getFirestore, FieldValue, DocumentReference } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
 import { getAuth } from "firebase-admin/auth";
 import * as fs from "fs";
 import * as path from "path";
+import * as crypto from "crypto";
 import type {
   Numeric,
+  AppSettingsDoc,
   VenueDoc,
   CouponDoc,
   VenuePointsDoc,
   PushCampaignDoc,
   PointsBand,
   PointsReward,
+  IgAccountDoc,
+  IgAuthStateDoc,
 } from "./types";
 
 /* ───────────────────────────────────────────────────────────────────────────
@@ -82,7 +87,13 @@ const REFERRAL_MAX_REWARDS = capFromEnv(process.env.REFERRAL_MAX_REWARDS, 20);
 // ── Баллы САН (per-venue ledger, System 1) ──────────────────────────────────
 // 1 балл = 1 сом при погашении. Гардрейлы (даже при self-serve конфиге хоста):
 const DEFAULT_EARN_COOLDOWN_MIN = 60;   // не чаще 1 начисления баллов на гостя/заведение
-const DEFAULT_STAMP_COOLDOWN_MIN = 15;  // не чаще 1 штампа лояльности на гостя/заведение
+// Штампы: не чаще одного на гостя/заведение за это окно. Дефолт 15 мин;
+// значение правит администратор в панели («Настройки» →
+// config/appSettings.stampCooldownMinutes, 0 — без паузы), см. `stampCooldownMinutes`.
+// Env-переключатель STAMP_COOLDOWN_MIN убран намеренно: два источника правды
+// для одной константы — это «забытый тестовый ноль в проде».
+const DEFAULT_STAMP_COOLDOWN_MIN = 15;
+const MAX_STAMP_COOLDOWN_MIN = 1440;
 const DEFAULT_EXPIRY_MONTHS = 6;        // баллы сгорают после N мес. без активности
 const MAX_CASHBACK_PERCENT = 20;        // потолок кэшбэка (защита от опечатки «50%»)
 const MAX_POINTS_PER_EARN = 10000;      // потолок за одно начисление
@@ -102,6 +113,33 @@ const MAX_POINTS_PER_EARN = 10000;      // потолок за одно начи
 function intOrDefault(raw: Numeric, fallback: number): number {
   const n = parseInt(String(raw), 10);
   return Number.isFinite(n) ? n : fallback;
+}
+
+// ── Глобальные настройки (config/appSettings) ───────────────────────────────
+// Читаются на горячем пути скана, поэтому кэшируются на минуту на инстанс:
+// правка в панели доезжает не мгновенно, зато нет лишнего чтения на каждый скан.
+const APP_SETTINGS_TTL_MS = 60 * 1000;
+let appSettingsCache: { at: number; data: AppSettingsDoc } | null = null;
+
+async function loadAppSettings(): Promise<AppSettingsDoc> {
+  const now = Date.now();
+  if (appSettingsCache && now - appSettingsCache.at < APP_SETTINGS_TTL_MS) return appSettingsCache.data;
+  let data: AppSettingsDoc = {};
+  try {
+    const snap = await db.collection("config").doc("appSettings").get();
+    if (snap.exists) data = (snap.data() || {}) as AppSettingsDoc;
+  } catch (e) {
+    // Нет документа/прав — работаем на дефолтах: скан не должен падать из-за настроек.
+    console.warn("appSettings read failed, using defaults", e);
+  }
+  appSettingsCache = { at: now, data };
+  return data;
+}
+
+/** Пауза между штампами из настроек: явный 0 сохраняется (см. `intOrDefault`), клэмп 0…1440. */
+function stampCooldownMinutes(settings: AppSettingsDoc): number {
+  return Math.min(Math.max(intOrDefault(settings.stampCooldownMinutes, DEFAULT_STAMP_COOLDOWN_MIN), 0),
+    MAX_STAMP_COOLDOWN_MIN);
 }
 
 // Метрики телеметрии, которые клиент может логировать (redemptions — только через
@@ -187,6 +225,31 @@ function toMillis(v: unknown): number {
   return v && typeof (v as { toMillis?: () => number }).toMillis === "function"
     ? (v as { toMillis: () => number }).toMillis()
     : 0;
+}
+
+/**
+ * Дневной счётчик заведения (`analytics/{venueID}/days/{day}`): несколько
+ * метрик одной записью. Не роняет ответ на скан, но и не молчит при ошибке.
+ * Здесь считаются ВСЕ серверные события лояльности — штампы, награды, баллы —
+ * иначе хост видел бы только купоны, а стамп-карта и баллы оставались невидимыми.
+ */
+function bumpAnalytics(venueID: string, inc: Record<string, number>): Promise<void> {
+  const day = dayKey();
+  const data: Record<string, unknown> = { date: day };
+  for (const [k, v] of Object.entries(inc)) if (v > 0) data[k] = FieldValue.increment(v);
+  if (Object.keys(data).length === 1) return Promise.resolve();
+  return db.collection("analytics").doc(venueID).collection("days").doc(day)
+    .set(data, { merge: true })
+    .then(() => undefined)
+    .catch((e) => console.warn(`⚠️ analytics increment failed: venue=${venueID}`, e));
+}
+
+/** Код купона-награды за заполненную карту — тот же формат, что у купонов акций. */
+function newCouponCode(): string {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let s = "";
+  for (const b of crypto.randomBytes(6)) s += alphabet[b % alphabet.length];
+  return `AYANT-${s}`;
 }
 
 // Рассылка идёт только после одобрения админом (status: "approved") и один раз
@@ -319,6 +382,82 @@ export const notifyOnNewDeal = onDocumentCreated("deals/{id}", async (event) => 
     android: { notification: { sound: "default" }, priority: "high" },
   });
   console.log(`🔔 new-deal push → venue_${venueID} (${venueName})`);
+});
+
+/* ───────────────────────────────────────────────────────────────────────────
+ * 2b) Новый отзыв → push владельцу заведения.
+ *     Адресно по FCM-токенам владельца (`userTokens` с uid == ownerID), без
+ *     частотного лимита: это не реклама, а событие по его же заведению. Свой
+ *     отзыв на своё заведение не уведомляем.
+ * ─────────────────────────────────────────────────────────────────────────── */
+export const notifyHostOnReview = onDocumentCreated("reviews/{id}", async (event) => {
+  const snap = event.data;
+  if (!snap) return;
+  const review = snap.data() || {};
+  const venueID = String(review.venueID || "");
+  if (!venueID) return;
+
+  const vdoc = await db.collection("venues").doc(venueID).get();
+  if (!vdoc.exists) return;
+  const venue = vdoc.data() || {};
+  const ownerID = String(venue.ownerID || "");
+  if (!ownerID || ownerID === String(review.authorID || "")) return;
+
+  const tokensSnap = await db.collection("userTokens").where("uid", "==", ownerID).get();
+  const tokens = tokensSnap.docs.map((d) => d.id).filter((t) => t.length > 0);
+  if (tokens.length === 0) { console.log(`🔕 review push: no tokens for owner ${ownerID}`); return; }
+
+  const rating = Math.max(0, Math.min(5, parseInt(String(review.rating), 10) || 0));
+  const stars = rating > 0 ? "★".repeat(rating) + "☆".repeat(5 - rating) + " " : "";
+  const author = String(review.authorName || "Гость");
+  const text = String(review.text || "").trim();
+  const body = `${stars}${author}${text ? ": " + (text.length > 120 ? text.slice(0, 117) + "…" : text) : ""}`;
+
+  const res = await getMessaging().sendEachForMulticast({
+    tokens,
+    notification: { title: `Новый отзыв · ${String(venue.name || "заведение")}`, body },
+    data: { type: "review", reviewID: event.params.id, venueID },
+    apns: { payload: { aps: { sound: "default", badge: 1 } } },
+    android: { notification: { sound: "default" }, priority: "high" },
+  });
+  console.log(`🔔 review push → owner ${ownerID}: ${res.successCount}/${tokens.length} delivered`);
+});
+
+/* ───────────────────────────────────────────────────────────────────────────
+ * 2c) Владелец ответил на отзыв → push автору отзыва.
+ *     Срабатывает один раз — когда `hostReply` появился (или текст сменился).
+ * ─────────────────────────────────────────────────────────────────────────── */
+export const notifyGuestOnHostReply = onDocumentWritten("reviews/{id}", async (event) => {
+  const before = event.data?.before?.data() || null;
+  const after = event.data?.after?.data() || null;
+  if (!after) return;
+  const replyAfter = String((after.hostReply || {}).text || "").trim();
+  const replyBefore = String(((before || {}).hostReply || {}).text || "").trim();
+  if (!replyAfter || replyAfter === replyBefore) return;
+
+  const authorID = String(after.authorID || "");
+  const venueID = String(after.venueID || "");
+  if (!authorID || !venueID) return;
+
+  const tokensSnap = await db.collection("userTokens").where("uid", "==", authorID).get();
+  const tokens = tokensSnap.docs.map((d) => d.id).filter((t) => t.length > 0);
+  if (tokens.length === 0) return;
+
+  let venueName = "Заведение";
+  try {
+    const v = await db.collection("venues").doc(venueID).get();
+    if (v.exists && v.data()!.name) venueName = String(v.data()!.name);
+  } catch (_) {}
+
+  const body = replyAfter.length > 120 ? replyAfter.slice(0, 117) + "…" : replyAfter;
+  const res = await getMessaging().sendEachForMulticast({
+    tokens,
+    notification: { title: `${venueName} ответили на ваш отзыв`, body },
+    data: { type: "hostReply", reviewID: event.params.id, venueID },
+    apns: { payload: { aps: { sound: "default", badge: 1 } } },
+    android: { notification: { sound: "default" }, priority: "high" },
+  });
+  console.log(`🔔 host-reply push → ${authorID}: ${res.successCount}/${tokens.length}`);
 });
 
 /* ───────────────────────────────────────────────────────────────────────────
@@ -770,7 +909,8 @@ export const scanCoupon = onRequest(MONEY_PATH_OPTS, async (req, res) => {
       if (!cardUser || cardVenue !== venueID) { res.status(409).json({ error: "wrong_venue" }); return; }
 
       const nowMs = Date.now();
-      const cooldownMin = DEFAULT_STAMP_COOLDOWN_MIN;   // штампы: 15 мин (отдельно от баллов)
+      // Штампы: окно из настроек панели (дефолт 15 мин; отдельно от 60-мин паузы баллов).
+      const cooldownMin = stampCooldownMinutes(await loadAppSettings());
       const cardRef = db.collection("loyaltyCards").doc(`${cardUser}_${venueID}`);
       const keyRef = idempotencyKey ? cardRef.collection("scanKeys").doc(idempotencyKey) : null;
 
@@ -802,7 +942,7 @@ export const scanCoupon = onRequest(MONEY_PATH_OPTS, async (req, res) => {
         return;
       }
 
-      let stamps = 0, rewardIssued = false;
+      let stamps = 0, rewardIssued = false, applied = false;
       await db.runTransaction(async (tx) => {
         // Все чтения до записей (требование транзакций Firestore).
         const priorTx = keyRef ? await tx.get(keyRef) : null;
@@ -822,9 +962,21 @@ export const scanCoupon = onRequest(MONEY_PATH_OPTS, async (req, res) => {
           userID: cardUser, venueID, venueName, goal, reward,
           stamps: s, completedRounds: rounds, lastStampAt: new Date(nowMs), updatedAt: new Date(),
         }, { merge: true });
+        if (rewardIssued) {
+          // Награда — купон гостю: виден в «Мои купоны» и сканируется как
+          // обычный купон (ветка B) сразу или в следующий визит. Раньше награда
+          // существовала только в словах сотрудника и нигде не записывалась.
+          tx.set(db.collection("coupons").doc(), {
+            userID: cardUser, venueID, venueName, title: reward,
+            code: newCouponCode(), kind: "loyalty", dealID: "",
+            used: false, createdAt: new Date(nowMs), source: "loyaltyCard",
+          });
+        }
         if (keyRef) tx.set(keyRef, { code, stamps: s, rewardIssued, at: new Date(nowMs) });
         stamps = s;
+        applied = true;
       });
+      if (applied) await bumpAnalytics(venueID, { stamps: 1, rewardsIssued: rewardIssued ? 1 : 0 });
       res.status(200).json({
         ok: true, loyalty: true,
         title: rewardIssued ? "Карта заполнена!" : "Штамп начислен",
@@ -899,7 +1051,7 @@ export const scanCoupon = onRequest(MONEY_PATH_OPTS, async (req, res) => {
         return;
       }
 
-      let balance = 0;
+      let balance = 0, appliedEarn = false;
       await db.runTransaction(async (tx) => {
         // Все чтения до записей (требование транзакций Firestore).
         const priorTx = keyRef ? await tx.get(keyRef) : null;
@@ -912,6 +1064,7 @@ export const scanCoupon = onRequest(MONEY_PATH_OPTS, async (req, res) => {
         }
         const curLast = toMillis(cur.lastEarnAt);
         if (cooldownMin > 0 && nowMs - curLast < cooldownMin * 60000) throw new Error("cooldown");
+        appliedEarn = true;
         balance = (parseInt(String(cur.balance), 10) || 0) + awarded;
         tx.set(cardRef, {
           userID: ptsUser, venueID, venueName,
@@ -926,6 +1079,7 @@ export const scanCoupon = onRequest(MONEY_PATH_OPTS, async (req, res) => {
         if (keyRef) tx.set(keyRef, { code, awarded, balance, at: new Date(nowMs) });
       });
 
+      if (appliedEarn) await bumpAnalytics(venueID, { pointsEarned: awarded });
       res.status(200).json({ ok: true, points: true, awarded, balance, venueName, replayed: false });
       return;
     }
@@ -944,9 +1098,7 @@ export const scanCoupon = onRequest(MONEY_PATH_OPTS, async (req, res) => {
       tx.update(couponRef, { used: true, usedAt: new Date(), usedByVenue: venueID });
     });
 
-    const day = dayKey();
-    db.collection("analytics").doc(venueID).collection("days").doc(day)
-      .set({ redemptions: FieldValue.increment(1) }, { merge: true }).catch(() => {});
+    await bumpAnalytics(venueID, { redemptions: 1 });
 
     // Авторитетная метка погашения для обучения весов выдачи (кросс-платформенно).
     // Нужен userID купона для склейки с impression/tap; иначе метка бесполезна.
@@ -1073,6 +1225,7 @@ export const redeemVenuePoints = onRequest(MONEY_PATH_OPTS, async (req, res) => 
       if (keyRef) tx.set(keyRef, { rewardId, redeemed: cost, balance, at: new Date() });
     });
 
+    if (!replayed) await bumpAnalytics(venueID, { pointsRedeemed: cost, rewardsIssued: 1 });
     res.status(200).json({
       ok: true, redeemed: cost, balance,
       rewardTitle: String(reward.title || ""),
@@ -1134,9 +1287,65 @@ export const expireVenuePoints = onSchedule("every 24 hours", async () => {
   // Пульс задачи: ночная сверка проверит, что она отработала (см. reconcileVenuePoints).
   await db.collection("ops").doc("heartbeats")
     .set({ expireVenuePoints: new Date(), expireVenuePointsCount: expired }, { merge: true });
-  // TODO(System 1, warn-pass): за ~14 дней до сгорания слать предупреждающий push
-  //   («твои баллы в {venue} скоро сгорят»). Нужен per-user канал доставки
-  //   (userTokens по userID) — вынесено в отдельную задачу, не блокирует Phase 1.
+});
+
+/* ───────────────────────────────────────────────────────────────────────────
+ * 6b) Предупреждение о сгорании: за EXPIRY_WARN_DAYS до порога — push гостю
+ *     «баллы в {venue} сгорят через N дней». Один раз на окно: отметка
+ *     `expiryWarnedAt` на карте; новая активность сдвигает порог, и предупреждение
+ *     сможет уйти снова только для нового окна.
+ * ─────────────────────────────────────────────────────────────────────────── */
+const EXPIRY_WARN_DAYS = 7;
+
+export const warnExpiringPoints = onSchedule("every 24 hours", async () => {
+  const nowMs = Date.now();
+  const venueCache = new Map<string, { months: number; name: string }>();
+  const snap = await db.collection("venuePoints").where("balance", ">", 0).get();
+  let warned = 0;
+
+  for (const doc of snap.docs) {
+    const c = (doc.data() || {}) as VenuePointsDoc & { expiryWarnedAt?: unknown; userID?: string };
+    const venueID = String(c.venueID || "");
+    const userID = String(c.userID || "");
+    if (!venueID || !userID) continue;
+
+    let venue = venueCache.get(venueID);
+    if (!venue) {
+      const v = (await db.collection("venues").doc(venueID).get()).data() || {};
+      venue = {
+        months: Math.max(parseInt(String(v.pointsExpiryMonths), 10) || DEFAULT_EXPIRY_MONTHS, 1),
+        name: String(v.name || "заведение"),
+      };
+      venueCache.set(venueID, venue);
+    }
+
+    const lastMs = toMillis(c.lastActivityAt);
+    if (lastMs === 0) continue;
+    const expiresAt = lastMs + venue.months * 30 * DAY_MS;
+    const daysLeft = Math.ceil((expiresAt - nowMs) / DAY_MS);
+    if (daysLeft <= 0 || daysLeft > EXPIRY_WARN_DAYS) continue;
+    // Уже предупреждали в этом окне (после последней активности) — молчим.
+    if (toMillis(c.expiryWarnedAt) > lastMs) continue;
+
+    const tokensSnap = await db.collection("userTokens").where("uid", "==", userID).get();
+    const tokens = tokensSnap.docs.map((d) => d.id).filter((t) => t.length > 0);
+    await doc.ref.set({ expiryWarnedAt: new Date(nowMs) }, { merge: true });
+    if (tokens.length === 0) continue;
+
+    const balance = parseInt(String(c.balance), 10) || 0;
+    await getMessaging().sendEachForMulticast({
+      tokens,
+      notification: {
+        title: `Баллы в ${venue.name} скоро сгорят`,
+        body: `${balance} баллов пропадут через ${daysLeft} дн. — загляните и потратьте их на награду.`,
+      },
+      data: { type: "pointsExpiring", venueID },
+      apns: { payload: { aps: { sound: "default" } } },
+      android: { notification: { sound: "default" }, priority: "high" },
+    });
+    warned++;
+  }
+  console.log(`⏳ expiry warnings sent: ${warned}`);
 });
 
 /* ───────────────────────────────────────────────────────────────────────────
@@ -1390,3 +1599,486 @@ async function deleteInChunks(refs: DocumentReference[]): Promise<void> {
     await batch.commit();
   }
 }
+
+/* ───────────────────────────────────────────────────────────────────────────
+ * INSTAGRAM: подключение аккаунта заведения и импорт постов в акции.
+ *
+ * Зачем на сервере. Секрет приложения Meta и токен доступа заведения не
+ * должны попадать в клиент вообще никогда — значит обмен `code` → токен,
+ * хранение, обновление и походы в Graph API живут здесь. Клиент ходит сюда по
+ * своему Firebase ID-токену и получает только обезличенные посты.
+ *
+ * Что важно знать, прежде чем это править:
+ *
+ *  1. Личные аккаунты подключить НЕЛЬЗЯ. Basic Display API Meta закрыла
+ *     4 декабря 2024-го; работает только Instagram API with Instagram Login,
+ *     и только для профессиональных аккаунтов (Business/Creator).
+ *  2. Ссылки `media_url` с CDN инстаграма ПРОТУХАЮТ за часы. Поэтому при
+ *     импорте картинка перезаливается к нам (`rehostToCDN`), и в акцию идёт
+ *     постоянная ссылка. Положить в акцию ссылку инстаграма — значит получить
+ *     каталог с битыми фото на следующий день, причём молча.
+ *  3. Длинный токен живёт 60 дней и обновляется (`refreshInstagramTokens`).
+ *     Обновить можно токен не моложе 24 часов и ещё не протухший — отсюда и
+ *     окно обновления, и флаг `needsReauth` при провале.
+ *  4. Scope `instagram_business_basic` требует App Review. До одобрения
+ *     подключиться могут только аккаунты из ролей приложения Meta.
+ *
+ * Конфигурация: INSTAGRAM_APP_ID / INSTAGRAM_REDIRECT_URI / INSTAGRAM_RETURN_URL
+ * в functions/.env, INSTAGRAM_APP_SECRET — в Secret Manager:
+ *   firebase functions:secrets:set INSTAGRAM_APP_SECRET
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+const IG_APP_SECRET = defineSecret("INSTAGRAM_APP_SECRET");
+const IG_APP_ID = process.env.INSTAGRAM_APP_ID || "";
+const IG_REDIRECT_URI = process.env.INSTAGRAM_REDIRECT_URI
+  || `https://${REGION}-san-25d32.cloudfunctions.net/instagramAuthCallback`;
+/**
+ * Куда вернуть браузер после входа. Схема приложения (`san://`), а не https:
+ * вход идёт в `ASWebAuthenticationSession`, и он ловит возврат именно по
+ * схеме — так сессия закрывается сама и кабинет сразу знает результат.
+ */
+const IG_RETURN_URL = process.env.INSTAGRAM_RETURN_URL || "san://ig/connected";
+const IG_SCOPES = "instagram_business_basic";
+/** Тот же аккаунт Cloudinary, что и у iOS-приложения и админ-панели. */
+const CLOUDINARY_CLOUD = process.env.CLOUDINARY_CLOUD || "dsb14gwxw";
+const CLOUDINARY_PRESET = process.env.CLOUDINARY_PRESET || "Ayta_ios";
+/** Сколько постов отдаём за одну синхронизацию и сколько фото тянем из карусели. */
+const IG_MEDIA_LIMIT = 25;
+const IG_CAROUSEL_LIMIT = 5;
+/** Жизнь одноразового `state` OAuth. */
+const IG_STATE_TTL_MS = 10 * 60 * 1000;
+/** За сколько до протухания обновляем токен. */
+const IG_REFRESH_WINDOW_MS = 10 * 24 * 60 * 60 * 1000;
+
+const igOptions = { cors: true, secrets: [IG_APP_SECRET] };
+
+function igDocID(ownerID: string, venueID: string): string { return `${ownerID}_${venueID}`; }
+
+/**
+ * Хост + его заведение по запросу. Возвращает null, ОТВЕТИВ клиенту, — вызов
+ * после этого должен просто выйти. Один и тот же порядок проверок, что и в
+ * `scanCoupon`: метод → App Check → токен → владение заведением.
+ */
+async function igRequireOwner(
+  req: { method: string; get: (h: string) => string | undefined; body?: Record<string, unknown> },
+  res: { status: (c: number) => { json: (b: unknown) => void } },
+  label: string,
+): Promise<{ uid: string; venueID: string } | null> {
+  if (req.method !== "POST") { res.status(405).json({ error: "method_not_allowed" }); return null; }
+  if (!(await checkAppCheck(req, label))) { res.status(401).json({ error: "app_check_failed" }); return null; }
+  const uid = await verifyBearer(req);
+  if (!uid) { res.status(401).json({ error: "bad_token" }); return null; }
+  const venueID = String((req.body && req.body.venueID) || "").trim();
+  if (!venueID) { res.status(400).json({ error: "missing_params" }); return null; }
+  const snap = await db.collection("venues").doc(venueID).get();
+  if (!snap.exists) { res.status(404).json({ error: "venue_not_found" }); return null; }
+  if (String((snap.data() as VenueDoc).ownerID || "") !== uid) {
+    res.status(403).json({ error: "not_owner" }); return null;
+  }
+  return { uid, venueID };
+}
+
+/** Токен заведения. null — аккаунт не подключён либо требует повторного входа. */
+async function igLoadToken(ownerID: string, venueID: string): Promise<string | null> {
+  const snap = await db.collection("igAccounts").doc(igDocID(ownerID, venueID)).get();
+  if (!snap.exists) return null;
+  const acc = snap.data() as IgAccountDoc;
+  if (acc.needsReauth === true) return null;
+  return String(acc.accessToken || "") || null;
+}
+
+/**
+ * Токен больше не принимают. Помечаем оба документа, чтобы кабинет показал
+ * «войдите заново», а не молча пустой список — молчание тут читается как
+ * «постов нет», и хост идёт жаловаться, что интеграция «не работает».
+ */
+async function igMarkReauth(ownerID: string, venueID: string): Promise<void> {
+  const id = igDocID(ownerID, venueID);
+  await Promise.all([
+    db.collection("igAccounts").doc(id).set({ needsReauth: true }, { merge: true }),
+    db.collection("igConnections").doc(id).set({ needsReauth: true }, { merge: true }),
+  ]).catch((e) => console.warn("⚠️ ig reauth flag failed", e));
+}
+
+/**
+ * Ответ обмена `code` на короткий токен. Instagram Login отдаёт его ЗАВЁРНУТЫМ
+ * в массив (`{"data":[{access_token, user_id, permissions}]}`), а старый Basic
+ * Display отдавал те же поля плоско. Разбираем оба вида: угадать «тот самый»
+ * по документации нельзя — он уже менялся, а цена ошибки здесь равна
+ * «подключение не работает вообще», причём только на живом аккаунте.
+ */
+function igShortToken(payload: unknown): { access_token?: string; user_id?: string | number } {
+  const p = payload as {
+    access_token?: string;
+    user_id?: string | number;
+    data?: Array<{ access_token?: string; user_id?: string | number }>;
+  };
+  const first = Array.isArray(p?.data) ? p.data[0] : undefined;
+  return {
+    access_token: p?.access_token || first?.access_token,
+    user_id: p?.user_id ?? first?.user_id,
+  };
+}
+
+/** Ошибка протухшего/отозванного токена в Graph API. */
+function igIsAuthError(payload: unknown): boolean {
+  const err = (payload as { error?: { code?: number; type?: string } })?.error;
+  return !!err && (err.code === 190 || err.code === 104 || err.type === "OAuthException");
+}
+
+/**
+ * Перезаливает картинку по внешней ссылке на наш CDN и возвращает постоянный
+ * URL. Cloudinary скачивает файл сам — байты через функцию не идут.
+ */
+async function rehostToCDN(remoteURL: string): Promise<string | null> {
+  try {
+    const body = new URLSearchParams({
+      file: remoteURL,
+      upload_preset: CLOUDINARY_PRESET,
+      folder: "instagram",
+    });
+    const r = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`,
+      { method: "POST", body });
+    const j = (await r.json()) as { secure_url?: string };
+    return j.secure_url || null;
+  } catch (e) {
+    console.warn("⚠️ cloudinary rehost failed", e);
+    return null;
+  }
+}
+
+/** Сырой ответ Graph API по медиа. */
+interface IgMediaNode {
+  id?: string;
+  caption?: string;
+  media_type?: string;
+  media_url?: string;
+  thumbnail_url?: string;
+  permalink?: string;
+  timestamp?: string;
+  children?: { data?: IgMediaNode[] };
+}
+
+const IG_MEDIA_FIELDS =
+  "id,caption,media_type,media_url,thumbnail_url,permalink,timestamp," +
+  "children{id,media_type,media_url,thumbnail_url}";
+
+/** Картинки поста: для видео — обложка, для карусели — кадры детей. */
+function igImages(node: IgMediaNode): string[] {
+  const kids = node.children?.data || [];
+  if (kids.length) {
+    return kids
+      .map((k) => (String(k.media_type || "").toUpperCase() === "VIDEO" ? k.thumbnail_url : k.media_url))
+      .filter((u): u is string => !!u)
+      .slice(0, IG_CAROUSEL_LIMIT);
+  }
+  const single = String(node.media_type || "").toUpperCase() === "VIDEO"
+    ? node.thumbnail_url : node.media_url;
+  return single ? [single] : [];
+}
+
+/** Пост наружу — без единого поля, которого клиенту знать не нужно. */
+function igPublicPost(node: IgMediaNode): Record<string, unknown> {
+  const images = igImages(node);
+  return {
+    id: String(node.id || ""),
+    caption: String(node.caption || ""),
+    mediaType: String(node.media_type || "IMAGE"),
+    previewURL: images[0] || "",
+    imageURLs: images,
+    permalink: String(node.permalink || ""),
+    timestamp: String(node.timestamp || ""),
+  };
+}
+
+/* ── Шаг 1: ссылка входа ──────────────────────────────────────────────────
+ * `state` одноразовый и лежит в Firestore: без него callback нельзя отличить
+ * от подделанного, и чужой аккаунт можно было бы привязать к чужому заведению.
+ */
+export const instagramAuthStart = onRequest(igOptions, async (req, res) => {
+  try {
+    const owner = await igRequireOwner(req, res, "instagramAuthStart");
+    if (!owner) return;
+    if (!IG_APP_ID) { res.status(500).json({ error: "not_configured" }); return; }
+
+    const nonce = crypto.randomBytes(24).toString("hex");
+    await db.collection("igAuthStates").doc(nonce).set({
+      ownerID: owner.uid, venueID: owner.venueID, createdAt: new Date(),
+    });
+
+    // `force_reauth=1` — не «лишняя строгость», а защита от привязки НЕ ТОГО
+    // аккаунта. Без него Instagram молча берёт сессию, уже открытую в браузере:
+    // у владельца заведения это чаще личный профиль, а не профиль кафе. Ошибку
+    // видно не сразу — она всплывает постами из чужого инстаграма в ленте
+    // заведения, и чинится только переподключением.
+    const authURL = "https://www.instagram.com/oauth/authorize?" + new URLSearchParams({
+      client_id: IG_APP_ID,
+      redirect_uri: IG_REDIRECT_URI,
+      response_type: "code",
+      scope: IG_SCOPES,
+      state: nonce,
+      force_reauth: "1",
+    }).toString();
+    res.status(200).json({ authURL });
+  } catch (e) {
+    console.error("instagramAuthStart", e);
+    res.status(500).json({ error: "internal" });
+  }
+});
+
+/* ── Шаг 2: возврат из Instagram ──────────────────────────────────────────
+ * Публичная точка (сюда редиректит Meta). Всё доверие — в одноразовом
+ * `state`: он и говорит, чьё это заведение.
+ */
+export const instagramAuthCallback = onRequest(
+  { cors: false, secrets: [IG_APP_SECRET] },
+  async (req, res) => {
+    const back = (status: string, venueID = "") =>
+      res.redirect(302, `${IG_RETURN_URL}?status=${encodeURIComponent(status)}`
+        + (venueID ? `&venue=${encodeURIComponent(venueID)}` : ""));
+    try {
+      const code = String(req.query.code || "");
+      const state = String(req.query.state || "");
+      if (req.query.error || !code || !state) { back("denied"); return; }
+
+      const stateRef = db.collection("igAuthStates").doc(state);
+      const stateSnap = await stateRef.get();
+      if (!stateSnap.exists) { back("bad_state"); return; }
+      const st = stateSnap.data() as IgAuthStateDoc;
+      await stateRef.delete().catch(() => undefined);   // одноразовый
+      if (Date.now() - toMillis(st.createdAt) > IG_STATE_TTL_MS) { back("expired_state"); return; }
+
+      const ownerID = String(st.ownerID || ""), venueID = String(st.venueID || "");
+      if (!ownerID || !venueID) { back("bad_state"); return; }
+
+      // code → короткий токен
+      const shortRes = await fetch("https://api.instagram.com/oauth/access_token", {
+        method: "POST",
+        body: new URLSearchParams({
+          client_id: IG_APP_ID,
+          client_secret: IG_APP_SECRET.value(),
+          grant_type: "authorization_code",
+          redirect_uri: IG_REDIRECT_URI,
+          code,
+        }),
+      });
+      const short = igShortToken(await shortRes.json());
+      if (!short.access_token) { console.warn("ig: short token failed", short); back("auth_failed"); return; }
+
+      // короткий → длинный (60 дней)
+      const longRes = await fetch("https://graph.instagram.com/access_token?" + new URLSearchParams({
+        grant_type: "ig_exchange_token",
+        client_secret: IG_APP_SECRET.value(),
+        access_token: short.access_token,
+      }).toString());
+      const long = (await longRes.json()) as { access_token?: string; expires_in?: number };
+      const token = long.access_token || short.access_token;
+      const ttlSec = Number(long.expires_in || 0) || 60 * 24 * 3600;
+
+      const meRes = await fetch("https://graph.instagram.com/me?" + new URLSearchParams({
+        fields: "id,username",
+        access_token: token,
+      }).toString());
+      const me = (await meRes.json()) as { id?: string; username?: string };
+
+      const now = new Date();
+      const id = igDocID(ownerID, venueID);
+      await db.collection("igAccounts").doc(id).set({
+        ownerID, venueID,
+        // Именно `user_id` из обмена кода, а не `id` из /me: в колбэк
+        // деавторизации Meta присылает первый, и по нему мы ищем подключение.
+        igUserID: String(short.user_id || me.id || ""),
+        username: String(me.username || ""),
+        accessToken: token,
+        tokenExpiresAt: new Date(now.getTime() + ttlSec * 1000),
+        lastRefreshAt: now,
+        connectedAt: now,
+        needsReauth: false,
+      }, { merge: true });
+      await db.collection("igConnections").doc(id).set({
+        ownerID, venueID,
+        username: String(me.username || ""),
+        connectedAt: now,
+        needsReauth: false,
+      }, { merge: true });
+
+      back("ok", venueID);
+    } catch (e) {
+      console.error("instagramAuthCallback", e);
+      back("internal");
+    }
+  });
+
+/* ── Кнопка «Синхронизировать»: последние посты ─────────────────────────── */
+export const instagramMedia = onRequest(igOptions, async (req, res) => {
+  try {
+    const owner = await igRequireOwner(req, res, "instagramMedia");
+    if (!owner) return;
+    const token = await igLoadToken(owner.uid, owner.venueID);
+    if (!token) { res.status(409).json({ error: "not_connected" }); return; }
+
+    const limit = Math.min(Math.max(parseInt(String(req.body?.limit ?? ""), 10) || IG_MEDIA_LIMIT, 1),
+      IG_MEDIA_LIMIT);
+    const r = await fetch("https://graph.instagram.com/me/media?" + new URLSearchParams({
+      fields: IG_MEDIA_FIELDS, limit: String(limit), access_token: token,
+    }).toString());
+    const payload = (await r.json()) as { data?: IgMediaNode[]; error?: unknown };
+    if (igIsAuthError(payload)) {
+      await igMarkReauth(owner.uid, owner.venueID);
+      res.status(409).json({ error: "reauth_required" }); return;
+    }
+    if (!r.ok || !payload.data) { res.status(502).json({ error: "instagram_unavailable" }); return; }
+
+    await db.collection("igConnections").doc(igDocID(owner.uid, owner.venueID))
+      .set({ lastSyncAt: new Date() }, { merge: true }).catch(() => undefined);
+
+    res.status(200).json({ posts: payload.data.map(igPublicPost) });
+  } catch (e) {
+    console.error("instagramMedia", e);
+    res.status(500).json({ error: "internal" });
+  }
+});
+
+/* ── Импорт поста: фото переезжают на наш CDN ─────────────────────────────
+ * Саму акцию создаёт клиент обычным путём (`HostRepository.saveDeal`) — так
+ * импорт не проходит мимо модерации и правил владения.
+ */
+export const instagramImportMedia = onRequest(igOptions, async (req, res) => {
+  try {
+    const owner = await igRequireOwner(req, res, "instagramImportMedia");
+    if (!owner) return;
+    const postID = String(req.body?.postID || "").trim();
+    if (!postID) { res.status(400).json({ error: "missing_params" }); return; }
+    const token = await igLoadToken(owner.uid, owner.venueID);
+    if (!token) { res.status(409).json({ error: "not_connected" }); return; }
+
+    // Токен принадлежит аккаунту заведения — Graph отдаст чужой пост только
+    // как ошибку, поэтому отдельной проверки владения постом не нужно.
+    const r = await fetch(`https://graph.instagram.com/${encodeURIComponent(postID)}?`
+      + new URLSearchParams({ fields: IG_MEDIA_FIELDS, access_token: token }).toString());
+    const node = (await r.json()) as IgMediaNode & { error?: unknown };
+    if (igIsAuthError(node)) {
+      await igMarkReauth(owner.uid, owner.venueID);
+      res.status(409).json({ error: "reauth_required" }); return;
+    }
+    if (!r.ok || !node.id) { res.status(404).json({ error: "post_not_found" }); return; }
+
+    const sources = igImages(node);
+    if (!sources.length) { res.status(409).json({ error: "no_image" }); return; }
+    const hosted = (await Promise.all(sources.map(rehostToCDN))).filter((u): u is string => !!u);
+    if (!hosted.length) { res.status(502).json({ error: "upload_failed" }); return; }
+
+    res.status(200).json({
+      postID: String(node.id),
+      imageURLs: hosted,
+      caption: String(node.caption || ""),
+      permalink: String(node.permalink || ""),
+    });
+  } catch (e) {
+    console.error("instagramImportMedia", e);
+    res.status(500).json({ error: "internal" });
+  }
+});
+
+/* ── Отключение аккаунта хостом ──────────────────────────────────────────── */
+export const instagramDisconnect = onRequest(igOptions, async (req, res) => {
+  try {
+    const owner = await igRequireOwner(req, res, "instagramDisconnect");
+    if (!owner) return;
+    const id = igDocID(owner.uid, owner.venueID);
+    await Promise.all([
+      db.collection("igAccounts").doc(id).delete(),
+      db.collection("igConnections").doc(id).delete(),
+    ]);
+    res.status(200).json({ ok: true });
+  } catch (e) {
+    console.error("instagramDisconnect", e);
+    res.status(500).json({ error: "internal" });
+  }
+});
+
+/* ── Продление токенов ────────────────────────────────────────────────────
+ * Длинный токен живёт 60 дней. Обновляем всё, чему осталось меньше 10 дней:
+ * запас на случай, если прогон не отработает пару раз подряд.
+ */
+export const refreshInstagramTokens = onSchedule(
+  { schedule: "every 24 hours", secrets: [IG_APP_SECRET] },
+  async () => {
+    const deadline = new Date(Date.now() + IG_REFRESH_WINDOW_MS);
+    const snap = await db.collection("igAccounts")
+      .where("tokenExpiresAt", "<", deadline).limit(200).get();
+    let ok = 0, failed = 0;
+    for (const doc of snap.docs) {
+      const acc = doc.data() as IgAccountDoc;
+      if (acc.needsReauth === true || !acc.accessToken) continue;
+      try {
+        const r = await fetch("https://graph.instagram.com/refresh_access_token?"
+          + new URLSearchParams({
+            grant_type: "ig_refresh_token", access_token: String(acc.accessToken),
+          }).toString());
+        const j = (await r.json()) as { access_token?: string; expires_in?: number };
+        if (!r.ok || !j.access_token) throw new Error(JSON.stringify(j).slice(0, 200));
+        const now = new Date();
+        await doc.ref.set({
+          accessToken: j.access_token,
+          tokenExpiresAt: new Date(now.getTime() + (Number(j.expires_in) || 60 * 24 * 3600) * 1000),
+          lastRefreshAt: now,
+          needsReauth: false,
+        }, { merge: true });
+        ok++;
+      } catch (e) {
+        failed++;
+        console.warn(`⚠️ ig refresh failed for ${doc.id}`, e);
+        await igMarkReauth(String(acc.ownerID || ""), String(acc.venueID || ""));
+      }
+    }
+    console.log(`ig refresh: ok=${ok} failed=${failed} of ${snap.size}`);
+  });
+
+/* ── Обязательные для App Review точки Meta ───────────────────────────────
+ * Deauthorize вызывается, когда пользователь отключает приложение у себя в
+ * инстаграме, Data Deletion — когда просит удалить данные. Оба приходят с
+ * `signed_request`, подписанным секретом приложения.
+ */
+function igParseSignedRequest(signed: string, secret: string): { user_id?: string } | null {
+  const [sigPart, payloadPart] = String(signed).split(".");
+  if (!sigPart || !payloadPart) return null;
+  const expected = crypto.createHmac("sha256", secret).update(payloadPart).digest();
+  const given = Buffer.from(sigPart.replace(/-/g, "+").replace(/_/g, "/"), "base64");
+  if (given.length !== expected.length || !crypto.timingSafeEqual(given, expected)) return null;
+  try {
+    return JSON.parse(Buffer.from(payloadPart.replace(/-/g, "+").replace(/_/g, "/"), "base64")
+      .toString("utf8"));
+  } catch { return null; }
+}
+
+/** Удаляет все подключения инстаграм-пользователя. Возвращает число удалённых. */
+async function igPurgeUser(igUserID: string): Promise<number> {
+  const snap = await db.collection("igAccounts").where("igUserID", "==", igUserID).get();
+  const refs: DocumentReference[] = [];
+  for (const d of snap.docs) {
+    refs.push(d.ref);
+    refs.push(db.collection("igConnections").doc(d.id));
+  }
+  await deleteInChunks(refs);
+  return snap.size;
+}
+
+export const instagramDeauthorize = onRequest(igOptions, async (req, res) => {
+  const parsed = igParseSignedRequest(String(req.body?.signed_request || ""), IG_APP_SECRET.value());
+  if (!parsed?.user_id) { res.status(400).json({ error: "bad_signature" }); return; }
+  const n = await igPurgeUser(String(parsed.user_id));
+  console.log(`ig deauthorize: purged ${n} connection(s)`);
+  res.status(200).json({ ok: true });
+});
+
+export const instagramDataDeletion = onRequest(igOptions, async (req, res) => {
+  const parsed = igParseSignedRequest(String(req.body?.signed_request || ""), IG_APP_SECRET.value());
+  if (!parsed?.user_id) { res.status(400).json({ error: "bad_signature" }); return; }
+  const userID = String(parsed.user_id);
+  const n = await igPurgeUser(userID);
+  console.log(`ig data deletion: purged ${n} connection(s)`);
+  // Формат ответа задан Meta: страница статуса + код обращения.
+  const code = crypto.createHash("sha256").update(userID).digest("hex").slice(0, 16);
+  res.status(200).json({ url: `https://ayant.kg/ig/deletion?code=${code}`, confirmation_code: code });
+});

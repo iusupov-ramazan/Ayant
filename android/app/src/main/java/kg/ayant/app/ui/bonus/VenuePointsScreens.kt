@@ -76,7 +76,7 @@ fun VenuePointsScreen(vm: PointsViewModel, onBack: () -> Unit) {
         containerColor = c.canvas,
         topBar = {
             TopAppBar(
-                title = { Text("Баллы САН", fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.points_title), fontWeight = FontWeight.Bold) },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.action_back)) } },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = c.canvas, titleContentColor = c.ink),
             )
@@ -91,14 +91,14 @@ fun VenuePointsScreen(vm: PointsViewModel, onBack: () -> Unit) {
 
             is LoadState.Failed ->
                 PointsPlaceholder(padding, c.accent, c.ink, c.inkSoft,
-                    title = "Не удалось загрузить баллы",
+                    title = stringResource(R.string.points_load_failed),
                     body = pointsErrorText(cards.error))
 
             is LoadState.Loaded<*> ->
                 if (state.sortedCards.isEmpty()) {
                     PointsPlaceholder(padding, c.accent, c.ink, c.inkSoft,
-                        title = "Пока нет баллов",
-                        body = "Показывайте свой QR при оплате в заведениях с бонусами САН — за визиты копятся баллы. Награды — на странице заведения.")
+                        title = stringResource(R.string.points_empty_title),
+                        body = stringResource(R.string.points_empty_body))
                 } else {
                     Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         state.sortedCards.forEach { VenuePointsCardView(it, state.userID) }
@@ -125,7 +125,7 @@ fun VenuePointsCardView(card: VenuePointsCard, userID: String) {
             }
             Column(Modifier.padding(start = 12.dp).weight(1f)) {
                 Text(card.venueName, fontSize = 20.sp, fontWeight = FontWeight.Black, color = Color.White, maxLines = 1)
-                Text("Ваши баллы", fontSize = 13.sp, color = Color.White.copy(alpha = 0.92f))
+                Text(stringResource(R.string.points_your_points), fontSize = 13.sp, color = Color.White.copy(alpha = 0.92f))
             }
             Text(
                 "${card.balance}", fontSize = 22.sp, fontWeight = FontWeight.Black, color = Color.White,
@@ -135,16 +135,16 @@ fun VenuePointsCardView(card: VenuePointsCard, userID: String) {
         if (showQR && canScan) {
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 QrCode(earnCode, size = 168)
-                Text("Покажите сотруднику — он начислит баллы", fontSize = 12.sp, color = Color.White.copy(alpha = 0.92f))
+                Text(stringResource(R.string.qr_show_to_staff), fontSize = 12.sp, color = Color.White.copy(alpha = 0.92f))
             }
         }
         Text(
-            if (showQR) "Скрыть QR" else "Показать QR для начисления", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = c.accentDeep,
+            if (showQR) stringResource(R.string.loyalty_hide_qr) else stringResource(R.string.points_show_qr_earn), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = c.accentDeep,
             modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color.White.copy(alpha = 0.92f))
                 .clickable(enabled = canScan) { showQR = !showQR }.padding(vertical = 13.dp),
             textAlign = TextAlign.Center,
         )
-        if (!canScan) Text("Войдите в аккаунт, чтобы копить баллы.", fontSize = 12.sp, color = Color.White.copy(alpha = 0.92f))
+        if (!canScan) Text(stringResource(R.string.qr_sign_in_title), fontSize = 12.sp, color = Color.White.copy(alpha = 0.92f))
     }
 }
 
@@ -166,7 +166,7 @@ fun VenuePointsVenueScreen(venueID: String, app: AppViewModel, vm: PointsViewMod
         containerColor = c.canvas,
         topBar = {
             TopAppBar(
-                title = { Text("Баллы САН", fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.points_title), fontWeight = FontWeight.Bold) },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.action_back)) } },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = c.canvas, titleContentColor = c.ink),
             )
@@ -177,7 +177,7 @@ fun VenuePointsVenueScreen(venueID: String, app: AppViewModel, vm: PointsViewMod
 
             if (activeRewards.isNotEmpty()) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Награды", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = c.ink)
+                    Text(stringResource(R.string.host_rewards), fontSize = 17.sp, fontWeight = FontWeight.Bold, color = c.ink)
                     activeRewards.forEach { reward ->
                         val affordable = balance >= reward.cost
                         Row(
@@ -192,7 +192,7 @@ fun VenuePointsVenueScreen(venueID: String, app: AppViewModel, vm: PointsViewMod
                             Column(Modifier.padding(start = 12.dp).weight(1f)) {
                                 Text(reward.title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = c.ink, maxLines = 1)
                                 Text(
-                                    if (reward.type == "money") "Скидка баллами · от ${reward.cost} б." else "${reward.cost} баллов",
+                                    if (reward.type == "money") stringResource(R.string.points_reward_money_from, reward.cost) else stringResource(R.string.qr_points_count, reward.cost),
                                     fontSize = 12.sp, color = c.inkSoft,
                                 )
                             }
@@ -206,8 +206,8 @@ fun VenuePointsVenueScreen(venueID: String, app: AppViewModel, vm: PointsViewMod
             }
 
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(c.surface).border(0.5.dp, c.hairline, RoundedCornerShape(20.dp)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Как это работает", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = c.ink)
-                Text("Показывайте QR при оплате — сотрудник начисляет баллы. Тратьте их на награды из списка выше.", fontSize = 15.sp, color = c.inkSoft)
+                Text(stringResource(R.string.loyalty_how_title), fontSize = 17.sp, fontWeight = FontWeight.Bold, color = c.ink)
+                Text(stringResource(R.string.points_how_body), fontSize = 15.sp, color = c.inkSoft)
             }
         }
     }
@@ -243,28 +243,28 @@ private fun RedeemDialog(
                 if (isMoney) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         TextButton(enabled = spend - 10 >= reward.cost, onClick = { spend -= 10 }) { Text("−10") }
-                        Text("$spend б.", fontWeight = FontWeight.Bold, color = c.ink)
+                        Text(stringResource(R.string.points_short, spend), fontWeight = FontWeight.Bold, color = c.ink)
                         TextButton(enabled = spend + 10 <= balance, onClick = { spend += 10 }) { Text("+10") }
                     }
-                    Text("Скидка: $somOff сом", fontSize = 13.sp, color = c.inkSoft)
+                    Text(stringResource(R.string.points_discount_som, somOff), fontSize = 13.sp, color = c.inkSoft)
                 } else {
-                    Text("Стоимость: ${reward.cost} баллов", fontSize = 14.sp, color = c.inkSoft)
+                    Text(stringResource(R.string.points_cost, reward.cost), fontSize = 14.sp, color = c.inkSoft)
                 }
                 when {
                     done != null -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            "Списано ${done.redeemed} баллов. Остаток: ${done.balance}. Заберите награду у сотрудника.",
+                            stringResource(R.string.points_redeemed_customer, done.redeemed, done.balance),
                             fontWeight = FontWeight.SemiBold, color = c.open,
                         )
                         if (done.replayed) {
                             // Сервер узнал повтор по ключу идемпотентности — второй раз не списали.
-                            Text("Это повтор предыдущего запроса — баллы списаны один раз.",
+                            Text(stringResource(R.string.points_redeem_replayed),
                                 fontSize = 12.sp, color = c.inkSoft)
                         }
                     }
                     staffScan -> Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         QrCode(redeemCode, size = 200)
-                        Text("Покажите QR сотруднику — он спишет баллы и выдаст награду.", fontSize = 12.sp, color = c.inkSoft)
+                        Text(stringResource(R.string.points_redeem_show_qr), fontSize = 12.sp, color = c.inkSoft)
                     }
                 }
                 error?.let { Text(pointsErrorText(it), fontSize = 13.sp, color = Color(0xFFD32F2F)) }
@@ -274,13 +274,13 @@ private fun RedeemDialog(
             if (done == null && !staffScan) {
                 TextButton(enabled = !working && cost <= balance, onClick = {
                     vm.send(PointsIntent.Redeem(venue.id, reward.id, if (isMoney) spend else 0))
-                }) { Text(if (working) "Списываем…" else "Списать $cost баллов") }
+                }) { Text(if (working) stringResource(R.string.points_redeeming) else stringResource(R.string.points_redeem_button, cost)) }
             } else {
-                TextButton(onClick = { vm.send(PointsIntent.DismissRedeem); onDismiss() }) { Text("Готово") }
+                TextButton(onClick = { vm.send(PointsIntent.DismissRedeem); onDismiss() }) { Text(stringResource(R.string.action_done)) }
             }
         },
         dismissButton = {
-            if (done == null) TextButton(onClick = { vm.send(PointsIntent.DismissRedeem); onDismiss() }) { Text("Отмена") }
+            if (done == null) TextButton(onClick = { vm.send(PointsIntent.DismissRedeem); onDismiss() }) { Text(stringResource(R.string.action_cancel)) }
         },
     )
 }
@@ -290,17 +290,20 @@ private fun RedeemDialog(
  * (`PointsMath`), и от сервера, поэтому текст должен быть один.
  * Зеркалит `PointsMessages` на iOS.
  */
-internal fun pointsErrorText(error: AppError): String = when (error.code) {
-    "insufficient" -> "Недостаточно баллов."
-    "reward_not_found" -> "Награда недоступна."
-    "redeem_not_allowed" -> "Списание доступно только у сотрудника."
-    "below_min" -> "Слишком мало баллов."
-    "key_reused" -> "Этот запрос уже выполнялся. Обновите экран."
-    "unauthenticated", "no_token", "bad_token" -> "Войдите в аккаунт, чтобы списать баллы."
-    "permission_denied" -> "Нет доступа к баллам этого аккаунта."
-    "network" -> "Нет связи. Проверьте интернет и повторите."
-    else -> "Не удалось списать баллы. Попробуйте ещё раз."
-}
+@Composable
+internal fun pointsErrorText(error: AppError): String = stringResource(
+    when (error.code) {
+        "insufficient" -> R.string.points_err_insufficient
+        "reward_not_found" -> R.string.points_err_reward_not_found
+        "redeem_not_allowed" -> R.string.points_err_redeem_not_allowed
+        "below_min" -> R.string.points_err_below_min
+        "key_reused" -> R.string.points_err_key_reused
+        "unauthenticated", "no_token", "bad_token" -> R.string.points_err_unauthenticated
+        "permission_denied" -> R.string.points_err_permission_denied
+        "network" -> R.string.points_err_network
+        else -> R.string.points_err_generic
+    }
+)
 
 /** Пустое состояние / ошибка списка — одинаковая рамка, разный текст. */
 @Composable

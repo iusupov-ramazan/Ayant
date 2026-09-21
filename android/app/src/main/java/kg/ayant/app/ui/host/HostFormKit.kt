@@ -52,9 +52,12 @@ import kg.ayant.app.ui.theme.ayantPressScale
  * обычные Material-диалоги — их вид не совпадал ни с чем в редизайне.
  */
 
-/** Ряд формы: метка-капслок + значение. Mirrors `SanFieldRow`. */
+/**
+ * Ряд формы: метка-капслок + значение (+ пояснение под полем там, где из
+ * одного названия правило не понятно). Mirrors `SanFieldRow(label:hint:)`.
+ */
 @Composable
-fun AyantFieldRow(label: String, value: @Composable ColumnScope.() -> Unit) {
+fun AyantFieldRow(label: String, hint: String? = null, value: @Composable ColumnScope.() -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
@@ -67,6 +70,89 @@ fun AyantFieldRow(label: String, value: @Composable ColumnScope.() -> Unit) {
             color = Color(0xFF9A9188),
         )
         value()
+        hint?.let { Text(it, fontSize = 11.5.sp, color = AyantTheme.colors.inkSoft, lineHeight = 15.sp) }
+    }
+}
+
+/** Капслоковый заголовок группы на канвасе. Mirrors `.sanEyebrowText()` над карточкой. */
+@Composable
+fun AyantEyebrow(text: String, modifier: Modifier = Modifier, color: Color = Color(0xFF9A9188)) {
+    Text(
+        text.uppercase(), fontSize = 11.5.sp, fontWeight = FontWeight.Black,
+        letterSpacing = 1.2.sp, color = color, modifier = modifier,
+    )
+}
+
+/** Степпер «−  N  +» в ряду формы. Mirrors системный `Stepper` на iOS. */
+@Composable
+fun AyantStepper(value: Int, range: IntRange, onChange: (Int) -> Unit) {
+    val c = AyantTheme.colors
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            "$value", fontSize = 15.5.sp, fontWeight = FontWeight.SemiBold,
+            color = c.ink, modifier = Modifier.weight(1f),
+        )
+        AyantStepButton("−", enabled = value > range.first) { onChange((value - 1).coerceIn(range)) }
+        Spacer(Modifier.width(8.dp))
+        AyantStepButton("+", enabled = value < range.last) { onChange((value + 1).coerceIn(range)) }
+    }
+}
+
+@Composable
+fun AyantStepButton(label: String, enabled: Boolean = true, onClick: () -> Unit) {
+    val c = AyantTheme.colors
+    Box(
+        Modifier
+            .size(32.dp)
+            .clip(CircleShape)
+            .background(c.surfaceMuted)
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(label, fontSize = 17.sp, fontWeight = FontWeight.Bold,
+            color = if (enabled) c.ink else c.inkSoft)
+    }
+}
+
+/**
+ * Полноэкранная форма хоста: шапка «Отмена · Название», прокрутка и липкий
+ * футер — как `SanFormHeader` + `SanStickyFooter` на iOS. Все формы кабинета
+ * (заведение, акция, объект, филиал, реквизиты, ответ на отзыв, кампания)
+ * собраны на этом каркасе, поэтому выглядят одинаково.
+ */
+@Composable
+fun AyantHostFormScreen(
+    title: String,
+    onCancel: () -> Unit,
+    footer: @Composable ColumnScope.() -> Unit,
+    aboveScroll: (@Composable ColumnScope.() -> Unit)? = null,
+    contentSpacing: androidx.compose.ui.unit.Dp = 10.dp,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val c = AyantTheme.colors
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onCancel,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Column(
+            Modifier
+                .androidx.compose.foundation.layout.fillMaxSize()
+                .background(c.canvas)
+                .androidx.compose.foundation.layout.statusBarsPadding()
+                .androidx.compose.foundation.layout.imePadding(),
+        ) {
+            AyantFormHeader(title, onCancel = onCancel)
+            aboveScroll?.invoke(this)
+            Column(
+                Modifier
+                    .weight(1f)
+                    .androidx.compose.foundation.verticalScroll(androidx.compose.foundation.rememberScrollState())
+                    .padding(horizontal = AyantMetrics.screenPadding)
+                    .padding(top = 4.dp, bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(contentSpacing),
+            ) { content() }
+            AyantStickyFooter { footer() }
+        }
     }
 }
 

@@ -276,6 +276,21 @@ extension Deal {
     }
 }
 
+// MARK: - ReviewReport
+
+extension ReviewReport {
+    var firestoreData: [String: Any] {
+        [
+            FS.ReviewReportDoc.reviewID: reviewID,
+            FS.ReviewReportDoc.venueID: venueID,
+            FS.ReviewReportDoc.reporterID: reporterID,
+            FS.ReviewReportDoc.reason: reason.rawValue,
+            FS.ReviewReportDoc.createdAt: Timestamp(date: createdAt),
+            FS.ReviewReportDoc.status: ReviewReportStatus.open,
+        ]
+    }
+}
+
 // MARK: - Review
 
 extension HostReply {
@@ -397,6 +412,19 @@ extension LoyaltyCard {
             completedRounds: d.int(FS.LoyaltyCardDoc.completedRounds) ?? 0,
             goal: d.int(FS.LoyaltyCardDoc.goal) ?? 6,
             reward: d.string(FS.LoyaltyCardDoc.reward) ?? "Награда за лояльность"
+        )
+    }
+}
+
+extension PointsLedgerEntry {
+    public init(firestore d: [String: Any], id: String) {
+        self.init(
+            id: id,
+            kind: Kind(rawValue: d.string(FS.LedgerDoc.type) ?? "") ?? .unknown,
+            points: d.int(FS.LedgerDoc.points) ?? 0,
+            at: d.date(FS.LedgerDoc.at) ?? Date(timeIntervalSince1970: 0),
+            billAmount: d.int(FS.LedgerDoc.billAmount),
+            rewardID: d.string(FS.LedgerDoc.rewardId)
         )
     }
 }
@@ -579,6 +607,8 @@ extension HostDealDTO {
         d[FS.DealDoc.imageURL] = imageURL
         d[FS.DealDoc.imageURLs] = imageURLs
         d[FS.DealDoc.terms] = terms
+        // Источник импорта: по нему кабинет помечает пост как уже добавленный.
+        if let sourcePostID, !sourcePostID.isEmpty { d[FS.DealDoc.igPostID] = sourcePostID }
         return d
     }
 
@@ -599,7 +629,8 @@ extension HostDealDTO {
             statusRaw: status.rawValue,
             imageURL: d.string(FS.DealDoc.imageURL) ?? "",
             imageURLs: d[FS.DealDoc.imageURLs] as? [String] ?? [],
-            terms: d[FS.DealDoc.terms] as? [String] ?? [])
+            terms: d[FS.DealDoc.terms] as? [String] ?? [],
+            sourcePostID: d.string(FS.DealDoc.igPostID))
     }
 }
 

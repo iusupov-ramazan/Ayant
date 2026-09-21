@@ -33,6 +33,10 @@ import kg.ayant.app.core.storefrontIcon
 import kg.ayant.app.domain.model.Deal
 import kg.ayant.app.ui.theme.AyantTheme
 import kg.ayant.app.ui.theme.color
+import androidx.compose.ui.res.stringResource
+import kg.ayant.app.R
+import kg.ayant.app.core.localizedTitle
+import kg.ayant.app.core.AppLanguage
 
 // MARK: - Responsive deal image (card height follows the photo's aspect ratio,
 // clamped to the Instagram range 1.91:1 … 4:5). Mirrors DealImage.
@@ -205,7 +209,7 @@ fun StarRating(rating: Double, count: Int? = null, size: Int = 13, modifier: Mod
             Icon(icon, null, tint = Color(0xFFF5C518), modifier = Modifier.size(size.dp))
         }
         Text(
-            "%.1f".format(rating),
+            "%.1f".format(AppLanguage.locale, rating),
             fontSize = size.sp,
             fontWeight = FontWeight.SemiBold,
             color = AyantTheme.colors.ink,
@@ -229,7 +233,7 @@ fun DealTypeBadge(deal: Deal, modifier: Modifier = Modifier) {
             .padding(horizontal = 10.dp, vertical = 5.dp),
     ) {
         Icon(kg.ayant.app.core.dealTypeIcon(deal.type), null, tint = Color.White, modifier = Modifier.size(12.dp))
-        Text(deal.type.title, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 4.dp))
+        Text(deal.type.localizedTitle(), color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 4.dp))
     }
 }
 
@@ -240,7 +244,7 @@ fun PriceLabel(deal: Deal, modifier: Modifier = Modifier) {
     Row(verticalAlignment = Alignment.Bottom, modifier = modifier) {
         deal.oldPrice?.let {
             Text(
-                "$it сом",
+                stringResource(R.string.price_som, it),
                 fontSize = 14.sp,
                 color = AyantTheme.colors.inkSoft,
                 textDecoration = androidx.compose.ui.text.style.TextDecoration.LineThrough,
@@ -248,7 +252,7 @@ fun PriceLabel(deal: Deal, modifier: Modifier = Modifier) {
             )
         }
         deal.newPrice?.let {
-            Text("$it сом", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = AyantTheme.colors.accentText)
+            Text(stringResource(R.string.price_som, it), fontSize = 17.sp, fontWeight = FontWeight.Bold, color = AyantTheme.colors.accentText)
         }
     }
 }

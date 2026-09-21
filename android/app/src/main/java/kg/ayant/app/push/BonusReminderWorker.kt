@@ -18,6 +18,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import kg.ayant.app.core.AppLanguage
 
 /**
  * Periodic re-engagement nudge: if the user hasn't earned their bonus goal today,
@@ -44,8 +45,8 @@ class BonusReminderWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, 
         )
         val n = NotificationCompat.Builder(applicationContext, Push.CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("Не забудь про бонусы 🎁")
-            .setContentText("Загляни в Ayant — новые акции и бонусы ждут.")
+            .setContentTitle(AppLanguage.context.getString(R.string.bonus_reminder_title))
+            .setContentText(AppLanguage.context.getString(R.string.bonus_reminder_body))
             .setAutoCancel(true)
             .setContentIntent(pending)
             .build()
@@ -54,10 +55,21 @@ class BonusReminderWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, 
     }
 
     companion object {
+        private const val WORK_NAME = "ayant_bonus_reminder"
+
+        /**
+         * Напоминание — про глобальный кошелёк: пока он скрыт флагом релиза
+         * (`ReleaseFlags.GLOBAL_BONUS_WALLET`), пуш вёл бы в никуда — снимаем,
+         * как `NotificationManager.disable()` на iOS.
+         */
         fun schedule(context: Context) {
+            if (!kg.ayant.app.core.ReleaseFlags.GLOBAL_BONUS_WALLET) {
+                WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
+                return
+            }
             val request = PeriodicWorkRequestBuilder<BonusReminderWorker>(6, TimeUnit.HOURS).build()
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-                "ayant_bonus_reminder",
+                WORK_NAME,
                 androidx.work.ExistingPeriodicWorkPolicy.KEEP,
                 request,
             )

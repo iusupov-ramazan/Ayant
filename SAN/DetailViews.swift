@@ -59,7 +59,7 @@ struct DealDetailView: View {
             }
             .padding(.bottom, 24)
         }
-        .navigationTitle(venue?.name ?? "Предложение")
+        .navigationTitle(venue?.name ?? LS("Предложение"))
         .navigationBarTitleDisplayMode(.inline)
         .guestAlert(isPresented: $showGuestAlert, message: GuestGate.saveDeal)
         .onAppear {
@@ -210,7 +210,7 @@ struct DealDetailView: View {
                         VenueAvatar(venue: venue, size: 48)
                         VStack(alignment: .leading, spacing: 3) {
                             Text(venue.name).font(.subheadline.weight(.semibold)).foregroundStyle(.primary)
-                            Text("\(venue.category.rawValue) • \(venue.district)")
+                            (Text(venue.category.locKey) + Text(verbatim: " • \(venue.district)"))
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                         Spacer()
@@ -238,9 +238,16 @@ struct DealDetailView: View {
                 }
                 if !venue.phone.trimmingCharacters(in: .whitespaces).isEmpty,
                    let url = URL(string: "tel:\(venue.phone.filter { !$0.isWhitespace })") {
-                    Link(destination: url) {
+                    // Кнопка, а не `Link`: звонок по номеру — такое же обращение,
+                    // как по кнопке «Позвонить», и должен попадать в аналитику.
+                    Button {
+                        store.log(AnalyticsMetric.calls, for: venue.id)
+                        openURL(url)
+                    } label: {
                         Label(venue.phone, systemImage: "phone.fill").font(.subheadline)
                     }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.sanAccentText)
                 }
             }
             .padding(.horizontal, 16)
@@ -266,6 +273,8 @@ struct VenueDetailView: View {
     @State private var hoursExpanded = false
     @State private var photoViewerIndex: Int?
     @State private var reportingReview: Review?
+    /// Показываем подтверждение: молчаливая жалоба неотличима от сломанной кнопки.
+    @State private var reportSent = false
     @State private var showGuestPrompt = false
     @State private var guestMessage = GuestGate.saveVenue
     @State private var showMapOptions = false
@@ -477,7 +486,7 @@ struct VenueDetailView: View {
             HStack(spacing: 6) {
                 Circle().fill(venue.isOpenNow ? Color.sanOpen : Color.sanInkSoft)
                     .frame(width: 6, height: 6)
-                Text(venue.hoursStatusText)
+                Text(venue.hoursStatusKey)
             }
             .font(.golos(12.5, .bold))
             .foregroundStyle(venue.isOpenNow ? Color.sanOpen : Color.sanInkSoft)
@@ -734,12 +743,7 @@ struct VenueDetailView: View {
         }
     }
 
-    private static func reviewsWord(_ n: Int) -> String {
-        let n10 = n % 10, n100 = n % 100
-        if n10 == 1 && n100 != 11 { return "отзыв" }
-        if (2...4).contains(n10) && !(12...14).contains(n100) { return "отзыва" }
-        return "отзывов"
-    }
+    private static func reviewsWord(_ n: Int) -> String { LPlural(n, "отзыв", "отзыва", "отзывов") }
 
     // MARK: Действия
 
@@ -779,11 +783,11 @@ struct VenueDetailView: View {
         .padding(.horizontal, 16)
     }
 
-    private func actionButton(_ title: String, _ icon: String, action: @escaping () -> Void) -> some View {
+    private func actionButton(_ title: LocalizedStringKey, _ icon: String, action: @escaping () -> Void) -> some View {
         Button(action: action) { actionLabel(title, icon) }.buttonStyle(.plain)
     }
 
-    private func actionLabel(_ title: String, _ icon: String) -> some View {
+    private func actionLabel(_ title: LocalizedStringKey, _ icon: String) -> some View {
         VStack(spacing: 5) {
             Image(systemName: icon).font(.subheadline)
             Text(title).font(.caption2)
@@ -910,12 +914,7 @@ struct VenueDetailView: View {
         .buttonStyle(.sanPress(0.98))
     }
 
-    private static func pointsWord(_ n: Int) -> String {
-        let n10 = n % 10, n100 = n % 100
-        if n10 == 1 && n100 != 11 { return "балл" }
-        if (2...4).contains(n10) && !(12...14).contains(n100) { return "балла" }
-        return "баллов"
-    }
+    private static func pointsWord(_ n: Int) -> String { LPlural(n, "балл", "балла", "баллов") }
 
     // MARK: Инфо
 
@@ -957,7 +956,10 @@ struct VenueDetailView: View {
                 .buttonStyle(.plain)
                 if showAllBranches {
                     ForEach(venue.branches) { b in
-                        Button { openURL(Directions.dgis(lat: b.latitude, lng: b.longitude)) } label: {
+                        Button {
+                            detail.send(.logContact(.maps))
+                            openURL(Directions.dgis(lat: b.latitude, lng: b.longitude))
+                        } label: {
                             HStack {
                                 Label(b.address, systemImage: "mappin.and.ellipse").font(.subheadline)
                                 Spacer()
@@ -970,7 +972,15 @@ struct VenueDetailView: View {
             }
             if !venue.phone.trimmingCharacters(in: .whitespaces).isEmpty,
                let url = URL(string: "tel:\(venue.phone.filter { !$0.isWhitespace })") {
-                Link(destination: url) { Label(venue.phone, systemImage: "phone.fill").font(.subheadline) }
+                // Тап по номеру считается обращением наравне с кнопкой «Позвонить».
+                Button {
+                    detail.send(.logContact(.call))
+                    openURL(url)
+                } label: {
+                    Label(venue.phone, systemImage: "phone.fill").font(.subheadline)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.sanAccentText)
             }
             if venue.whatsappURL != nil || venue.instagramURL != nil || venue.telegramURL != nil {
                 HStack(spacing: 12) {
@@ -987,7 +997,7 @@ struct VenueDetailView: View {
             }
             Button { withAnimation { hoursExpanded.toggle() } } label: {
                 HStack {
-                    Label(venue.hoursStatusText, systemImage: "clock")
+                    Label(venue.hoursStatusKey, systemImage: "clock")
                         .font(.subheadline)
                         .foregroundStyle(venue.isOpenNow ? .green : .secondary)
                     Spacer()
@@ -1130,7 +1140,7 @@ struct VenueDetailView: View {
                 VStack(spacing: 2) {
                     Text(String(format: "%.1f", agg.rating)).font(.system(size: 40, weight: .bold))
                     StarRatingView(rating: agg.rating, size: 12)
-                    Text("\(agg.count) отзывов").font(.caption2).foregroundStyle(.secondary)
+                    Text("\(agg.count) \(Self.reviewsWord(agg.count))").font(.caption2).foregroundStyle(.secondary)
                 }
                 RatingBreakdownView(breakdown: detail.state.ratingBreakdown)
             }
@@ -1176,14 +1186,29 @@ struct VenueDetailView: View {
                 .padding(.horizontal, 16)
             }
         }
+        // Причины перечисляем из домена, а не литералами: список один и тот же
+        // на обеих платформах и в админ-панели.
         .confirmationDialog("Пожаловаться на отзыв", isPresented: Binding(
             get: { reportingReview != nil }, set: { if !$0 { reportingReview = nil } }
         ), titleVisibility: .visible) {
-            Button("Фейк", role: .destructive) { reportingReview = nil }
-            Button("Спам", role: .destructive) { reportingReview = nil }
-            Button("Оскорбительное", role: .destructive) { reportingReview = nil }
+            ForEach(ReviewReportReason.allCases, id: \.self) { reason in
+                Button(L(reason.title), role: .destructive) { send(reason) }
+            }
             Button("Отмена", role: .cancel) { reportingReview = nil }
         }
+        .alert("Жалоба отправлена", isPresented: $reportSent) {
+            Button("Понятно", role: .cancel) {}
+        } message: {
+            Text("Мы проверим отзыв. Если он нарушает правила, его удалят.")
+        }
+    }
+
+    private func send(_ reason: ReviewReportReason) {
+        guard let review = reportingReview else { return }
+        reportingReview = nil
+        store.reportReview(review, reason: reason)
+        SanHaptics.success()
+        reportSent = true
     }
 }
 

@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="host_onb_title">Мекемеңизди Ayant\'ка кошуңуз</string>
+    <string name="host_onb_name_placeholder">Мисалы, Sierra Coffee</string>
+    <string name="host_onb_phone_placeholder">+996 …</string>
+    <string name="host_onb_email_placeholder">you@example.com</string>
+    <string name="host_onb_note">Жөнөткөндөн кийин мекеме модерацияга түшөт. Адатта бир сутканын ичинде текшеребиз.</string>
+    <string name="host_onb_first_title">Биринчи мекемени кошобузбу?</string>
+    <string name="host_onb_first_body">Азыр же кийин — «Мекемелер» өтмөгүнөн кошсо болот.</string>
+    <string name="host_onb_add_now">Мекемени азыр кошуу</string>
+    <string name="host_onb_later">Кийин жасайм</string>
+
+    <string name="host_venue_plural_one">Мекеме</string>
+    <string name="host_venue_plural_few">Мекеме</string>
+    <string name="host_venue_plural_many">Мекеме</string>
+    <string name="host_stat_active_deals_lc">активдүү акция</string>
+    <string name="host_sync_denied">Сервер сактоону четке какты: аккаунттун бул мекемеге укугу жок. Маалыматтар ушул түзмөктө гана көрүнөт.</string>
+    <string name="host_sync_network">Сервер менен байланыш жок. Өзгөрүүлөр түзмөктө сакталды жана кийинки жаңыртууда жөнөтүлөт.</string>
+    <string name="host_sync_failed">Сервер менен синхрондоштуруу мүмкүн болгон жок.</string>
+    <string name="host_menu_duplicate">Көчүрмөлөө</string>
+    <string name="host_period">Мезгил</string>
+
+    <string name="host_special_placeholder_full">100 белгиге чейин — алып салуу үчүн бош калтырыңыз</string>
+    <string name="host_points_no_rewards">Сыйлыктар киргизилген эмес</string>
+    <string name="host_points_rewards_count">%1$d сыйлык</string>
+    <string name="host_points_scan_pause">Скан тыныгуусу</string>
+    <string name="host_points_expiry_short">Күйүү</string>
+    <string name="host_loyalty_enabled_explain">Конок сиздин купонуңузду/акцияңызды ар колдонгондо штамп алат. %1$d-штампта ага автоматтык түрдө «%2$s» купону берилет, аны ал сизге көрсөтөт.</string>
+    <string name="host_loyalty_disabled_explain">Коноктор кайра келиши үчүн лоялдуулук программасын күйгүзүңүз: келүүлөр үчүн штамп топтоп, сыйлык алышат.</string>
+    <string name="host_loyalty_setup">Жөндөө</string>
+    <string name="host_loyalty_turn_on">Күйгүзүү</string>
+    <string name="host_items_sub">Коноктор өзүнчө баалай ала турган тамактар жана кызматтар.</string>
+    <string name="host_all_campaigns">Бардык жарнама кампаниялары</string>
+
+    <string name="host_cover_upload">Мукаба жүктөө</string>
+    <string name="host_form_section_photo">Мекеменин сүрөтү</string>
+    <string name="host_form_section_pdf">Прайс-барак / каталог (PDF)</string>
+    <string name="host_form_pdf_hint">Тамактардын же кызматтардын тизмеси. Коноктор аны мекеменин барагында ачышат.</string>
+    <string name="host_form_section_coupons">Купондор</string>
+    <string name="host_form_coupons_on_footer">Коноктор акцияларыңызга купон алып, колдоно алышат. Күйгүзүлгөн бойдон калтырууну сунуштайбыз — купондор келүүчүлүктү байкаларлык жогорулатат.</string>
+    <string name="host_form_coupons_off_footer">⚠️ Купондор өчүрүлгөн — коноктор акцияларыңызда купон алуу баскычын көрүшпөйт. Күйгүзүүнү сунуштайбыз: бул көбүрөөк конок тартат.</string>
+    <string name="host_form_loyalty_off_footer">Коноктор келүүлөр үчүн штамп топтоп, сыйлык алышы үчүн күйгүзүңүз.</string>
+    <string name="host_form_stamps_goal_n">Сыйлыкка чейинки штамптар: %1$d</string>
+    <string name="host_form_manual_coords">Координаттарды кол менен киргизүү</string>
+    <string name="host_form_apply_monday_all">Дүйшөмбүнү бардык күндөргө колдонуу</string>
+    <string name="host_form_footer_new">Жаңы мекеме модерацияга түшөт — адатта 24 саатка чейин.</string>
+    <string name="host_form_footer_edit">Өзгөрүүлөр дароо сакталат, жарыялоо статусу өзгөрбөйт.</string>
+    <string name="host_form_whatsapp_full">WhatsApp (номер, мис. 996700123456)</string>
+    <string name="host_form_section_branch">Филиал</string>
+    <string name="host_pdf_uploaded">PDF жүктөлдү</string>
+    <string name="host_pdf_upload">PDF жүктөө</string>
+    <string name="host_pdf_replace">PDF алмаштыруу</string>
+    <string name="host_remove">Алып салуу</string>
+    <string name="host_pdf_failed">PDF жүктөө мүмкүн болгон жок</string>
+    <string name="host_photo_upload">Сүрөт жүктөө</string>
+    <string name="host_photo_failed">Сүрөт жүктөө катасы</string>
+    <string name="host_paste_link">Же шилтеме коюңуз</string>
+    <string name="host_map_title">Картадагы чекит</string>
+
+    <string name="host_deal_title_placeholder">Жумуш күндөрү мантыга −30%</string>
+    <string name="host_deal_price_hint">Баа — бүтүн сом саны, 0дөн кем эмес</string>
+    <string name="host_deal_discount_hint">Арзандатуу — 1ден 99га чейинки бүтүн сан</string>
+    <string name="host_deal_need_offer_hint">Арзандатуу үчүн жаңы бааны же пайызды көрсөтүңүз</string>
+    <string name="host_deal_details_placeholder">11:00дөн 15:00гө чейин мантынын бардык түрүнө</string>
+    <string name="host_deal_terms_label">Шарттар</string>
+    <string name="host_deal_terms_hint">Ар бир сапка бирден — конок аларды тизме түрүндө көрөт</string>
+    <string name="host_deal_terms_placeholder">Күн сайын 12:00го чейин\nБир конокко бир суусундук</string>
+    <string name="host_deal_discount_label" formatted="false">Арзандатуу, %</string>
+    <string name="host_deal_photo_eyebrow">Сүрөттөр</string>
+    <string name="host_deal_photo_add">Сүрөт кошуу</string>
+    <string name="host_deal_valid_label">Күчүндө</string>
+    <string name="host_deal_publication_label">Жарыялоо</string>
+    <string name="host_deal_draft_sub">Кара нускасы конокторго көрүнбөйт</string>
+    <string name="host_deal_preview_eyebrow">Коноктор кантип көрөт</string>
+    <string name="host_deal_footer_draft">Кара нускасы конокторго көрүнбөйт — даяр болгондо жарыялаңыз.</string>
+    <string name="host_deal_footer_publish">Сунуш модерациясыз дароо жарыяланат.</string>
+    <string name="host_deal_title_fallback">Сунуштун аталышы</string>
+
+    <string name="host_scanner_title">Купон сканери</string>
+    <string name="host_camera_denied_title">Камерага уруксат жок</string>
+    <string name="host_camera_denied_body">Коноктордун QR\'ин сканерлөө үчүн Жөндөөлөрдөн уруксат бериңиз.</string>
+    <string name="host_open_settings">Жөндөөлөрдү ачуу</string>
+    <string name="host_scan_checking_long">Кодду текшерүүдөбүз…</string>
+    <string name="host_manual_placeholder">AYANT-XXXXXX</string>
+    <string name="host_err_network">Тармак катасы. Дагы бир жолу аракет кылыңыз.</string>
+    <string name="host_err_loyalty_is_points">Бул мекеме штамп эмес, упай чегерет — конокту «Менин QR» кодун көрсөтүүнү сураныңыз.</string>
+    <string name="host_err_key_reused">Бул код башка сурам менен мурда иштетилген. QR\'ди кайра сканерлеңиз.</string>
+    <string name="host_err_bad_reward">Сыйлык туура эмес көрсөтүлгөн. Конокту QR\'ди жаңыртууну сураныңыз.</string>
+    <string name="host_err_internal">Серверде ката. Бир мүнөттөн кийин кайра аракет кылыңыз.</string>
+    <string name="host_err_app_check">Тиркеме текшерүүдөн өткөн жок. Аны Google Play\'ден жаңыртыңыз.</string>
+    <string name="host_err_cooldown_long">Бул конокко жакында эле чегерилген, кийинчерээк аракет кылыңыз.</string>
+    <string name="host_result_stamp">+1 штамп ✓</string>
+    <string name="host_result_done">Даяр ✓</string>
+    <string name="host_result_coupon">Купон колдонулду ✓</string>
+    <string name="host_result_titled">«%1$s» ✓</string>
+    <string name="host_result_reward">Сыйлык берилди ✓</string>
+    <string name="host_result_points">+%1$d упай ✓</string>
+    <string name="host_sub_coupon">Купон колдонулду.</string>
+    <string name="host_sub_stamp_total">Картада бардыгы: %1$d / %2$d.</string>
+    <string name="host_sub_coupon_stamp">«%1$s» купону колдонулду. %2$s</string>
+    <string name="host_sub_reward_issued">🎉 Карта толду! Конокко «%1$s» купону берилди — ал «Менин купондорум» бөлүмүндө; аны азыр же кийинки келгенде колдонсо болот.</string>
+
+    <string name="analytics_rewards_issued">Сыйлык берилди</string>
+    <string name="analytics_stamps">Штамп берилди</string>
+    <string name="analytics_points_earned">Упай чегерилди</string>
+    <string name="analytics_points_redeemed">Упай чыгымдалды</string>
+    <string name="analytics_empty_title">Азырынча маалымат жок</string>
+    <string name="analytics_empty_body">Статистика коноктордун чыныгы аракеттеринен топтолот: мекемени көрүү, сактоо жана залдагы скандоолор. Алгачкы жумаларда сандар кичине болот — бул нормалдуу.</string>
+
+    <string name="host_reviews_empty_title">Азырынча пикир жок</string>
+    <string name="host_reviews_empty_body">Биринчи пикирлерди алуу үчүн мекеме менен бөлүшүңүз.</string>
+    <string name="host_quick_replies">Тез жооптор</string>
+
+    <string name="host_profile_under_review">Текшерүүдө</string>
+    <string name="host_profile_has_check">Сизде көк белги бар.</string>
+    <string name="host_profile_info_placeholder">Аталышы, телефону, ЖИ, ИНН…</string>
+    <string name="host_signout_body">Кирүү экранына кайтасыз. Мекемелер жана статистика сакталат.</string>
+    <string name="host_info_section_legal">Формасы жана реквизиттери</string>
+    <string name="host_info_legal_footer">Бул маалыматтар сизге жана Ayant модерациясына гана көрүнөт — алар верификациядан тезирээк өтүүгө жардам берет.</string>
+    <string name="host_info_section_more">Кошумча</string>
+    <string name="host_info_about_short">Бизнес жөнүндө (кыскача)</string>
+
+    <string name="host_promo_rate_boost">180 сом/күн</string>
+    <string name="host_promo_rate_push">240 сом/күн</string>
+    <string name="host_promo_headline_label">Push аталышы (60 чейин)</string>
+    <string name="host_promo_text_label">Push тексти (120 чейин)</string>
+    <string name="host_promo_headline_placeholder">Бүгүн 30% арзандатуу</string>
+    <string name="host_promo_text_placeholder">11ден 15ке чейин келиңиз</string>
+    <string name="host_promo_total">Жыйынтык</string>
+    <string name="host_promo_launch">Кампанияны баштоо</string>
+    <string name="host_promo_preview">Алдын ала көрүү</string>
+    <string name="host_promo_preview_hint">Коноктор сизди тасмада ушундай көрүшөт</string>
+    <string name="host_promo_ad_label">Жарнак</string>
+    <string name="host_promo_unlimited_price">Мөөнөтсүз — %1$d сом</string>
+    <string name="host_promo_unlimited">мөөнөтсүз</string>
+    <string name="host_promo_days_one">күн</string>
+    <string name="host_promo_days_few">күн</string>
+    <string name="host_promo_days_many">күн</string>
+    <string name="host_promo_search_venue">Мекеме издөө</string>
+</resources>

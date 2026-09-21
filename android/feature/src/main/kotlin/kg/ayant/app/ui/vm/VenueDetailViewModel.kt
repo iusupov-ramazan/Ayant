@@ -129,7 +129,7 @@ class VenueDetailViewModel(app: Application) : AndroidViewModel(app) {
         if (_state.value.submission.isSending) return   // второй тап игнорируем
 
         _state.update { it.copy(submission = ReviewSubmission.Sending) }
-        owner.saveReview(venue.id, intent.rating, intent.text, intent.itemID, intent.itemName)
+        owner.saveReview(venue.id, intent.rating, intent.text, intent.photos, intent.itemID, intent.itemName)
         _state.update { it.copy(submission = ReviewSubmission.Idle) }
         refresh()
     }

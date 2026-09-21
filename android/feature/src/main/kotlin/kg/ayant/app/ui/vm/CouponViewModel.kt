@@ -11,6 +11,7 @@ import androidx.lifecycle.viewModelScope
 import kg.ayant.app.domain.CodeGen
 import kg.ayant.app.domain.contract.CouponService
 import kg.ayant.app.domain.model.Coupon
+import kg.ayant.app.domain.model.CouponCatalog
 import kg.ayant.app.domain.model.Reward
 import kotlinx.coroutines.launch
 import org.json.JSONArray
@@ -59,15 +60,40 @@ class CouponViewModel @JvmOverloads constructor(
     }
 
     /** Spend bonuses and issue a coupon. Returns coupon or null (not enough bonuses). */
+    /**
+     * Списывает бонусы и выдаёт купон.
+     *
+     * Купон уходит в бэкенд — иначе сотрудник его не найдёт: `scanCoupon`
+     * ищет купон по коду в Firestore и сверяет `venueID`. Раньше награда
+     * глобального кошелька оставалась только на устройстве, и предъявить её
+     * было невозможно.
+     */
     fun redeem(reward: Reward, bonus: BonusViewModel): Coupon? {
+        if (!reward.isRedeemable) return null
         if (!bonus.spend(reward.cost)) return null
         val c = Coupon(
             id = "cp_${short()}", title = reward.title,
             code = CodeGen.couponCode(),
             createdAt = Date(clock.nowMs),
+            venueID = reward.venueID, venueName = reward.venueName,
+            kind = "reward",
         )
         put(listOf(c) + _coupons.value)
+        viewModelScope.launch { runCatching { backend.saveCoupon(c, userID) } }
         return c
+    }
+
+    /**
+     * Награды, которые реально можно предъявить: каталог из
+     * `config/globalRewards` с заведением-партнёром у каждой.
+     */
+    private val _rewards = MutableStateFlow<List<Reward>>(emptyList())
+    val rewards: StateFlow<List<Reward>> = _rewards.asStateFlow()
+
+    fun loadRewards() {
+        viewModelScope.launch {
+            _rewards.value = runCatching { backend.fetchGlobalRewards() }.getOrDefault(emptyList())
+        }
     }
 
     /** Create a deal coupon (scanned by staff → loyalty stamp). */
@@ -148,11 +174,9 @@ class CouponViewModel @JvmOverloads constructor(
     }
 
     companion object {
-        val catalog = listOf(
-            Reward("disc10", "−10% к любой акции", 100, "🏷️"),
-            Reward("coffee", "Бесплатный кофе у партнёра", 300, "☕️"),
-            Reward("dessert", "Десерт в подарок", 400, "🍰"),
-            Reward("vip", "VIP-доступ к новинкам", 500, "⭐️"),
-        )
+        /// Заготовки без партнёра — их заполняет админ-панель, показывать нельзя.
+        @Deprecated("Каталог приходит из config/globalRewards — см. rewards",
+            ReplaceWith("rewards"))
+        val catalog = CouponCatalog.builtIn
     }
 }

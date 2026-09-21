@@ -36,6 +36,9 @@ class MockAuthService : AuthService {
         AyantUser(UUID.randomUUID().toString(), "Пользователь Google", null, AuthProvider.GOOGLE)
     override suspend fun continueAsGuest(): AyantUser =
         AyantUser("guest_${UUID.randomUUID().toString().take(8)}", "Гость", null, AuthProvider.GUEST)
+    override suspend fun sendPasswordReset(email: String) {
+        require(email.isNotBlank()) { "Введите почту" }
+    }
     override fun signOut() {}
     override suspend fun deleteAccount() {}
     override suspend fun discardGuestAccount() {}
@@ -104,6 +107,11 @@ class FirebaseAuthService(
     override suspend fun continueAsGuest(): AyantUser = translating {
         val res = auth.signInAnonymously().await()
         AyantUser(res.user!!.uid, "Гость", null, AuthProvider.GUEST)
+    }
+
+    override suspend fun sendPasswordReset(email: String) = translating {
+        auth.sendPasswordResetEmail(AuthValidation.normalizedEmail(email)).await()
+        Unit
     }
 
     override fun signOut() { auth.signOut() }

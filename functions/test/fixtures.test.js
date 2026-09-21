@@ -4,7 +4,7 @@
  * Прогон общего фикстура `specs/fixtures/points-fixtures.json` через НАСТОЯЩИЕ
  * обработчики `scanCoupon` (ветка C) и `redeemVenuePoints`.
  *
- * Тот же файл гоняют iOS (`SANTests/PointsFixtureTests.swift`) и Android
+ * Тот же файл гоняют iOS (`AyantDomain/Tests/AyantDomainTests/PointsFixtureTests.swift`) и Android
  * (`PointsFixtureTest.kt`) — там он проверяет клиентский `PointsMath`, который
  * только предсказывает результат для UI. Здесь — авторитетный расчёт. Расхождение
  * между ними означает обещание в приложении, которое сервер не выполнит.

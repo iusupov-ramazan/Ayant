@@ -50,7 +50,7 @@ struct VenueAvatar: View {
                 AsyncImage(url: url) { phase in
                     switch phase {
                     case .success(let image):
-                        image.resizable().scaledToFill()
+                        Color.clear.overlay { image.resizable().scaledToFill() }
                     default:
                         Image(systemName: "storefront.fill").font(.system(size: size * 0.42)).foregroundStyle(.white)
                     }
@@ -71,13 +71,17 @@ struct VenuePhoto: View {
     let urlString: String?
     var gradient: [Color] = [.sanAccent, .orange]
 
+    /// Размер задаёт контейнер, а не фотография. `scaledToFill` без этого
+    /// растягивал сам `ZStack` до размеров снимка: в форме заведения обложка
+    /// вылезала за свои 150pt и закрашивала весь лист под формой.
     var body: some View {
         ZStack {
             LinearGradient(colors: gradient, startPoint: .topLeading, endPoint: .bottomTrailing)
             if let s = urlString, !s.isEmpty, let url = URL(string: s) {
                 AsyncImage(url: url) { phase in
                     switch phase {
-                    case .success(let image): image.resizable().scaledToFill()
+                    case .success(let image):
+                        Color.clear.overlay { image.resizable().scaledToFill() }
                     // Пока грузится — просто градиент заведения, без спиннера.
                     // `ProgressView` крутится бесконечно и инвалидирует свой
                     // слой каждый кадр; в списке из десятка карточек это десяток
@@ -90,6 +94,7 @@ struct VenuePhoto: View {
                 Image(systemName: "storefront.fill").font(.largeTitle).foregroundStyle(.white.opacity(0.85))
             }
         }
+        .clipped()
     }
 }
 
@@ -147,7 +152,8 @@ struct CoverImage: View {
                 AsyncImage(url: url) { phase in
                     switch phase {
                     case .success(let image):
-                        image.resizable().scaledToFill()
+                        // См. `VenuePhoto`: размер — от контейнера, снимок обрезаем.
+                        Color.clear.overlay { image.resizable().scaledToFill() }
                     case .empty:
                         ProgressView().tint(.white)
                     default:
@@ -158,6 +164,7 @@ struct CoverImage: View {
                 Text(emoji).font(.system(size: emojiSize)).shadow(radius: 6)
             }
         }
+        .clipped()
     }
 }
 
@@ -205,7 +212,7 @@ struct DealImage: View {
         ZStack {
             LinearGradient(colors: gradient, startPoint: .topLeading, endPoint: .bottomTrailing)
             if let ui = loader.ui {
-                Image(uiImage: ui).resizable().scaledToFill()
+                Color.clear.overlay { Image(uiImage: ui).resizable().scaledToFill() }
             } else if url != nil {
                 ProgressView().tint(.white)
             } else {
@@ -254,8 +261,9 @@ struct ItemThumb: View {
         Group {
             if !item.imageURL.isEmpty, let url = URL(string: item.imageURL) {
                 AsyncImage(url: url) { img in
-                    img.resizable().scaledToFill()
+                    Color.clear.overlay { img.resizable().scaledToFill() }
                 } placeholder: { Color(.systemGray6) }
+                .clipped()
             } else {
                 ZStack {
                     Color(.systemGray6)
@@ -454,6 +462,11 @@ struct VenueCard: View {
 // MARK: - Рекламный слот-плейсхолдер (каждая 5-я позиция в ленте)
 
 struct AdPlaceholderCard: View {
+    /// Текст из настроек панели (`AppStore.settings.adPlaceholderText`);
+    /// пусто → локализованный дефолт. Длинный текст переносится и ужимается,
+    /// а не обрезается.
+    var text: String = ""
+
     var body: some View {
         VStack(spacing: 8) {
             Text("Реклама")
@@ -463,10 +476,11 @@ struct AdPlaceholderCard: View {
             Image(systemName: "megaphone.fill")
                 .font(.system(size: 30))
                 .foregroundStyle(Color.sanAccent.opacity(0.8))
-            Text("Здесь может быть\nваша реклама")
+            Text(text.isEmpty ? LS("Здесь может быть ваша реклама") : text)
                 .font(.headline)
                 .multilineTextAlignment(.center)
-                .lineLimit(2)
+                .lineLimit(3)
+                .minimumScaleFactor(0.6)
                 .foregroundStyle(.primary)
             Text("Заведения — продвигайтесь в Ayant")
                 .font(.caption)

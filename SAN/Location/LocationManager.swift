@@ -80,8 +80,8 @@ extension LocationManager: CLLocationManagerDelegate {
 extension Double {
     /// «0.8 км» / «1.2 км» / «350 м».
     var distanceText: String {
-        if self < 1 { return "\(Int((self * 1000).rounded())) м" }
-        return String(format: "%.1f км", self)
+        if self < 1 { return LF("%lld м", Int((self * 1000).rounded())) }
+        return LF("%.1f км", self)
     }
 }
 

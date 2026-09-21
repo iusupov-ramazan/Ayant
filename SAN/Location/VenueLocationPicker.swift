@@ -126,7 +126,7 @@ struct VenueLocationPicker: View {
                 ForEach(results, id: \.self) { item in
                     Button { select(item) } label: {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(item.name ?? "Без названия")
+                            Text(item.name ?? LS("Без названия"))
                                 .font(.subheadline)
                                 .foregroundStyle(.primary)
                             if let subtitle = item.placemark.title {

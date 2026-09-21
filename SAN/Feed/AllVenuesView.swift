@@ -102,12 +102,9 @@ struct AllVenuesView: View {
     /// «41 заведение · Бишкек» — склонение существительного по последним
     /// цифрам; город через точку, чтобы не склонять его самого.
     static func countText(_ n: Int, city: String) -> String {
-        let mod10 = n % 10, mod100 = n % 100
-        let noun: String
-        if mod10 == 1 && mod100 != 11 { noun = "заведение" }
-        else if (2...4).contains(mod10) && !(12...14).contains(mod100) { noun = "заведения" }
-        else { noun = "заведений" }
-        return "\(n) \(noun) · \(city)"
+        let noun = LPlural(n, "заведение", "заведения", "заведений")
+        let cityName = LS(city)
+        return "\(n) \(noun) · \(cityName)"
     }
 
     // MARK: Поиск

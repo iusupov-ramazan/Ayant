@@ -22,7 +22,9 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Share
@@ -40,6 +42,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -49,6 +53,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kg.ayant.app.R
 import kg.ayant.app.core.Links
+import kg.ayant.app.domain.contract.AnalyticsMetric
+import kg.ayant.app.domain.model.Coupon
+import androidx.compose.ui.text.font.FontFamily
 import kg.ayant.app.core.dial
 import kg.ayant.app.core.openUrl
 import kg.ayant.app.core.sanShort
@@ -64,6 +71,8 @@ import kg.ayant.app.ui.theme.AyantTheme
 import kg.ayant.app.ui.theme.gradientColors
 import kg.ayant.app.ui.vm.AppViewModel
 import kg.ayant.app.ui.vm.SessionViewModel
+import kg.ayant.app.core.localizedName
+import kg.ayant.app.core.localizedUrgency
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -92,8 +101,12 @@ fun DealDetailScreen(
         }
     }
 
-    // Ranking tap event (deal opened) — mirrors iOS DealDetailView.onAppear.
-    androidx.compose.runtime.LaunchedEffect(deal.id) { app.logRankingTap(deal) }
+    // Открытие предложения — клик по акции в аналитике заведения + событие
+    // ранжирования. Зеркалит `DealDetailView.onAppear`.
+    androidx.compose.runtime.LaunchedEffect(deal.id) {
+        app.log(AnalyticsMetric.DEAL_TAPS, deal.venueID)
+        app.logRankingTap(deal)
+    }
 
     Scaffold(
         containerColor = c.canvas,
@@ -136,7 +149,7 @@ fun DealDetailScreen(
                 Text(deal.title, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = c.ink)
                 Text(deal.details, fontSize = 16.sp, color = c.inkSoft)
                 PriceLabel(deal)
-                deal.urgencyText?.let {
+                deal.localizedUrgency()?.let {
                     Text(
                         "🔥 $it", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFFD32F2F),
                         modifier = Modifier.clip(RoundedCornerShape(50)).background(Color(0xFFD32F2F).copy(alpha = 0.12f)).padding(horizontal = 10.dp, vertical = 5.dp),
@@ -148,30 +161,52 @@ fun DealDetailScreen(
                 }
             }
 
-            // Coupon
+            // Купон есть только у скидок и акций, и только если заведение принимает
+            // купоны. У новинок и объявлений показывать нечего. Зеркалит `showAtVenue`.
             if (deal.isRedeemable && (venue?.couponsEnabled != false)) {
+                val dealCoupon = couponVm.coupons.collectAsState().value.firstOrNull { it.dealID == deal.id }
+                val used = dealCoupon?.used ?: false
                 Column(
                     Modifier.padding(horizontal = 16.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(c.accent.copy(alpha = 0.08f)).padding(14.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        QrCode("AYANT-${deal.id.uppercase()}", size = 92)
-                        Column(Modifier.padding(start = 14.dp)) {
-                            Text(stringResource(R.string.deal_coupon_title), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = c.ink)
-                            Text(stringResource(R.string.deal_coupon_hint), fontSize = 12.sp, color = c.inkSoft)
+                        CouponQr(dealCoupon, used)
+                        Column(Modifier.padding(start = 14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                if (used) stringResource(R.string.detail_coupon_used) else stringResource(R.string.deal_coupon_title),
+                                fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = c.ink,
+                            )
+                            Text(
+                                if (dealCoupon == null) stringResource(R.string.detail_coupon_locked_hint)
+                                else stringResource(R.string.deal_coupon_hint),
+                                fontSize = 12.sp, color = c.inkSoft,
+                            )
+                            if (dealCoupon != null) {
+                                Text(dealCoupon.code, fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = c.inkSoft)
+                            }
                         }
                     }
-                    if (session.isGuest) {
+                    if (used) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Filled.Verified, null, tint = c.open, modifier = Modifier.size(18.dp))
+                            Text(" " + stringResource(R.string.detail_coupon_used), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = c.open)
+                        }
+                    } else if (session.isGuest) {
                         Text(stringResource(R.string.deal_coupon_guest), fontSize = 12.sp, color = c.inkSoft)
                     } else {
-                        val existing = couponVm.coupons.collectAsState().value.firstOrNull { it.dealID == deal.id }
                         Text(
-                            if (existing == null) stringResource(R.string.deal_get_coupon) else stringResource(R.string.deal_show_coupon),
+                            if (dealCoupon == null) stringResource(R.string.deal_get_coupon) else stringResource(R.string.deal_show_coupon),
                             fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White,
                             modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(c.accent)
                                 .clickable {
                                     val cpn = couponVm.createDealCoupon(deal.id, deal.title, venue?.id ?: deal.venueID, venue?.name ?: "")
                                     onCoupon(cpn.id)
+                                    // Просим оценить приложение после 1-го и каждого 5-го купона.
                                     kg.ayant.app.core.AppReview.maybePrompt(context)
                                 }.padding(vertical = 11.dp),
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -191,14 +226,17 @@ fun DealDetailScreen(
                         VenueAvatar(venue.gradientColors, venue.imageURL, 48)
                         Column(Modifier.padding(start = 12.dp).weight(1f)) {
                             Text(venue.name, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = c.ink)
-                            Text("${venue.category.rawValue} • ${venue.district}", fontSize = 12.sp, color = c.inkSoft)
+                            Text("${venue.category.localizedName()} • ${venue.district}", fontSize = 12.sp, color = c.inkSoft)
                         }
                         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = c.inkSoft, modifier = Modifier.size(18.dp))
                     }
                     // Address → map (2GIS / Google), mirrors iOS venueSection.
                     if (venue.address.isNotBlank()) {
                         Row(
-                            Modifier.fillMaxWidth().clickable { showMapOptions = true },
+                            Modifier.fillMaxWidth().clickable {
+                                app.log(AnalyticsMetric.MAPS, venue.id)
+                                showMapOptions = true
+                            },
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Icon(Icons.Filled.LocationOn, null, tint = c.inkSoft, modifier = Modifier.size(18.dp))
@@ -207,7 +245,15 @@ fun DealDetailScreen(
                         }
                     }
                     if (venue.phone.isNotBlank()) {
-                        Row(Modifier.fillMaxWidth().clickable { context.dial(venue.phone) }, verticalAlignment = Alignment.CenterVertically) {
+                        // Звонок по номеру — такое же обращение, как по кнопке
+                        // «Позвонить», и должен попадать в аналитику.
+                        Row(
+                            Modifier.fillMaxWidth().clickable {
+                                app.log(AnalyticsMetric.CALLS, venue.id)
+                                context.dial(venue.phone)
+                            },
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
                             Icon(Icons.Filled.Call, null, tint = c.accentText, modifier = Modifier.size(18.dp))
                             Text(" ${venue.phone}", fontSize = 14.sp, color = c.ink)
                         }
@@ -225,5 +271,30 @@ fun DealDetailScreen(
             confirmButton = { androidx.compose.material3.TextButton(onClick = { showMapOptions = false; context.openUrl(kg.ayant.app.core.Directions.dgis(venue.latitude, venue.longitude)) }) { Text("2GIS") } },
             dismissButton = { androidx.compose.material3.TextButton(onClick = { showMapOptions = false; context.openUrl(kg.ayant.app.core.Directions.google(venue.latitude, venue.longitude)) }) { Text("Google Maps") } },
         )
+    }
+}
+
+/** Константа под размытым QR: не код купона и ни к чему на сервере не ведёт. */
+private const val LOCKED_QR_PLACEHOLDER = "AYANT-LOCKED"
+
+/**
+ * QR есть только у купона, который записан в Firestore. Пока купона нет —
+ * замок поверх размытой заглушки: сканируемого кода без документа на
+ * сервере быть не должно, иначе сотрудник отсканирует «пустоту».
+ */
+@Composable
+private fun CouponQr(coupon: Coupon?, used: Boolean) {
+    val c = AyantTheme.colors
+    if (coupon != null) {
+        QrCode(coupon.code, size = 92, modifier = Modifier.alpha(if (used) 0.4f else 1f))
+    } else {
+        Box(contentAlignment = Alignment.Center) {
+            QrCode(LOCKED_QR_PLACEHOLDER, size = 92, modifier = Modifier.blur(6.dp).alpha(0.35f))
+            Icon(
+                Icons.Filled.Lock,
+                contentDescription = stringResource(R.string.detail_coupon_locked_hint),
+                tint = c.inkSoft, modifier = Modifier.size(26.dp),
+            )
+        }
     }
 }

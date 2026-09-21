@@ -1,6 +1,7 @@
 package kg.ayant.app.ui.detail
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -8,51 +9,52 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.border
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.CreditCard
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Directions
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.Flag
-import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -62,39 +64,70 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.runtime.collectAsState
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
 import kg.ayant.app.R
+import kg.ayant.app.core.AppLanguage
 import kg.ayant.app.core.Directions as Dir
 import kg.ayant.app.core.Links
+import kg.ayant.app.core.ayantFactory
 import kg.ayant.app.core.dial
 import kg.ayant.app.core.distanceText
+import kg.ayant.app.core.localizedHoursStatus
+import kg.ayant.app.core.localizedLabel
+import kg.ayant.app.core.localizedName
 import kg.ayant.app.core.openUrl
 import kg.ayant.app.core.shareText
-import kg.ayant.app.domain.model.Venue
-import kg.ayant.app.location.LocationManager
-import kg.ayant.app.ui.components.CoverImage
-import kg.ayant.app.ui.components.RatingBreakdown
-import kg.ayant.app.ui.components.StarRating
-import kg.ayant.app.ui.components.VenueAvatar
-import kg.ayant.app.ui.components.VenuePhoto
-import kg.ayant.app.ui.theme.AyantTheme
-import kg.ayant.app.ui.bonus.AyantProgressBar
-import kg.ayant.app.ui.bonus.pointsModeLabel
-import kg.ayant.app.ui.theme.gradientColors
-import kg.ayant.app.ui.vm.AppViewModel
-import kg.ayant.app.ui.vm.SessionViewModel
+import kg.ayant.app.core.weekdayLongRes
+import kg.ayant.app.domain.ContactAction
+import kg.ayant.app.domain.VenueDetailIntent
+import kg.ayant.app.domain.contract.AnalyticsMetric
 import kg.ayant.app.domain.model.Deal
-import kg.ayant.app.ui.theme.AyantRadius
-import androidx.compose.foundation.layout.aspectRatio
+import kg.ayant.app.domain.model.Review
+import kg.ayant.app.domain.model.ReviewReportReason
+import kg.ayant.app.domain.model.Venue
 import kg.ayant.app.domain.pointsActive
 import kg.ayant.app.domain.stampsActive
+import kg.ayant.app.location.LocationManager
+import kg.ayant.app.ui.auth.GuestAlert
+import kg.ayant.app.ui.auth.GuestGate
+import kg.ayant.app.ui.bonus.AyantProgressBar
+import kg.ayant.app.ui.bonus.MyQrScreen
+import kg.ayant.app.ui.bonus.pointsModeLabel
+import kg.ayant.app.ui.components.CoverImage
+import kg.ayant.app.ui.components.ImageCarousel
+import kg.ayant.app.ui.components.RatingBreakdown
+import kg.ayant.app.ui.components.StarRating
+import kg.ayant.app.ui.components.VenuePhoto
+import kg.ayant.app.ui.theme.AyantRadius
+import kg.ayant.app.ui.theme.AyantTheme
+import kg.ayant.app.ui.theme.gradientColors
+import kg.ayant.app.ui.vm.AppViewModel
+import kg.ayant.app.ui.vm.LoyaltyViewModel
+import kg.ayant.app.ui.vm.PointsViewModel
+import kg.ayant.app.ui.vm.SessionViewModel
+import kg.ayant.app.ui.vm.VenueDetailViewModel
+import java.text.SimpleDateFormat
 
+/**
+ * Страница заведения. Зеркалит `VenueDetailView` в `DetailViews.swift`:
+ * обложка → лист (рейтинг, название, мета, чипы, герой баллов, «Сегодня»,
+ * вкладки «Публикации / Отзывы / Инфо») → нижняя панель «Показать QR» + сердечко.
+ *
+ * [loyalty] — общая `LoyaltyViewModel` из `RootScaffold` (штампы на баннере карты
+ * лояльности). Пока корень её не передаёт, счётчик штампов на баннере скрыт.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VenueDetailScreen(
@@ -102,11 +135,12 @@ fun VenueDetailScreen(
     app: AppViewModel,
     session: SessionViewModel,
     location: LocationManager,
-    points: kg.ayant.app.ui.vm.PointsViewModel,
+    points: PointsViewModel,
     onBack: () -> Unit,
     onDeal: (String) -> Unit,
     onLoyalty: (String) -> Unit = {},
     onPoints: (String) -> Unit = {},
+    loyalty: LoyaltyViewModel? = null,
 ) {
     val c = AyantTheme.colors
     val context = LocalContext.current
@@ -115,16 +149,17 @@ fun VenueDetailScreen(
         return
     }
     // Состояние карточки — одним значением из VenueDetailViewModel (state + send).
-    val detail: kg.ayant.app.ui.vm.VenueDetailViewModel = viewModel(factory = kg.ayant.app.core.ayantFactory())
+    // Единственная VM, которая сознательно живёт per-route (см. CLAUDE.md).
+    val detail: VenueDetailViewModel = viewModel(factory = ayantFactory())
     val detailState by detail.state.collectAsState()
     // Каталог/отзывы принадлежат ленте и профилю — пересобираем срез, когда они менялись.
     val feedState by app.feedState.collectAsState()
     val profileState by app.profileFlow.collectAsState()
 
-    val agg = detailState.aggregate.let { it.rating to it.count }
+    val agg = detailState.aggregate
     val deals = detailState.deals
     val reviews = detailState.reviews
-    // Real photos (cover, item images, review photos) + emoji fallbacks. Mirrors galleryPhotos.
+    // Реальные фото (обложка, объекты, фото из отзывов) + легаси-эмодзи как фолбэк. Зеркалит galleryPhotos.
     val galleryPhotos = remember(venue, reviews) {
         buildList {
             venue.imageURL?.takeIf { it.isNotEmpty() }?.let { add(it) }
@@ -134,30 +169,41 @@ fun VenueDetailScreen(
             reviews.forEach { addAll(it.photoEmojis) }
         }
     }
-    var showAllDeals by remember { mutableStateOf(false) }
+
     var hoursExpanded by remember { mutableStateOf(false) }
     var showAllBranches by remember { mutableStateOf(false) }
     var showWriteReview by remember { mutableStateOf(false) }
     var writeReviewItemID by remember { mutableStateOf<String?>(null) }
     var photoViewerStart by remember { mutableStateOf<Int?>(null) }
-    var showGuestPrompt by remember { mutableStateOf(false) }
-    var showGuestQr by remember { mutableStateOf(false) }
-
-    if (showGuestQr) {
-        kg.ayant.app.ui.auth.GuestAlert(session, kg.ayant.app.ui.auth.GuestGate.QR) { showGuestQr = false }
-    }
     var showPdf by remember { mutableStateOf(false) }
     var showMapOptions by remember { mutableStateOf(false) }
-    var reportingReview by remember { mutableStateOf<kg.ayant.app.domain.model.Review?>(null) }
+    var showMyQr by remember { mutableStateOf(false) }
+    var reportingReview by remember { mutableStateOf<Review?>(null) }
+    // Показываем подтверждение: молчаливая жалоба неотличима от сломанной кнопки.
+    var reportSent by remember { mutableStateOf(false) }
+    // Отказ гостю — с текстом под конкретное действие (GuestGate), как на iOS.
+    var guestGate by remember { mutableStateOf<Int?>(null) }
 
     // Баланс баллов приходит snapshot-листенером — без подписки карточка не обновится.
     val pointsState by points.state.collectAsState()
 
-    androidx.compose.runtime.LaunchedEffect(venue.id) {
+    LaunchedEffect(venue.id) {
         detail.bind(app)
-        detail.send(kg.ayant.app.domain.VenueDetailIntent.Open(venue.id))
+        detail.send(VenueDetailIntent.Open(venue.id))
     }
-    androidx.compose.runtime.LaunchedEffect(feedState, profileState) { detail.refresh() }
+    LaunchedEffect(feedState, profileState) { detail.refresh() }
+
+    fun toggleSave() {
+        if (session.isGuest) guestGate = GuestGate.SAVE_VENUE
+        else detail.send(VenueDetailIntent.ToggleSave)
+    }
+    fun writeReview(itemID: String?) {
+        if (session.isGuest) guestGate = GuestGate.REVIEW
+        else { writeReviewItemID = itemID; showWriteReview = true }
+    }
+    fun share() {
+        context.shareText(context.getString(R.string.venue_share_text, venue.name, venue.address, Links.venue(venue.id)), venue.name)
+    }
 
     // Вкладки листа (SCREENS.md G3). Разделы прежней страницы разложены по ним
     // целиком — редизайн меняет порядок и подачу, а не состав.
@@ -168,13 +214,16 @@ fun VenueDetailScreen(
         bottomBar = {
             VenueStickyBar(
                 isSaved = detailState.isSaved,
-                // Личный QR привязан к аккаунту: заведению некуда начислять
-                // баллы гостя, поэтому вместо кода — приглашение войти.
-                onShowQr = { if (session.isGuest) showGuestQr = true else onPoints(venue.id) },
-                onToggleSave = {
-                    if (session.isGuest) showGuestPrompt = true
-                    else detail.send(kg.ayant.app.domain.VenueDetailIntent.ToggleSave)
+                onShowQr = {
+                    // Личный QR привязан к аккаунту: заведению некуда начислять
+                    // баллы гостя, поэтому вместо кода — приглашение войти.
+                    when {
+                        session.isGuest -> guestGate = GuestGate.QR
+                        venue.pointsActive -> onPoints(venue.id)
+                        else -> showMyQr = true
+                    }
                 },
+                onToggleSave = ::toggleSave,
             )
         },
     ) { padding ->
@@ -184,9 +233,16 @@ fun VenueDetailScreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState()),
         ) {
-            // Обложка 330. Кнопки НЕ здесь — см. закреплённый ряд ниже.
+            // Обложка 330: карусель, когда фото больше одного; иначе фото или
+            // эмодзи на градиенте. Кнопки НЕ здесь — см. закреплённый ряд ниже.
             Box(Modifier.fillMaxWidth().height(330.dp)) {
-                VenuePhoto(venue.imageURL, venue.gradientColors, Modifier.fillMaxSize())
+                val httpPhotos = galleryPhotos.filter { it.startsWith("http") }
+                if (httpPhotos.size > 1) {
+                    ImageCarousel(httpPhotos, venue.gradientColors, venue.emoji, Modifier.fillMaxSize(), height = 330, emojiSize = 64)
+                } else {
+                    CoverImage(venue.imageURL, venue.gradientColors, venue.emoji, Modifier.fillMaxSize(), emojiSize = 64)
+                }
+                // Верхний скрим — под плавающими кнопками.
                 Box(
                     Modifier.fillMaxWidth().height(150.dp).background(
                         Brush.verticalGradient(
@@ -201,7 +257,7 @@ fun VenueDetailScreen(
                 Modifier
                     .fillMaxWidth()
                     .offset(y = (-36).dp)
-                    .clip(RoundedCornerShape(topStart = 34.dp, topEnd = 34.dp))
+                    .clip(RoundedCornerShape(topStart = AyantRadius.panel, topEnd = AyantRadius.panel))
                     .background(c.canvas)
                     .padding(top = 22.dp, bottom = 30.dp),
             ) {
@@ -209,10 +265,10 @@ fun VenueDetailScreen(
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                             Icon(Icons.Filled.Star, null, tint = Color(0xFFFF9500), modifier = Modifier.size(13.dp))
-                            Text(ratingText(agg.first), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = c.ink)
+                            Text(ratingText(agg.rating), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = c.ink)
                         }
                         Text(
-                            "· ${agg.second} ${reviewsWord(agg.second)}",
+                            "· " + pluralStringResource(R.plurals.reviews_word, agg.count, agg.count),
                             fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = c.inkSoft,
                         )
                         if (venue.isVerified) {
@@ -227,7 +283,7 @@ fun VenueDetailScreen(
                     Spacer(Modifier.height(9.dp))
                     Text(
                         buildString {
-                            append(venue.category.rawValue)
+                            append(venue.category.localizedName())
                             append(" · ").append(venue.district)
                             location.distanceKm(venue.latitude, venue.longitude)?.let {
                                 append(" · ").append(it.distanceText())
@@ -247,13 +303,14 @@ fun VenueDetailScreen(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
                             Box(Modifier.size(6.dp).clip(CircleShape).background(openColor))
-                            Text(venue.hoursStatusText, fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = openColor)
+                            Text(venue.localizedHoursStatus(), fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = openColor)
                         }
                         if (venue.branches.isNotEmpty()) {
                             Text(
-                                "${venue.branches.size + 1} адреса",
+                                pluralStringResource(R.plurals.addresses_count, venue.branches.size + 1, venue.branches.size + 1),
                                 fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = c.inkSoft,
                                 modifier = Modifier.clip(CircleShape).background(c.surface)
+                                    .border(0.5.dp, c.hairline, CircleShape)
                                     .padding(horizontal = 13.dp, vertical = 8.dp),
                             )
                         }
@@ -263,6 +320,11 @@ fun VenueDetailScreen(
                     if (venue.pointsActive) {
                         Spacer(Modifier.height(20.dp))
                         VenuePointsHeroCard(venue, pointsState.balance(venue.id)) { onPoints(venue.id) }
+                    }
+                    // Сегодняшний специал — в шапке, над вкладками, как на iOS.
+                    if (venue.hasTodaySpecial) {
+                        Spacer(Modifier.height(16.dp))
+                        TodaySpecialBanner(venue)
                     }
                 }
 
@@ -288,210 +350,175 @@ fun VenueDetailScreen(
                     when (tab) {
                         VenueTab.Deals -> {
                             if (deals.isEmpty()) {
-                                Text(
-                                    stringResource(R.string.venue_no_deals),
-                                    fontSize = 14.sp, color = c.inkSoft,
-                                    modifier = Modifier.padding(horizontal = 16.dp),
-                                )
+                                EmptyTabNote(stringResource(R.string.venue_no_deals))
                             } else {
                                 VenuePublicationsGrid(deals, venue) { onDeal(it) }
                             }
                         }
-                        VenueTab.Reviews -> {
-                        // Reviews
-                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                            Text(stringResource(R.string.reviews), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = c.ink, modifier = Modifier.padding(horizontal = 16.dp))
-                            Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(20.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text("%.1f".format(agg.first), fontSize = 40.sp, fontWeight = FontWeight.Bold, color = c.ink)
-                                    StarRating(rating = agg.first, size = 12)
-                                    Text(stringResource(R.string.venue_reviews_count, agg.second), fontSize = 11.sp, color = c.inkSoft)
-                                }
-                                RatingBreakdown(detailState.ratingBreakdown, Modifier.weight(1f))
-                            }
-                            if (venue.items.isEmpty()) {
-                                Text(stringResource(R.string.venue_reviews_no_items), fontSize = 13.sp, color = c.inkSoft, modifier = Modifier.padding(horizontal = 16.dp))
-                            } else {
-                                Text(
-                                    stringResource(R.string.rate_item),
-                                    fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.White,
-                                    modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(c.accent).clickable {
-                                        if (session.isGuest) showGuestPrompt = true else { writeReviewItemID = null; showWriteReview = true }
-                                    }.padding(vertical = 12.dp),
-                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                                )
-                            }
-                            if (reviews.isEmpty()) {
-                                Text(stringResource(R.string.no_reviews), fontSize = 14.sp, color = c.inkSoft, modifier = Modifier.padding(horizontal = 16.dp))
-                            } else {
-                                Column(Modifier.padding(horizontal = 16.dp)) {
-                                    reviews.forEach { r ->
-                                        ReviewRow(r, onReport = if (r.authorID != app.currentUserID) ({ reportingReview = r }) else null)
-                                        Box(Modifier.fillMaxWidth().height(0.5.dp).background(c.hairline))
-                                    }
-                                }
-                            }
-                        }
-                        }
+
+                        VenueTab.Reviews -> ReviewsSection(
+                            venue = venue,
+                            rating = agg.rating, count = agg.count,
+                            breakdown = detailState.ratingBreakdown,
+                            reviews = reviews,
+                            currentUserID = app.currentUserID,
+                            onWriteReview = { writeReview(null) },
+                            onReport = { reportingReview = it },
+                        )
+
                         VenueTab.Info -> {
-                        // Today's special
-                        if (venue.hasTodaySpecial) {
-                            Row(
-                                Modifier.padding(horizontal = 16.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(c.accent.copy(alpha = 0.1f)).padding(14.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text("⭐️", fontSize = 22.sp)
-                                Column(Modifier.padding(start = 10.dp)) {
-                                    Text(stringResource(R.string.today), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = c.accentText)
-                                    Text(venue.todaySpecialText ?: "", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = c.ink)
-                                }
-                            }
-                        }
-                        // Action row
-                        Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            if (venue.phone.isNotBlank()) ActionButton(stringResource(R.string.act_call), Icons.Filled.Call, Modifier.weight(1f)) {
-                                detail.send(kg.ayant.app.domain.VenueDetailIntent.LogContact(kg.ayant.app.domain.ContactAction.CALL))
-                                context.dial(venue.phone)
-                            }
-                            if (venue.address.isNotBlank()) ActionButton(stringResource(R.string.act_route), Icons.Filled.Directions, Modifier.weight(1f)) {
-                                detail.send(kg.ayant.app.domain.VenueDetailIntent.LogContact(kg.ayant.app.domain.ContactAction.MAPS))
-                                showMapOptions = true
-                            }
-                            ActionButton(if (detailState.isSaved) stringResource(R.string.act_saved) else stringResource(R.string.act_save), if (detailState.isSaved) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder, Modifier.weight(1f)) {
-                                if (session.isGuest) showGuestPrompt = true else detail.send(kg.ayant.app.domain.VenueDetailIntent.ToggleSave)
-                            }
-                            ActionButton(stringResource(R.string.act_share), Icons.Filled.Share, Modifier.weight(1f)) {
-                                context.shareText(context.getString(R.string.venue_share_text, venue.name, venue.address, Links.venue(venue.id)), venue.name)
-                            }
-                        }
-                        // Loyalty banner
-                        // Штампы показываем, только если баллы выключены:
-                        // механика одна на заведение.
-                        if (venue.stampsActive) {
-                            Column(
-                                Modifier.padding(horizontal = 16.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(c.accentGradient)
-                                    .clickable { onLoyalty(venue.id) }.padding(14.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp),
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(stringResource(R.string.venue_loyalty_card), fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                                    Spacer(Modifier.weight(1f))
-                                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = Color.White, modifier = Modifier.size(18.dp))
-                                }
-                                Text(stringResource(R.string.venue_loyalty_progress, venue.loyaltyGoal, venue.loyaltyReward), fontSize = 12.sp, color = Color.White.copy(alpha = 0.9f))
-                            }
-                        }
-                        // Info section
-                        Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                            if (venue.address.isNotBlank()) {
-                                InfoRow(Icons.Filled.LocationOn, venue.address) { context.openUrl(Dir.dgis(venue.latitude, venue.longitude)) }
-                            }
-                            if (venue.phone.isNotBlank()) {
-                                InfoRow(Icons.Filled.Call, venue.phone) {
-                                    detail.send(kg.ayant.app.domain.VenueDetailIntent.LogContact(kg.ayant.app.domain.ContactAction.CALL))
+                            // Порядок как на iOS: действия → инфо → карта лояльности → фото → объекты.
+                            Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                if (venue.phone.isNotBlank()) ActionButton(stringResource(R.string.act_call), Icons.Filled.Call, Modifier.weight(1f)) {
+                                    detail.send(VenueDetailIntent.LogContact(ContactAction.CALL))
                                     context.dial(venue.phone)
                                 }
+                                if (venue.address.isNotBlank()) ActionButton(stringResource(R.string.act_route), Icons.Filled.Directions, Modifier.weight(1f)) {
+                                    // Вкладка «Поиск» скрыта (ReleaseFlags.SEARCH_TAB) —
+                                    // маршрут открываем во внешних картах, 2GIS по умолчанию.
+                                    detail.send(VenueDetailIntent.LogContact(ContactAction.MAPS))
+                                    context.openUrl(Dir.dgis(venue.latitude, venue.longitude))
+                                }
+                                ActionButton(
+                                    if (detailState.isSaved) stringResource(R.string.act_saved) else stringResource(R.string.act_save),
+                                    if (detailState.isSaved) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
+                                    Modifier.weight(1f),
+                                ) { toggleSave() }
+                                ActionButton(stringResource(R.string.act_share), Icons.Filled.Share, Modifier.weight(1f)) { share() }
                             }
-                            // Hours (expandable)
-                            Row(Modifier.fillMaxWidth().clickable { hoursExpanded = !hoursExpanded }, verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Filled.Schedule, null, tint = if (venue.isOpenNow) c.open else c.inkSoft, modifier = Modifier.size(18.dp))
-                                Text(" ${venue.hoursStatusText}", fontSize = 14.sp, color = if (venue.isOpenNow) c.open else c.inkSoft)
-                                Spacer(Modifier.weight(1f))
-                                Icon(if (hoursExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, null, tint = c.inkSoft, modifier = Modifier.size(18.dp))
-                            }
-                            if (hoursExpanded) {
-                                Column(Modifier.padding(start = 28.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    for (i in 0 until 7) {
-                                        val isToday = i == Venue.todayIndex
-                                        Row(Modifier.fillMaxWidth()) {
-                                            Text(Venue.weekdayLong[i], fontSize = 12.sp, fontWeight = if (isToday) FontWeight.SemiBold else FontWeight.Normal, color = if (isToday) c.ink else c.inkSoft)
-                                            Spacer(Modifier.weight(1f))
-                                            Text(venue.hours(i).label, fontSize = 12.sp, color = if (venue.hours(i).closed) c.inkSoft else c.ink)
+
+                            // Инфо: адрес → филиалы → телефон → соцсети → часы → PDF.
+                            Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                                if (venue.address.isNotBlank()) {
+                                    Row(
+                                        Modifier.fillMaxWidth().clickable {
+                                            app.log(AnalyticsMetric.MAPS, venue.id)
+                                            showMapOptions = true
+                                        },
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Icon(Icons.Filled.LocationOn, null, tint = c.inkSoft, modifier = Modifier.size(18.dp))
+                                        Text(" ${venue.address}", fontSize = 14.sp, color = c.ink, modifier = Modifier.weight(1f))
+                                        Icon(Icons.Filled.Map, null, tint = c.accentText, modifier = Modifier.size(18.dp))
+                                    }
+                                }
+                                // Дополнительные адреса (филиалы) — свёрнуты за кнопкой «Посмотреть все адреса».
+                                if (venue.branches.isNotEmpty()) {
+                                    Row(Modifier.fillMaxWidth().clickable { showAllBranches = !showAllBranches }, verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Filled.LocationOn, null, tint = c.accentText, modifier = Modifier.size(18.dp))
+                                        Text(
+                                            if (showAllBranches) " " + stringResource(R.string.venue_hide_addresses)
+                                            else " " + stringResource(R.string.venue_show_all_addresses, venue.branches.size + 1),
+                                            fontSize = 14.sp, fontWeight = FontWeight.Medium, color = c.ink,
+                                        )
+                                        Spacer(Modifier.weight(1f))
+                                        Icon(if (showAllBranches) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, null, tint = c.accentText, modifier = Modifier.size(18.dp))
+                                    }
+                                    if (showAllBranches) {
+                                        venue.branches.forEach { b ->
+                                            Row(
+                                                Modifier.fillMaxWidth().clickable {
+                                                    detail.send(VenueDetailIntent.LogContact(ContactAction.MAPS))
+                                                    context.openUrl(Dir.dgis(b.latitude, b.longitude))
+                                                },
+                                                verticalAlignment = Alignment.CenterVertically,
+                                            ) {
+                                                Icon(Icons.Filled.LocationOn, null, tint = c.inkSoft, modifier = Modifier.size(18.dp))
+                                                Text(" ${b.address}", fontSize = 14.sp, color = c.ink, modifier = Modifier.weight(1f))
+                                                Icon(Icons.Filled.Map, null, tint = c.accentText, modifier = Modifier.size(18.dp))
+                                            }
                                         }
                                     }
                                 }
-                            }
-                            // Branches — свёрнуты за кнопкой «Посмотреть все адреса».
-                            if (venue.branches.isNotEmpty()) {
-                                Row(Modifier.fillMaxWidth().clickable { showAllBranches = !showAllBranches }, verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Filled.LocationOn, null, tint = c.accentText, modifier = Modifier.size(18.dp))
-                                    Text(
-                                        if (showAllBranches) " Скрыть адреса"
-                                        else " Посмотреть все адреса (${venue.branches.size + 1})",
-                                        fontSize = 14.sp, fontWeight = FontWeight.Medium, color = c.accentText
-                                    )
+                                if (venue.phone.isNotBlank()) {
+                                    // Тап по номеру считается обращением наравне с кнопкой «Позвонить».
+                                    InfoRow(Icons.Filled.Call, venue.phone, tint = c.accentText) {
+                                        detail.send(VenueDetailIntent.LogContact(ContactAction.CALL))
+                                        context.dial(venue.phone)
+                                    }
+                                }
+                                // Соцсети. Порядок как на iOS: WhatsApp, Telegram, Instagram.
+                                val socials = buildList {
+                                    venue.whatsappURL?.let { add(Triple("WhatsApp", Color(0xFF25D366), it)) }
+                                    venue.telegramURL?.let { add(Triple("Telegram", Color(0xFF2AABEE), it)) }
+                                    venue.instagramURL?.let { add(Triple("Instagram", Color(0xFFE1306C), it)) }
+                                }
+                                if (socials.isNotEmpty()) {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        socials.forEach { (name, col, url) ->
+                                            Box(
+                                                Modifier.size(40.dp).clip(CircleShape).background(col).clickable { context.openUrl(url) },
+                                                contentAlignment = Alignment.Center,
+                                            ) { Text(name.take(1), color = Color.White, fontWeight = FontWeight.Bold) }
+                                        }
+                                    }
+                                }
+                                // Часы (раскрываются)
+                                Row(Modifier.fillMaxWidth().clickable { hoursExpanded = !hoursExpanded }, verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Filled.Schedule, null, tint = if (venue.isOpenNow) c.open else c.inkSoft, modifier = Modifier.size(18.dp))
+                                    Text(" ${venue.localizedHoursStatus()}", fontSize = 14.sp, color = if (venue.isOpenNow) c.open else c.inkSoft)
                                     Spacer(Modifier.weight(1f))
-                                    Icon(if (showAllBranches) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, null, tint = c.accentText, modifier = Modifier.size(18.dp))
+                                    Icon(if (hoursExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, null, tint = c.inkSoft, modifier = Modifier.size(18.dp))
                                 }
-                                if (showAllBranches) {
-                                    venue.branches.forEach { b ->
-                                        InfoRow(Icons.Filled.LocationOn, b.address) { context.openUrl(Dir.dgis(b.latitude, b.longitude)) }
+                                if (hoursExpanded) {
+                                    Column(Modifier.padding(start = 28.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        for (i in 0 until 7) {
+                                            val isToday = i == Venue.todayIndex
+                                            Row(Modifier.fillMaxWidth()) {
+                                                Text(stringResource(weekdayLongRes(i)), fontSize = 12.sp, fontWeight = if (isToday) FontWeight.SemiBold else FontWeight.Normal, color = if (isToday) c.ink else c.inkSoft)
+                                                Spacer(Modifier.weight(1f))
+                                                Text(venue.hours(i).localizedLabel(), fontSize = 12.sp, color = if (venue.hours(i).closed) c.inkSoft else c.ink)
+                                            }
+                                        }
+                                    }
+                                }
+                                // Прайс-лист / каталог (PDF)
+                                if (!venue.pdfMenuURL.isNullOrEmpty()) {
+                                    InfoRow(Icons.Filled.Description, stringResource(R.string.venue_pdf_menu)) { showPdf = true }
+                                }
+                            }
+
+                            // Карта лояльности — только если баллы выключены: механика одна.
+                            if (venue.stampsActive) {
+                                LoyaltyBanner(venue, loyalty) { onLoyalty(venue.id) }
+                            }
+
+                            // Галерея фото (реальные + эмодзи-фолбэк)
+                            if (galleryPhotos.isNotEmpty()) {
+                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Text(stringResource(R.string.photos), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = c.ink, modifier = Modifier.padding(horizontal = 16.dp))
+                                    Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        galleryPhotos.forEachIndexed { i, p ->
+                                            GalleryThumb(p, 90, emojiSize = 40, Modifier.clip(RoundedCornerShape(12.dp)).clickable { photoViewerStart = i })
+                                        }
                                     }
                                 }
                             }
-                            // Social links
-                            val socials = buildList {
-                                venue.whatsappURL?.let { add(Triple("WhatsApp", Color(0xFF25D366), it)) }
-                                venue.telegramURL?.let { add(Triple("Telegram", Color(0xFF2AABEE), it)) }
-                                venue.instagramURL?.let { add(Triple("Instagram", Color(0xFFE1306C), it)) }
-                            }
-                            if (socials.isNotEmpty()) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    socials.forEach { (name, col, url) ->
-                                        Box(
-                                            Modifier.size(40.dp).clip(CircleShape).background(col).clickable { context.openUrl(url) },
-                                            contentAlignment = Alignment.Center,
-                                        ) { Text(name.take(1), color = Color.White, fontWeight = FontWeight.Bold) }
-                                    }
-                                }
-                            }
-                            // PDF menu
-                            if (!venue.pdfMenuURL.isNullOrEmpty()) {
-                                Row(Modifier.fillMaxWidth().clickable { showPdf = true }, verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.AutoMirrored.Filled.MenuBook, null, tint = c.accentText, modifier = Modifier.size(18.dp))
-                                    Text(" " + stringResource(R.string.venue_pdf_menu), fontSize = 14.sp, color = c.ink)
-                                }
-                            }
-                        }
-                        // Photos gallery (real photos + emoji fallbacks)
-                        if (galleryPhotos.isNotEmpty()) {
-                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Text(stringResource(R.string.photos), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = c.ink, modifier = Modifier.padding(horizontal = 16.dp))
-                                Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    galleryPhotos.forEachIndexed { i, p ->
-                                        Box(Modifier.size(90.dp).clip(RoundedCornerShape(12.dp)).background(c.surfaceMuted).clickable { photoViewerStart = i }, contentAlignment = Alignment.Center) {
-                                            if (p.startsWith("http")) {
-                                                coil.compose.AsyncImage(model = p, contentDescription = null, contentScale = androidx.compose.ui.layout.ContentScale.Crop, modifier = Modifier.fillMaxSize())
-                                            } else {
-                                                Text(p, fontSize = 40.sp)
+                            // Объекты для отзывов (блюда/услуги)
+                            if (venue.items.isNotEmpty()) {
+                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Text(stringResource(R.string.rate_item), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = c.ink, modifier = Modifier.padding(horizontal = 16.dp))
+                                    Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        venue.items.forEach { item ->
+                                            Column(
+                                                horizontalAlignment = Alignment.CenterHorizontally,
+                                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                                                modifier = Modifier.width(80.dp).clickable { writeReview(item.id) },
+                                            ) {
+                                                // Как `ItemThumb`: фото объекта, если есть, иначе эмодзи.
+                                                Box(Modifier.size(70.dp).clip(RoundedCornerShape(14.dp)).background(c.surfaceMuted), contentAlignment = Alignment.Center) {
+                                                    if (item.imageURL.isNotEmpty()) {
+                                                        AsyncImage(model = item.imageURL, contentDescription = item.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                                                    } else {
+                                                        Text(item.emoji, fontSize = 32.sp)
+                                                    }
+                                                }
+                                                Text(item.name, fontSize = 12.sp, color = c.ink, maxLines = 1)
                                             }
                                         }
                                     }
                                 }
                             }
-                        }
-                        // Review objects (dishes / services)
-                        if (venue.items.isNotEmpty()) {
-                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Text(stringResource(R.string.rate_item), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = c.ink, modifier = Modifier.padding(horizontal = 16.dp))
-                                Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    venue.items.forEach { item ->
-                                        Column(
-                                            horizontalAlignment = Alignment.CenterHorizontally,
-                                            modifier = Modifier.width(80.dp).clickable {
-                                                if (session.isGuest) showGuestPrompt = true
-                                                else { writeReviewItemID = item.id; showWriteReview = true }
-                                            },
-                                        ) {
-                                            Box(Modifier.size(70.dp).clip(RoundedCornerShape(14.dp)).background(c.surfaceMuted), contentAlignment = Alignment.Center) {
-                                                Text(item.emoji, fontSize = 32.sp)
-                                            }
-                                            Text(item.name, fontSize = 12.sp, color = c.ink, maxLines = 1)
-                                        }
-                                    }
-                                }
-                            }
-                        }
                         }
                     }
                 }
@@ -512,20 +539,14 @@ fun VenueDetailScreen(
             FloatingIconButton(
                 if (detailState.isSaved) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
                 stringResource(R.string.act_save),
-            ) {
-                if (session.isGuest) showGuestPrompt = true
-                else detail.send(kg.ayant.app.domain.VenueDetailIntent.ToggleSave)
-            }
+            ) { toggleSave() }
             Spacer(Modifier.width(8.dp))
-            FloatingIconButton(Icons.Filled.Share, stringResource(R.string.act_share)) {
-                context.shareText(
-                    context.getString(R.string.venue_share_text, venue.name, venue.address, Links.venue(venue.id)),
-                    venue.name,
-                )
-            }
+            FloatingIconButton(Icons.Filled.Share, stringResource(R.string.act_share)) { share() }
         }
       }
     }
+
+    // ── Листы и диалоги ──────────────────────────────────────────────────────
 
     if (showWriteReview) {
         WriteReviewDialog(venue = venue, app = app, preselectItemID = writeReviewItemID, onDismiss = { showWriteReview = false })
@@ -536,13 +557,16 @@ fun VenueDetailScreen(
     if (showPdf && !venue.pdfMenuURL.isNullOrEmpty()) {
         PdfMenuDialog(venue.pdfMenuURL!!, onDismiss = { showPdf = false })
     }
-    if (showGuestPrompt) {
-        AlertDialog(
-            onDismissRequest = { showGuestPrompt = false },
-            title = { Text(stringResource(R.string.guest_title)) },
-            text = { Text(stringResource(R.string.guest_body)) },
-            confirmButton = { TextButton(onClick = { showGuestPrompt = false }) { Text(stringResource(R.string.action_ok)) } },
-        )
+    // Личный QR — листом, когда у заведения нет баллов САН (iOS: `VenueSheet.qr`).
+    if (showMyQr) {
+        Dialog(onDismissRequest = { showMyQr = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+            Box(Modifier.fillMaxSize().background(c.canvas)) {
+                MyQrScreen(app, points, location, onBack = { showMyQr = false })
+            }
+        }
+    }
+    guestGate?.let { gate ->
+        GuestAlert(session, gate) { guestGate = null }
     }
     if (showMapOptions) {
         AlertDialog(
@@ -553,25 +577,260 @@ fun VenueDetailScreen(
             dismissButton = { TextButton(onClick = { showMapOptions = false; context.openUrl(Dir.google(venue.latitude, venue.longitude)) }) { Text("Google Maps") } },
         )
     }
-    if (reportingReview != null) {
-        var reported by remember { mutableStateOf(false) }
+    // Жалоба уходит в Firestore и попадает в очередь модерации админ-панели.
+    // Причины перечисляем из домена, а не литералами: список один и тот же
+    // на обеих платформах и в админ-панели.
+    reportingReview?.let { review ->
         AlertDialog(
             onDismissRequest = { reportingReview = null },
-            title = { Text(if (reported) stringResource(R.string.review_report_thanks_title) else stringResource(R.string.review_report_title)) },
-            text = { Text(if (reported) stringResource(R.string.review_report_sent) else stringResource(R.string.review_report_choose)) },
-            confirmButton = {
-                if (reported) TextButton(onClick = { reportingReview = null }) { Text(stringResource(R.string.action_done)) }
-                else TextButton(onClick = { reported = true }) { Text(stringResource(R.string.review_report_spam)) }
+            title = { Text(stringResource(R.string.review_report_title)) },
+            text = {
+                Column {
+                    ReviewReportReason.entries.forEach { reason ->
+                        TextButton(onClick = {
+                            reportingReview = null
+                            app.reportReview(review, reason)
+                            reportSent = true
+                        }) { Text(stringResource(reason.labelRes()), color = Color(0xFFD32F2F)) }
+                    }
+                }
             },
-            dismissButton = {
-                if (!reported) TextButton(onClick = { reported = true }) { Text(stringResource(R.string.review_report_offensive)) }
-            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { reportingReview = null }) { Text(stringResource(R.string.action_cancel)) } },
+        )
+    }
+    if (reportSent) {
+        AlertDialog(
+            onDismissRequest = { reportSent = false },
+            title = { Text(stringResource(R.string.detail_report_sent_title)) },
+            text = { Text(stringResource(R.string.detail_report_sent_body)) },
+            confirmButton = { TextButton(onClick = { reportSent = false }) { Text(stringResource(R.string.action_ok)) } },
         )
     }
 }
 
+// MARK: - Секции
+
+/** Пустая вкладка — карточкой, как `emptyTabNote` на iOS. */
 @Composable
-private fun ActionButton(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector, modifier: Modifier, onClick: () -> Unit) {
+private fun EmptyTabNote(text: String) {
+    val c = AyantTheme.colors
+    Text(
+        text, fontSize = 14.sp, color = c.inkSoft,
+        modifier = Modifier
+            .padding(horizontal = 16.dp)
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(AyantRadius.card))
+            .background(c.surface)
+            .border(0.5.dp, c.hairline, RoundedCornerShape(AyantRadius.card))
+            .padding(18.dp),
+    )
+}
+
+/** Сегодняшний специал. Зеркалит `todaySpecialBanner`. */
+@Composable
+private fun TodaySpecialBanner(venue: Venue) {
+    val c = AyantTheme.colors
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(c.accent.copy(alpha = 0.1f)).padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("⭐️", fontSize = 22.sp)
+        Column(Modifier.padding(start = 10.dp)) {
+            Text(stringResource(R.string.today), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = c.accentText)
+            Text(venue.todaySpecialText ?: "", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = c.ink)
+        }
+    }
+}
+
+/** Вкладка «Отзывы». Зеркалит `reviewsSection`. */
+@Composable
+private fun ReviewsSection(
+    venue: Venue,
+    rating: Double,
+    count: Int,
+    breakdown: Map<Int, Int>,
+    reviews: List<Review>,
+    currentUserID: String,
+    onWriteReview: () -> Unit,
+    onReport: (Review) -> Unit,
+) {
+    val c = AyantTheme.colors
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Text(stringResource(R.string.reviews), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = c.ink, modifier = Modifier.padding(horizontal = 16.dp))
+        Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(20.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(ratingText(rating), fontSize = 40.sp, fontWeight = FontWeight.Bold, color = c.ink)
+                StarRating(rating = rating, size = 12)
+                Text(pluralStringResource(R.plurals.reviews_word, count, count), fontSize = 11.sp, color = c.inkSoft)
+            }
+            RatingBreakdown(breakdown, Modifier.weight(1f))
+        }
+        if (venue.items.isEmpty()) {
+            Text(stringResource(R.string.venue_reviews_no_items), fontSize = 13.sp, color = c.inkSoft, modifier = Modifier.padding(horizontal = 16.dp))
+        } else {
+            Row(
+                Modifier.padding(horizontal = 16.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(c.accent)
+                    .clickable(onClick = onWriteReview).padding(vertical = 12.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Filled.Edit, null, tint = Color.White, modifier = Modifier.size(16.dp))
+                Text(" " + stringResource(R.string.rate_item), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.White, textAlign = TextAlign.Center)
+            }
+        }
+        if (reviews.isEmpty()) {
+            Text(stringResource(R.string.no_reviews), fontSize = 14.sp, color = c.inkSoft, modifier = Modifier.padding(horizontal = 16.dp))
+        } else {
+            Column(Modifier.padding(horizontal = 16.dp)) {
+                reviews.forEach { r ->
+                    ReviewRow(r, onReport = if (r.authorID != currentUserID) ({ onReport(r) }) else null)
+                    Box(Modifier.fillMaxWidth().height(0.5.dp).background(c.hairline))
+                }
+            }
+        }
+    }
+}
+
+/** Строка отзыва (с ответом владельца). Зеркалит `ReviewRow` в `ReviewViews.swift`. */
+@Composable
+private fun ReviewRow(r: Review, onReport: (() -> Unit)? = null) {
+    val c = AyantTheme.colors
+    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Box(
+                Modifier.size(38.dp).clip(CircleShape)
+                    .background(Brush.linearGradient(listOf(c.accent, Color(0xFFFFCC00)))),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(r.initial, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Text(r.authorName, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = c.ink)
+                    if (r.verifiedVisit) {
+                        Icon(Icons.Filled.Verified, stringResource(R.string.detail_review_verified_visit), tint = c.open, modifier = Modifier.size(13.dp))
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    StarRating(rating = r.rating.toDouble(), size = 11)
+                    Text("· " + reviewDateText(r), fontSize = 11.sp, color = c.inkSoft)
+                }
+            }
+            if (r.verifiedVisit) {
+                Text(stringResource(R.string.review_verified_visit), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = c.open, modifier = Modifier.clip(RoundedCornerShape(50)).background(c.open.copy(alpha = 0.15f)).padding(horizontal = 7.dp, vertical = 3.dp))
+            }
+            if (onReport != null) {
+                // iOS: контекстное меню по долгому нажатию; здесь — явная иконка, та же роль.
+                Icon(Icons.Filled.Flag, stringResource(R.string.review_report_action), tint = c.inkSoft, modifier = Modifier.size(18.dp).clickable(onClick = onReport))
+            }
+        }
+        r.itemName?.takeIf { it.isNotEmpty() }?.let { itemName ->
+            Text(stringResource(R.string.review_about_item, itemName), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = c.accentText, modifier = Modifier.clip(RoundedCornerShape(50)).background(c.accent.copy(alpha = 0.12f)).padding(horizontal = 8.dp, vertical = 3.dp))
+        }
+        if (r.text.isNotEmpty()) Text(r.text, fontSize = 14.sp, color = c.ink)
+        val reviewPhotos = r.photos + r.photoEmojis
+        if (reviewPhotos.isNotEmpty()) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                reviewPhotos.forEach { p -> GalleryThumb(p, 56, emojiSize = 24, Modifier.clip(RoundedCornerShape(10.dp))) }
+            }
+        }
+        r.hostReply?.let { reply ->
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(c.surfaceMuted).padding(10.dp),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Icon(Icons.Filled.Verified, null, tint = Color(0xFF4DA3FF), modifier = Modifier.size(13.dp))
+                    Text(stringResource(R.string.review_host_reply), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF4DA3FF))
+                }
+                Text(reply.text, fontSize = 12.sp, color = c.inkSoft)
+            }
+        }
+    }
+}
+
+/** «12 сент. 2026» — дата отзыва на языке приложения. Зеркалит `Review.dateText`. */
+private fun reviewDateText(r: Review): String =
+    SimpleDateFormat("d MMM yyyy", AppLanguage.locale).format(r.createdAt)
+
+/** Миниатюра галереи: фото по URL или эмодзи-фолбэк. Зеркалит `GalleryImage`. */
+@Composable
+private fun GalleryThumb(value: String, size: Int, emojiSize: Int, modifier: Modifier = Modifier) {
+    val c = AyantTheme.colors
+    Box(modifier.size(size.dp).background(c.surfaceMuted), contentAlignment = Alignment.Center) {
+        if (value.startsWith("http")) {
+            AsyncImage(model = value, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        } else {
+            Text(value, fontSize = emojiSize.sp)
+        }
+    }
+}
+
+/**
+ * Карта лояльности (штампы). Зеркалит `loyaltyBanner`: заголовок, «N визитов → награда»,
+ * счётчик «stamps/goal», ряд печатей и подсказка, что штамп ставит сотрудник по QR.
+ * Без [loyalty] (корень ещё не передаёт VM) счётчик и печати скрыты — «0/6»
+ * при трёх реальных штампах хуже, чем ничего.
+ */
+@Composable
+private fun LoyaltyBanner(venue: Venue, loyalty: LoyaltyViewModel?, onClick: () -> Unit) {
+    val cards = loyalty?.cards?.collectAsState()?.value
+    val card = cards?.firstOrNull { it.venueID == venue.id }
+    val stamps = card?.stamps ?: 0
+    val goal = venue.loyaltyGoal
+    val rounds = card?.completedRounds ?: 0
+    val white = Color.White
+    Column(
+        Modifier
+            .padding(horizontal = 16.dp)
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(Brush.linearGradient(listOf(Color(0xFFFF4D29), Color(0xFFFFB300))))
+            .clickable(onClick = onClick)
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Icon(Icons.Filled.CreditCard, null, tint = white, modifier = Modifier.size(20.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(stringResource(R.string.venue_loyalty_card), fontSize = 14.sp, fontWeight = FontWeight.Bold, color = white)
+                Text(stringResource(R.string.venue_loyalty_progress, goal, venue.loyaltyReward), fontSize = 12.sp, color = white.copy(alpha = 0.9f))
+            }
+            if (loyalty != null) {
+                Text(
+                    "$stamps/$goal", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = white,
+                    modifier = Modifier.clip(CircleShape).background(white.copy(alpha = 0.25f)).padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+            }
+        }
+        if (loyalty != null) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                for (i in 0 until goal) {
+                    Icon(
+                        if (i < stamps) Icons.Filled.Verified else Icons.Filled.StarBorder, null,
+                        tint = if (i < stamps) white else white.copy(alpha = 0.45f),
+                        modifier = Modifier.size(14.dp),
+                    )
+                }
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Icon(Icons.Filled.Info, null, tint = white.copy(alpha = 0.9f), modifier = Modifier.size(12.dp))
+            // Штамп ставит только сервер, когда сотрудник сканирует QR
+            // карты (`scanCoupon`, ветка A) — не за купон.
+            Text(
+                if (rounds > 0) stringResource(R.string.detail_loyalty_rounds_hint, rounds)
+                else stringResource(R.string.detail_loyalty_stamp_hint),
+                fontSize = 11.sp, color = white.copy(alpha = 0.9f), modifier = Modifier.weight(1f),
+            )
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = white.copy(alpha = 0.9f), modifier = Modifier.size(14.dp))
+        }
+    }
+}
+
+@Composable
+private fun ActionButton(title: String, icon: ImageVector, modifier: Modifier, onClick: () -> Unit) {
     val c = AyantTheme.colors
     Column(
         modifier.clip(RoundedCornerShape(12.dp)).background(c.surfaceMuted).clickable(onClick = onClick).padding(vertical = 10.dp),
@@ -584,43 +843,11 @@ private fun ActionButton(title: String, icon: androidx.compose.ui.graphics.vecto
 }
 
 @Composable
-private fun InfoRow(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String, onClick: () -> Unit) {
+private fun InfoRow(icon: ImageVector, text: String, tint: Color? = null, onClick: () -> Unit) {
     val c = AyantTheme.colors
     Row(Modifier.fillMaxWidth().clickable(onClick = onClick), verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, null, tint = c.inkSoft, modifier = Modifier.size(18.dp))
-        Text(" $text", fontSize = 14.sp, color = c.ink)
-    }
-}
-
-@Composable
-private fun ReviewRow(r: kg.ayant.app.domain.model.Review, onReport: (() -> Unit)? = null) {
-    val c = AyantTheme.colors
-    Column(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(36.dp).clip(CircleShape).background(c.surfaceMuted), contentAlignment = Alignment.Center) {
-                Text(r.initial, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = c.ink)
-            }
-            Column(Modifier.padding(start = 10.dp).weight(1f)) {
-                Text(r.authorName, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = c.ink)
-                StarRating(rating = r.rating.toDouble(), size = 11)
-            }
-            if (r.verifiedVisit) {
-                Text(stringResource(R.string.review_verified_visit), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = c.open, modifier = Modifier.clip(RoundedCornerShape(50)).background(c.open.copy(alpha = 0.15f)).padding(horizontal = 7.dp, vertical = 3.dp))
-            }
-            if (onReport != null) {
-                Icon(Icons.Filled.Flag, stringResource(R.string.review_report_action), tint = c.inkSoft, modifier = Modifier.padding(start = 6.dp).size(18.dp).clickable(onClick = onReport))
-            }
-        }
-        r.itemName?.takeIf { it.isNotEmpty() }?.let { itemName ->
-            Text(stringResource(R.string.review_about_item, itemName), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = c.accentText, modifier = Modifier.clip(RoundedCornerShape(50)).background(c.accent.copy(alpha = 0.12f)).padding(horizontal = 8.dp, vertical = 3.dp))
-        }
-        if (r.text.isNotEmpty()) Text(r.text, fontSize = 14.sp, color = c.ink)
-        r.hostReply?.let { reply ->
-            Column(Modifier.padding(start = 12.dp).fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(c.surfaceMuted).padding(10.dp)) {
-                Text(stringResource(R.string.review_host_reply), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = c.accentText)
-                Text(reply.text, fontSize = 13.sp, color = c.ink)
-            }
-        }
+        Icon(icon, null, tint = tint ?: c.inkSoft, modifier = Modifier.size(18.dp))
+        Text(" $text", fontSize = 14.sp, color = tint ?: c.ink)
     }
 }
 
@@ -655,7 +882,7 @@ private fun VenueTabButton(tab: VenueTab, isOn: Boolean, modifier: Modifier, onC
 /** Плавающая кнопка поверх обложки. */
 @Composable
 private fun FloatingIconButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     label: String,
     onClick: () -> Unit,
 ) {
@@ -676,39 +903,42 @@ private fun FloatingIconButton(
 @Composable
 private fun VenueStickyBar(isSaved: Boolean, onShowQr: () -> Unit, onToggleSave: () -> Unit) {
     val c = AyantTheme.colors
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .background(c.canvas.copy(alpha = 0.94f))
-            .navigationBarsPadding()
-            .padding(horizontal = 18.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
+    Column(Modifier.fillMaxWidth().background(c.canvas.copy(alpha = 0.94f))) {
+        Box(Modifier.fillMaxWidth().height(0.5.dp).background(c.hairline))
+        Row(
             Modifier
-                .weight(1f)
-                .clip(RoundedCornerShape(18.dp))
-                .background(c.accentGradient)
-                .clickable(onClick = onShowQr)
-                .padding(vertical = 16.dp),
-            contentAlignment = Alignment.Center,
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 18.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(stringResource(R.string.venue_show_qr), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
-        }
-        Box(
-            Modifier
-                .size(width = 56.dp, height = 54.dp)
-                .clip(RoundedCornerShape(18.dp))
-                .background(c.surface)
-                .clickable(onClick = onToggleSave),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                if (isSaved) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                contentDescription = stringResource(R.string.act_save),
-                tint = c.accentText, modifier = Modifier.size(19.dp),
-            )
+            Box(
+                Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(AyantRadius.button))
+                    .background(c.accentGradient)
+                    .clickable(onClick = onShowQr)
+                    .padding(vertical = 16.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(stringResource(R.string.venue_show_qr), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            }
+            Box(
+                Modifier
+                    .size(width = 56.dp, height = 54.dp)
+                    .clip(RoundedCornerShape(AyantRadius.button))
+                    .background(c.surface)
+                    .border(0.5.dp, c.hairline, RoundedCornerShape(AyantRadius.button))
+                    .clickable(onClick = onToggleSave),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    if (isSaved) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                    contentDescription = stringResource(R.string.act_save),
+                    tint = c.accentText, modifier = Modifier.size(19.dp),
+                )
+            }
         }
     }
 }
@@ -717,12 +947,13 @@ private fun VenueStickyBar(isSaved: Boolean, onShowQr: () -> Unit, onToggleSave:
 @Composable
 private fun VenuePointsHeroCard(venue: Venue, balance: Int, onClick: () -> Unit) {
     val c = AyantTheme.colors
+    // Ближайшая доступная награда задаёт цель прогресса.
     val next = venue.pointsRewards.filter { it.active && it.cost > balance }.minByOrNull { it.cost }
     val fraction = next?.let { (balance.toFloat() / it.cost.coerceAtLeast(1)).coerceAtMost(1f) } ?: 1f
     Column(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(26.dp))
+            .clip(RoundedCornerShape(AyantRadius.hero))
             .background(c.accentGradient)
             .clickable(onClick = onClick)
             .padding(20.dp),
@@ -747,86 +978,15 @@ private fun VenuePointsHeroCard(venue: Venue, balance: Int, onClick: () -> Unit)
         AyantProgressBar(fraction = fraction, height = 8.dp)
         Spacer(Modifier.height(10.dp))
         Text(
-            next?.let { "Ещё ${it.cost - balance} до «${it.title}»" }
+            next?.let { stringResource(R.string.points_until_reward, it.cost - balance, it.title) }
                 ?: stringResource(R.string.venue_points_rewards_available),
             fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.94f),
         )
     }
 }
 
-/** Предложения списком (SCREENS.md G3 §7). */
-@Composable
-private fun VenueDealRows(
-    deals: List<kg.ayant.app.domain.model.Deal>,
-    venue: Venue,
-    onDeal: (String) -> Unit,
-) {
-    val c = AyantTheme.colors
-    Column(
-        Modifier.padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        deals.forEach { d ->
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(22.dp))
-                    .background(c.surface)
-                    .clickable { onDeal(d.id) }
-                    .padding(14.dp),
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                Box(Modifier.size(66.dp).clip(RoundedCornerShape(17.dp))) {
-                    CoverImage(d.imageURL, venue.gradientColors, d.emoji, Modifier.fillMaxSize(), emojiSize = 28)
-                }
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        d.title, fontSize = 15.sp, fontWeight = FontWeight.Bold,
-                        letterSpacing = (-0.3).sp, lineHeight = 19.sp, color = c.ink, maxLines = 2,
-                    )
-                    Text(
-                        d.details, fontSize = 12.5.sp, color = c.inkSoft, maxLines = 1,
-                        modifier = Modifier.padding(top = 5.dp),
-                    )
-                    Row(
-                        Modifier.padding(top = 7.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.Bottom,
-                    ) {
-                        d.newPrice?.let {
-                            Text(
-                                stringResource(R.string.price_som, it), fontSize = 17.sp,
-                                fontWeight = FontWeight.Black, letterSpacing = (-0.4).sp,
-                                // Акцент мелким текстом — контрастный вариант.
-                                color = c.accentText,
-                            )
-                        }
-                        d.oldPrice?.let {
-                            Text(
-                                stringResource(R.string.price_som, it), fontSize = 13.sp,
-                                color = Color(0xFF9A9188),
-                                textDecoration = androidx.compose.ui.text.style.TextDecoration.LineThrough,
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
 /** «4,8» — рейтинг с десятичной запятой. */
-private fun ratingText(v: Double): String = String.format("%.1f", v).replace('.', ',')
-
-private fun reviewsWord(n: Int): String {
-    val n10 = n % 10
-    val n100 = n % 100
-    return when {
-        n10 == 1 && n100 != 11 -> "отзыв"
-        n10 in 2..4 && n100 !in 12..14 -> "отзыва"
-        else -> "отзывов"
-    }
-}
+private fun ratingText(v: Double): String = String.format(AppLanguage.locale, "%.1f", v)
 
 // MARK: - Публикации: кладка в две колонки
 //
@@ -881,6 +1041,7 @@ private fun PublicationTile(deal: Deal, venue: Venue, onClick: () -> Unit) {
             .fillMaxWidth()
             .clip(RoundedCornerShape(AyantRadius.card))
             .background(c.surface)
+            .border(0.5.dp, c.hairline, RoundedCornerShape(AyantRadius.card))
             .clickable(onClick = onClick),
     ) {
         Box {

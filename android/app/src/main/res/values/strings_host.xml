@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Строки хост-кабинета, добавленные при сверке с iOS (SAN/Host/*.swift).
+     Общие ключи живут в strings.xml; здесь — только новые. Наборы ключей в
+     values / values-en / values-ky обязаны совпадать. -->
+<resources>
+    <!-- Онбординг (HostRoot.swift) -->
+    <string name="host_onb_title">Подключите заведение к Ayant</string>
+    <string name="host_onb_name_placeholder">Например, Sierra Coffee</string>
+    <string name="host_onb_phone_placeholder">+996 …</string>
+    <string name="host_onb_email_placeholder">you@example.com</string>
+    <string name="host_onb_note">После отправки заведение попадёт на модерацию. Обычно проверяем в течение суток.</string>
+    <string name="host_onb_first_title">Добавим первое заведение?</string>
+    <string name="host_onb_first_body">Можно добавить сейчас или позже — со вкладки «Заведения».</string>
+    <string name="host_onb_add_now">Добавить заведение сейчас</string>
+    <string name="host_onb_later">Сделаю позже</string>
+
+    <!-- Витрина заведений (HostVenuesView.swift) -->
+    <string name="host_venue_plural_one">Заведение</string>
+    <string name="host_venue_plural_few">Заведения</string>
+    <string name="host_venue_plural_many">Заведений</string>
+    <string name="host_stat_active_deals_lc">активных акций</string>
+    <string name="host_sync_denied">Сервер отклонил сохранение: у аккаунта нет прав на это заведение. Данные видны только на этом устройстве.</string>
+    <string name="host_sync_network">Нет связи с сервером. Изменения сохранены на устройстве и отправятся при следующем обновлении.</string>
+    <string name="host_sync_failed">Не удалось синхронизировать с сервером.</string>
+    <string name="host_menu_duplicate">Дублировать</string>
+    <string name="host_period">Период</string>
+
+    <!-- Карточка заведения -->
+    <string name="host_special_placeholder_full">До 100 символов — пусто, чтобы убрать</string>
+    <string name="host_points_no_rewards">Награды не заведены</string>
+    <string name="host_points_rewards_count">%1$d наград</string>
+    <string name="host_points_scan_pause">Пауза скана</string>
+    <string name="host_points_expiry_short">Сгорание</string>
+    <string name="host_loyalty_enabled_explain">Гость получает штамп за каждое погашение вашего купона/акции. На %1$d-м штампе ему автоматически выдаётся купон «%2$s», который он показывает вам.</string>
+    <string name="host_loyalty_disabled_explain">Включите программу лояльности, чтобы гости возвращались: копили штампы за визиты и получали награду.</string>
+    <string name="host_loyalty_setup">Настроить</string>
+    <string name="host_loyalty_turn_on">Включить</string>
+    <string name="host_items_sub">Блюда и услуги, которые гости смогут оценивать отдельно.</string>
+    <string name="host_all_campaigns">Все кампании продвижения</string>
+
+    <!-- Форма заведения -->
+    <string name="host_cover_upload">Загрузить обложку</string>
+    <string name="host_form_section_photo">Фото заведения</string>
+    <string name="host_form_section_pdf">Прайс-лист / каталог (PDF)</string>
+    <string name="host_form_pdf_hint">Список блюд или услуг. Гости откроют его на странице заведения.</string>
+    <string name="host_form_section_coupons">Купоны</string>
+    <string name="host_form_coupons_on_footer">Гости смогут получать и гасить купоны на ваши акции. Рекомендуем оставить включённым — купоны заметно повышают посещаемость.</string>
+    <string name="host_form_coupons_off_footer">⚠️ Купоны выключены — гости не увидят кнопку получения купона на ваших акциях. Рекомендуем включить: это привлекает больше гостей.</string>
+    <string name="host_form_loyalty_off_footer">Включите, чтобы гости копили штампы за визиты и получали награду.</string>
+    <string name="host_form_stamps_goal_n">Штампов до награды: %1$d</string>
+    <string name="host_form_manual_coords">Ввести координаты вручную</string>
+    <string name="host_form_apply_monday_all">Применить понедельник ко всем дням</string>
+    <string name="host_form_footer_new">Новое заведение попадёт на модерацию — обычно до 24 часов.</string>
+    <string name="host_form_footer_edit">Изменения сохранятся сразу, статус публикации не изменится.</string>
+    <string name="host_form_whatsapp_full">WhatsApp (номер, напр. 996700123456)</string>
+    <string name="host_form_section_branch">Филиал</string>
+    <string name="host_pdf_uploaded">PDF загружен</string>
+    <string name="host_pdf_upload">Загрузить PDF</string>
+    <string name="host_pdf_replace">Заменить PDF</string>
+    <string name="host_remove">Убрать</string>
+    <string name="host_pdf_failed">Не удалось загрузить PDF</string>
+    <string name="host_photo_upload">Загрузить фото</string>
+    <string name="host_photo_failed">Ошибка загрузки фото</string>
+    <string name="host_paste_link">Или вставьте ссылку</string>
+    <string name="host_map_title">Точка на карте</string>
+
+    <!-- Форма предложения -->
+    <string name="host_deal_title_placeholder">−30% на манты по будням</string>
+    <string name="host_deal_price_hint">Цена — целое число сомов, не меньше 0</string>
+    <string name="host_deal_discount_hint">Скидка — целое число от 1 до 99</string>
+    <string name="host_deal_need_offer_hint">Для скидки укажите новую цену или процент</string>
+    <string name="host_deal_details_placeholder">С 11:00 до 15:00 на все виды мантов</string>
+    <string name="host_deal_terms_label">Условия</string>
+    <string name="host_deal_terms_hint">По одному в строке — гость увидит их списком</string>
+    <string name="host_deal_terms_placeholder">Каждый день до 12:00\nОдин напиток на гостя</string>
+    <string name="host_deal_discount_label" formatted="false">Скидка, %</string>
+    <string name="host_deal_photo_eyebrow">Фото</string>
+    <string name="host_deal_photo_add">Добавить фото</string>
+    <string name="host_deal_valid_label">Действует</string>
+    <string name="host_deal_publication_label">Публикация</string>
+    <string name="host_deal_draft_sub">Черновик не виден гостям</string>
+    <string name="host_deal_preview_eyebrow">Как увидят гости</string>
+    <string name="host_deal_footer_draft">Черновик не виден гостям — опубликуйте, когда будет готово.</string>
+    <string name="host_deal_footer_publish">Предложение публикуется сразу, без модерации.</string>
+    <string name="host_deal_title_fallback">Заголовок предложения</string>
+
+    <!-- Сканер (HostScannerView.swift) -->
+    <string name="host_scanner_title">Сканер купонов</string>
+    <string name="host_camera_denied_title">Нет доступа к камере</string>
+    <string name="host_camera_denied_body">Разрешите доступ в Настройках, чтобы сканировать QR гостей.</string>
+    <string name="host_open_settings">Открыть настройки</string>
+    <string name="host_scan_checking_long">Проверяем код…</string>
+    <string name="host_manual_placeholder">AYANT-XXXXXX</string>
+    <string name="host_err_network">Ошибка сети. Попробуйте ещё раз.</string>
+    <string name="host_err_loyalty_is_points">Это заведение начисляет баллы, а не штампы — попросите гостя показать QR «Мой QR».</string>
+    <string name="host_err_key_reused">Этот код уже обрабатывался с другим запросом. Отсканируйте QR заново.</string>
+    <string name="host_err_bad_reward">Награда указана неверно. Попросите гостя обновить QR.</string>
+    <string name="host_err_internal">Ошибка на сервере. Попробуйте ещё раз через минуту.</string>
+    <string name="host_err_app_check">Приложение не прошло проверку. Обновите его из Google Play.</string>
+    <string name="host_err_cooldown_long">Этому гостю уже начисляли недавно, попробуйте позже.</string>
+    <string name="host_result_stamp">+1 штамп ✓</string>
+    <string name="host_result_done">Готово ✓</string>
+    <string name="host_result_coupon">Купон погашен ✓</string>
+    <string name="host_result_titled">«%1$s» ✓</string>
+    <string name="host_result_reward">Награда выдана ✓</string>
+    <string name="host_result_points">+%1$d баллов ✓</string>
+    <string name="host_sub_coupon">Купон погашен.</string>
+    <string name="host_sub_stamp_total">Всего на карте: %1$d из %2$d.</string>
+    <string name="host_sub_coupon_stamp">Купон «%1$s» погашен. %2$s</string>
+    <string name="host_sub_reward_issued">🎉 Карта заполнена! Гостю выдан купон «%1$s» — он уже в «Мои купоны»; погасить можно сразу или в следующий визит.</string>
+
+    <!-- Аналитика -->
+    <string name="analytics_rewards_issued">Наград выдано</string>
+    <string name="analytics_stamps">Штампов выдано</string>
+    <string name="analytics_points_earned">Баллов начислено</string>
+    <string name="analytics_points_redeemed">Баллов списано</string>
+    <string name="analytics_empty_title">Данных пока нет</string>
+    <string name="analytics_empty_body">Статистика копится из реальных действий гостей: просмотров заведения, сохранений и сканов в зале. В первые недели цифры будут небольшими — это нормально.</string>
+
+    <!-- Отзывы -->
+    <string name="host_reviews_empty_title">Пока нет отзывов</string>
+    <string name="host_reviews_empty_body">Поделитесь заведением, чтобы получить первые отзывы.</string>
+    <string name="host_quick_replies">Быстрые ответы</string>
+
+    <!-- Профиль -->
+    <string name="host_profile_under_review">На проверке</string>
+    <string name="host_profile_has_check">У вас есть синяя галочка.</string>
+    <string name="host_profile_info_placeholder">Название, телефон, ИП, ИНН…</string>
+    <string name="host_signout_body">Вы вернётесь на экран входа. Заведения и статистика сохранятся.</string>
+    <string name="host_info_section_legal">Форма и реквизиты</string>
+    <string name="host_info_legal_footer">Эти данные видны только вам и модерации Ayant — они помогают быстрее пройти верификацию.</string>
+    <string name="host_info_section_more">Дополнительно</string>
+    <string name="host_info_about_short">О бизнесе (коротко)</string>
+
+    <!-- Продвижение (за ReleaseFlags.PROMOTE) -->
+    <string name="host_promo_rate_boost">180 сом/день</string>
+    <string name="host_promo_rate_push">240 сом/день</string>
+    <string name="host_promo_headline_label">Заголовок push (до 60)</string>
+    <string name="host_promo_text_label">Текст push (до 120)</string>
+    <string name="host_promo_headline_placeholder">Скидка 30% сегодня</string>
+    <string name="host_promo_text_placeholder">Приходите с 11 до 15</string>
+    <string name="host_promo_total">Итого</string>
+    <string name="host_promo_launch">Запустить кампанию</string>
+    <string name="host_promo_preview">Предпросмотр</string>
+    <string name="host_promo_preview_hint">Так гости увидят вас в ленте</string>
+    <string name="host_promo_ad_label">Реклама</string>
+    <string name="host_promo_unlimited_price">Бессрочно — %1$d сом</string>
+    <string name="host_promo_unlimited">бессрочно</string>
+    <string name="host_promo_days_one">день</string>
+    <string name="host_promo_days_few">дня</string>
+    <string name="host_promo_days_many">дней</string>
+    <string name="host_promo_search_venue">Поиск заведения</string>
+</resources>

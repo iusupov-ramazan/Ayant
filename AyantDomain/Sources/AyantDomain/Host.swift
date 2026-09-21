@@ -16,13 +16,23 @@ public struct HostState: Equatable {
     public var deals: [HostDealDTO] = []
     public var campaigns: [AdCampaign] = []
     public var sync: SyncPhase = .idle
+    /// Сколько успешных сканов сделано за сессию. Экраны со статистикой
+    /// перезагружаются, когда счётчик меняется: «Погашено купонов» должно
+    /// вырасти сразу после скана, а не после ручного обновления.
+    public var scansCompleted: Int = 0
+    /// Instagram по заведениям: ключ — venueID. Пусто — аккаунт не подключён.
+    public var instagram: [String: InstagramVenueState] = [:]
 
     public init(ownerID: String = "", profile: HostProfile? = nil,
                 venues: [HostVenueDTO] = [], deals: [HostDealDTO] = [],
-                campaigns: [AdCampaign] = [], sync: SyncPhase = .idle) {
+                campaigns: [AdCampaign] = [], sync: SyncPhase = .idle,
+                scansCompleted: Int = 0,
+                instagram: [String: InstagramVenueState] = [:]) {
         self.ownerID = ownerID; self.profile = profile
         self.venues = venues; self.deals = deals
         self.campaigns = campaigns; self.sync = sync
+        self.scansCompleted = scansCompleted
+        self.instagram = instagram
     }
 
     /// Кабинет заведён — профиль создан.
@@ -31,6 +41,14 @@ public struct HostState: Equatable {
     public var ownedVenueIDs: Set<String> { Set(venues.map(\.id)) }
 
     public func venue(id: String) -> HostVenueDTO? { venues.first { $0.id == id } }
+
+    public func instagram(venueID: String) -> InstagramVenueState {
+        instagram[venueID] ?? InstagramVenueState()
+    }
+
+    /// Посты, уже превращённые в акции. Считается из самих акций, а не хранится
+    /// отдельно: два источника правды тут разъедутся на первом же удалении.
+    public var importedPostIDs: Set<String> { Set(deals.compactMap(\.sourcePostID)) }
 
     /// Акции заведения, новые сверху.
     public func deals(forVenue id: String) -> [HostDealDTO] {
@@ -112,4 +130,17 @@ public enum HostIntent: Equatable {
     case addCampaign(AdCampaign)
     case launchPush(headline: String, body: String, venueID: String, dealID: String?)
     case cancelCampaign(id: String)
+    /// Сканер успешно начислил/погасил — статистику пора перечитать.
+    case noteScanSucceeded
+
+    // Instagram
+    /// Запросить ссылку входа — вью откроет её в системном браузере.
+    case connectInstagram(venueID: String)
+    /// Вернулись из браузера: перечитать подключение и погасить `authURL`.
+    case instagramConnected(venueID: String)
+    /// Кнопка «Синхронизировать»: перечитать последние посты.
+    case syncInstagram(venueID: String)
+    /// Перезалить фото поста на наш CDN — дальше хост правит форму акции.
+    case importInstagramPost(venueID: String, postID: String)
+    case disconnectInstagram(venueID: String)
 }

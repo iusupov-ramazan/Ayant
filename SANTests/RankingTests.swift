@@ -239,6 +239,7 @@ private final class RankingStubRepo: DataRepository {
     func saveReview(_ review: Review) async throws {}
     func deleteReview(id: String) async throws {}
     func updateReviewReply(reviewID: String, reply: HostReply?) async throws {}
+    func reportReview(_ report: ReviewReport) async throws {}
     func logRedemption(userID: String, dealID: String, venueID: String) async throws {}
     func recordReferral(inviteeID: String, referrerID: String) async throws {}
     func claimBonusGrants(userID: String) async throws -> Int { 0 }

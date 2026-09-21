@@ -22,6 +22,7 @@ public enum FS {
         public static let venues = "venues"
         public static let deals = "deals"
         public static let reviews = "reviews"
+        public static let reviewReports = "reviewReports"
         public static let hosts = "hosts"
         public static let categories = "categories"
         public static let coupons = "coupons"
@@ -44,6 +45,28 @@ public enum FS {
     /// Документы с фиксированным id.
     public enum Document {
         public static let rankingWeights = "rankingWeights"
+        /// config/globalRewards — каталог наград глобального кошелька.
+        public static let globalRewards = "globalRewards"
+        /// config/appSettings — глобальные настройки из админ-панели.
+        public static let appSettings = "appSettings"
+    }
+
+    /// Поля config/appSettings. Читает и сервер (`scanCoupon`), и панель.
+    public enum AppSettingsDoc {
+        public static let stampCooldownMinutes = "stampCooldownMinutes"
+        public static let adPlaceholderText = "adPlaceholderText"
+    }
+
+    /// Элемент массива `items` в config/globalRewards.
+    public enum GlobalRewardDoc {
+        public static let items = "items"
+        public static let id = "id"
+        public static let title = "title"
+        public static let cost = "cost"
+        public static let emoji = "emoji"
+        /// Заведение-партнёр: без него награду нельзя погасить.
+        public static let venueID = "venueID"
+        public static let venueName = "venueName"
     }
 
     // MARK: - venues/{id}
@@ -122,9 +145,39 @@ public enum FS {
         public static let ownerID = "ownerID"
         /// Ключ партиционирования по городам — то же поле `city`, что у заведения.
         public static let city = "city"
+        /// id поста в инстаграме, из которого импортирована акция.
+        public static let igPostID = "igPostId"
+    }
+
+    // MARK: - igConnections/{ownerID}_{venueID}
+
+    /// Публичная половина подключения инстаграма. Токен лежит в закрытой
+    /// `igAccounts` и клиенту недоступен — см. firestore.rules.
+    public enum IgConnectionDoc {
+        public static let collection = "igConnections"
+        public static let ownerID = "ownerID"
+        public static let venueID = "venueID"
+        public static let username = "username"
+        public static let connectedAt = "connectedAt"
+        public static let needsReauth = "needsReauth"
+        public static let lastSyncAt = "lastSyncAt"
+
+        public static func id(ownerID: String, venueID: String) -> String { "\(ownerID)_\(venueID)" }
     }
 
     // MARK: - reviews/{id}
+
+    // MARK: - reviewReports/{reviewID}_{reporterID}
+
+    public enum ReviewReportDoc {
+        public static let reviewID = "reviewID"
+        public static let venueID = "venueID"
+        public static let reporterID = "reporterID"
+        public static let reason = "reason"
+        public static let createdAt = "createdAt"
+        /// "open" | "reviewed" — очередь разбора в админ-панели.
+        public static let status = "status"
+    }
 
     public enum ReviewDoc {
         public static let venueID = "venueID"
@@ -254,6 +307,19 @@ public enum FS {
         public static let balance = "balance"
         public static let lifetimeEarned = "lifetimeEarned"
         public static let lifetimeRedeemed = "lifetimeRedeemed"
+        /// Подколлекция журнала карты (`venuePoints/{card}/ledger`).
+        public static let ledger = "ledger"
+    }
+
+    /// `venuePoints/{card}/ledger/{auto}` — пишет только `scanCoupon` (ветка C),
+    /// `redeemVenuePoints` и `expireVenuePoints` (functions/src/index.ts).
+    public enum LedgerDoc {
+        public static let type = "type"            // "earn" | "redeem" | "expire"
+        public static let points = "points"        // со знаком
+        public static let billAmount = "billAmount"
+        public static let rewardId = "rewardId"
+        public static let byVenue = "byVenue"
+        public static let at = "at"
     }
 
     public enum BonusGrantDoc {

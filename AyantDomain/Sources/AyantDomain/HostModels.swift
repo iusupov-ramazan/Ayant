@@ -237,17 +237,24 @@ public struct HostDealDTO: Codable, Identifiable, Equatable {
     public var imageURL: String = ""
     public var imageURLs: [String] = []      // галерея фото (карусель)
     public var terms: [String] = []          // условия акции, по строке на пункт
+    /// id поста в инстаграме, из которого акция импортирована (иначе nil).
+    ///
+    /// Нужен, чтобы в списке постов помечать уже добавленные: иначе хост при
+    /// каждой синхронизации заново создаёт ту же акцию и каталог дублируется.
+    public var sourcePostID: String? = nil
 
 
     public init(id: String, venueID: String, typeRaw: String, title: String, details: String,
                 emoji: String, newPrice: Int? = nil, discountPercent: Int? = nil,
                 startDate: Date, endDate: Date? = nil, statusRaw: String,
-                imageURL: String = "", imageURLs: [String] = [], terms: [String] = []) {
+                imageURL: String = "", imageURLs: [String] = [], terms: [String] = [],
+                sourcePostID: String? = nil) {
         self.id = id; self.venueID = venueID; self.typeRaw = typeRaw
         self.title = title; self.details = details; self.emoji = emoji
         self.newPrice = newPrice; self.discountPercent = discountPercent
         self.startDate = startDate; self.endDate = endDate; self.statusRaw = statusRaw
         self.imageURL = imageURL; self.imageURLs = imageURLs; self.terms = terms
+        self.sourcePostID = sourcePostID
     }
 
     /// Терпимый к схеме декодер кэша — см. `HostVenueDTO.init(from:)`.
@@ -268,6 +275,7 @@ public struct HostDealDTO: Codable, Identifiable, Equatable {
         imageURL = try c.decodeIfPresent(String.self, forKey: .imageURL) ?? ""
         imageURLs = try c.decodeIfPresent([String].self, forKey: .imageURLs) ?? []
         terms = try c.decodeIfPresent([String].self, forKey: .terms) ?? []
+        sourcePostID = try c.decodeIfPresent(String.self, forKey: .sourcePostID)
     }
 
     public var type: DealType { DealType(rawValue: typeRaw) ?? .discount }

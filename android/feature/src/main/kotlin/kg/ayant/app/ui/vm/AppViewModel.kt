@@ -22,10 +22,13 @@ import kg.ayant.app.domain.RankingEvent
 import kg.ayant.app.domain.contract.RankingEventService
 import kg.ayant.app.domain.RankingEventType
 import kg.ayant.app.domain.RankingItemFeatures
+import kg.ayant.app.domain.model.AppSettings
 import kg.ayant.app.domain.model.City
 import kg.ayant.app.domain.model.Deal
 import kg.ayant.app.domain.model.FeedItem
 import kg.ayant.app.domain.model.Review
+import kg.ayant.app.domain.model.ReviewReportReason
+import kg.ayant.app.domain.model.ReviewReport
 import kg.ayant.app.domain.model.Venue
 import kg.ayant.app.domain.model.VenueCategory
 import kg.ayant.app.domain.GiftInfo
@@ -139,6 +142,24 @@ class AppViewModel @JvmOverloads constructor(
     private val _session = MutableStateFlow(AppSessionState())
     val session: StateFlow<AppSessionState> = _session.asStateFlow()
 
+    /**
+     * Глобальные настройки из админ-панели (config/appSettings). Mirrors
+     * `AppStore.settings`: дефолт → переопределяется в [load]; сеть недоступна —
+     * остаёмся на дефолтах.
+     */
+    private val _settings = MutableStateFlow(AppSettings.DEFAULT)
+    val settings: StateFlow<AppSettings> = _settings.asStateFlow()
+
+    /**
+     * Всплывающее уведомление поверх приложения (подарки и т. п.). Mirrors
+     * `AppStore.toastMessage`. Значение — КОД (`TOAST_*`): у `:feature` нет
+     * каталога строк, текст подбирает `AppToast` в корне приложения.
+     */
+    private val _toastMessage = MutableStateFlow<String?>(null)
+    val toastMessage: StateFlow<String?> = _toastMessage.asStateFlow()
+    fun showToast(code: String) { _toastMessage.value = code }
+    fun clearToast() { _toastMessage.value = null }
+
     var isGuest: Boolean
         get() = _session.value.isGuest
         set(v) { _session.update { it.copy(isGuest = v) } }
@@ -178,7 +199,24 @@ class AppViewModel @JvmOverloads constructor(
         profile?.send(ProfileIntent.SetUser(currentUserID, currentUserName, isGuest))
     }
 
-    fun load() { feed?.load() }
+    fun load() {
+        feed?.load()
+        // Настройки панели — некритично: ошибка/отсутствие документа → дефолты.
+        viewModelScope.launch { loadSettings() }
+    }
+
+    /**
+     * Ожидаемая перезагрузка каталога — для pull-to-refresh на главной и в
+     * поиске. Зеркалит `await store.load()` в `.refreshable` на iOS.
+     */
+    suspend fun refresh() {
+        feed?.refresh()
+        loadSettings()
+    }
+
+    private suspend fun loadSettings() {
+        try { repository.fetchAppSettings()?.let { _settings.value = it } } catch (_: Exception) { /* дефолты */ }
+    }
 
     // MARK: - City
 
@@ -411,6 +449,21 @@ class AppViewModel @JvmOverloads constructor(
     suspend fun claimGift(code: String): GiftInfo? =
         if (isGuest || code.isEmpty()) null else runCatching { repository.claimGiftCoupon(code) }.getOrNull()
 
+    /**
+     * Подарок по ссылке: купон в кошелёк и тост о результате. Mirrors
+     * `AppStore.claimPendingGift(into:)` — код уже снят с диска вызывающим.
+     */
+    suspend fun claimGiftWithToast(code: String, addCoupon: (title: String, code: String) -> Unit) {
+        if (isGuest || code.isEmpty()) return
+        val gift = claimGift(code)
+        if (gift != null) {
+            addCoupon(gift.title, gift.code)
+            showToast(TOAST_GIFT_RECEIVED)
+        } else {
+            showToast(TOAST_GIFT_INVALID)
+        }
+    }
+
     fun myReview(venueID: String, itemID: String?): Review? =
         reviews.firstOrNull { it.venueID == venueID && it.authorID == currentUserID && it.itemID == itemID }
 
@@ -421,19 +474,33 @@ class AppViewModel @JvmOverloads constructor(
     fun ratingBreakdown(v: Venue): Map<Int, Int> =
         ReviewStats.ratingBreakdown(reviews(forVenue = v))
 
-    fun saveReview(venueID: String, rating: Int, text: String, itemID: String? = null, itemName: String? = null) {
+    /**
+     * Публикация/правка отзыва. Зеркалит `AppStore.saveReview`: [photos] — URL-фото
+     * (до трёх), а `verifiedVisit` ставится, если автор гасил купон в этом
+     * заведении ([ProfileState.hasVisited]).
+     */
+    fun saveReview(
+        venueID: String, rating: Int, text: String,
+        photos: List<String> = emptyList(),
+        itemID: String? = null, itemName: String? = null,
+    ) {
         if (isGuest) return
+        val verified = feed?.state?.value?.catalog?.valueOrNull()
+            ?.let { profileState.hasVisited(venueID, it) } ?: false
         val idx = reviews.indexOfFirst {
             it.venueID == venueID && it.authorID == currentUserID && it.itemID == itemID
         }
         val saved = if (idx >= 0) {
-            reviews[idx].copy(rating = rating, text = text, itemName = itemName, updatedAt = Date(clock.nowMs))
+            reviews[idx].copy(
+                rating = rating, text = text, photos = photos, itemName = itemName,
+                verifiedVisit = verified, updatedAt = Date(clock.nowMs),
+            )
         } else {
             Review(
                 id = "ur_${UUID.randomUUID().toString().take(8)}",
                 venueID = venueID, authorID = currentUserID, authorName = currentUserName,
                 rating = rating, text = text, createdAt = Date(clock.nowMs), updatedAt = Date(clock.nowMs),
-                itemID = itemID, itemName = itemName,
+                itemID = itemID, itemName = itemName, photos = photos, verifiedVisit = verified,
             )
         }
         feed?.upsertUserReview(saved)
@@ -443,6 +510,25 @@ class AppViewModel @JvmOverloads constructor(
     fun deleteReview(review: Review) {
         feed?.removeReview(review.id)
         viewModelScope.launch { runCatching { repository.deleteReview(review.id) } }
+    }
+
+    /**
+     * Жалоба на отзыв (Guidelines 1.2).
+     *
+     * Отзыв НЕ прячем сразу: иначе жалоба стала бы кнопкой «удалить чужой
+     * отзыв» — достаточно пожаловаться, чтобы убрать неудобную правду о
+     * заведении. Решение принимает модератор в админ-панели.
+     *
+     * Гостю не отказываем: он подписан анонимно, uid у него есть, а модерация
+     * не должна упираться в регистрацию.
+     */
+    fun reportReview(review: Review, reason: ReviewReportReason) {
+        val reporterID = profileState.userID
+        if (reporterID.isEmpty()) return
+        val report = ReviewReport.of(review, reporterID, reason, Date(clock.nowMs))
+        // Продуктовой аналитики на Android пока нет (на iOS — `AnalyticsLog`),
+        // поэтому событие `review_reported` тут не пишем.
+        viewModelScope.launch { runCatching { repository.reportReview(report) } }
     }
 
     // MARK: - Feed (organic ranking with distance)
@@ -469,5 +555,8 @@ class AppViewModel @JvmOverloads constructor(
 
     companion object {
         private const val KEY_CITY = "san.city"
+        /** Коды тостов — текст подбирает корень приложения по каталогу строк. */
+        const val TOAST_GIFT_RECEIVED = "toast.gift_received"
+        const val TOAST_GIFT_INVALID = "toast.gift_invalid"
     }
 }

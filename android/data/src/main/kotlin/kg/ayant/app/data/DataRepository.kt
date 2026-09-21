@@ -5,6 +5,7 @@ import kg.ayant.app.domain.DataRepository
 import kg.ayant.app.domain.GiftInfo
 import kg.ayant.app.domain.model.Deal
 import kg.ayant.app.domain.model.Review
+import kg.ayant.app.domain.model.ReviewReport
 import kg.ayant.app.domain.model.Venue
 
 /**
@@ -34,6 +35,7 @@ class MockDataRepository : DataRepository {
     override suspend fun saveReview(review: Review) {}
     override suspend fun deleteReview(id: String) {}
     override suspend fun updateReviewReply(reviewID: String, replyText: String?) {}
+    override suspend fun reportReview(report: ReviewReport) {}
     override suspend fun logRedemption(userID: String, dealID: String, venueID: String) {}
     override suspend fun recordReferral(inviteeID: String, referrerID: String) {}
     override suspend fun createGiftCoupon(title: String, code: String, fromName: String) {}

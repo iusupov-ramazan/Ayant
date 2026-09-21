@@ -6,13 +6,13 @@ import AyantDomain
 
 @MainActor
 public final class CouponStore: ObservableObject {
-    /// Каталог наград. Позже можно вынести в Firestore.
-    public static let catalog: [Reward] = [
-        Reward(id: "disc10", title: "−10% к любой акции", cost: 100, emoji: "🏷️"),
-        Reward(id: "coffee", title: "Бесплатный кофе у партнёра", cost: 300, emoji: "☕️"),
-        Reward(id: "dessert", title: "Десерт в подарок", cost: 400, emoji: "🍰"),
-        Reward(id: "vip", title: "VIP-доступ к новинкам", cost: 500, emoji: "⭐️"),
-    ]
+    /// Награды, которые реально можно предъявить: каталог из `config/globalRewards`,
+    /// где у каждой проставлено заведение-партнёр.
+    ///
+    /// Пусто, пока партнёров не завели, — и это правильное поведение: награда
+    /// без заведения выдаёт купон, который сотрудник не погасит
+    /// (`scanCoupon` → `wrong_venue`).
+    @Published public private(set) var rewards: [Reward] = []
 
     @Published public private(set) var coupons: [Coupon] = []
     private let key = "san.coupons"
@@ -40,16 +40,33 @@ public final class CouponStore: ObservableObject {
         save()
     }
 
-    /// Списывает бонусы и выдаёт купон. Возвращает купон или nil (не хватило бонусов).
+    /// Загружает каталог наград. Ошибка сети → каталог остаётся пустым, и
+    /// раздел наград показывает пустое состояние вместо нерабочих карточек.
+    public func loadRewards() async {
+        rewards = (try? await backend.fetchGlobalRewards()) ?? []
+    }
+
+    /// Списывает бонусы и выдаёт купон. Возвращает купон или nil (не хватило
+    /// бонусов либо у награды нет партнёра).
+    ///
+    /// Купон уходит в бэкенд — иначе сотрудник его не найдёт: `scanCoupon`
+    /// ищет купон по коду в Firestore и сверяет `venueID`. Раньше награда
+    /// глобального кошелька оставалась только на устройстве, и предъявить её
+    /// было невозможно.
     public func redeem(_ reward: Reward, bonus: BonusEngine) -> Coupon? {
+        guard reward.isRedeemable else { return nil }
         guard bonus.spend(reward.cost) else { return nil }
         let c = Coupon(id: "cp_\(UUID().uuidString.prefix(8))",
                        title: reward.title,
                        code: "AYANT-\(UUID().uuidString.prefix(6).uppercased())",
-                       createdAt: clock.now)
+                       createdAt: clock.now, used: false,
+                       venueID: reward.venueID, venueName: reward.venueName,
+                       kind: "reward")
         coupons.insert(c, at: 0)
         save()
         AnalyticsLog.log(.couponClaim, ["reward_id": reward.id, "cost": reward.cost])
+        let uid = userID
+        Task { try? await backend.saveCoupon(c, userID: uid) }
         return c
     }
 

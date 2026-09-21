@@ -135,3 +135,84 @@ test("rewardReferral: к лимиту считаются только грант
     .filter(([p, d]) => p.startsWith("bonusGrants/") && d.reason === "referral");
   assert.equal(referralGrants.length, 1, "welcome-гранты не считаются к реферальному лимиту");
 });
+
+/* ── notifyHostOnReview: push владельцу заведения о новом отзыве ─────────── */
+
+test("notifyHostOnReview шлёт push на все токены владельца", async () => {
+  const h = makeHarness();
+  h.seed("venues/v9", { name: "Нават", ownerID: "owner1" });
+  h.seed("userTokens/tokA", { uid: "owner1", city: "bishkek" });
+  h.seed("userTokens/tokB", { uid: "owner1", city: "bishkek" });
+  h.seed("userTokens/tokC", { uid: "someone-else", city: "bishkek" });
+  const event = createdEvent(h, "reviews/r9",
+    { venueID: "v9", authorID: "guest1", authorName: "Айжан", rating: 5, text: "Очень вкусно" }, { id: "r9" });
+  await h.mod.notifyHostOnReview.run(event);
+
+  assert.equal(h.messagingCalls.length, 1);
+  const m = h.messagingCalls[0];
+  assert.deepEqual([...m.tokens].sort(), ["tokA", "tokB"]);
+  assert.equal(m.notification.title, "Новый отзыв · Нават");
+  assert.match(m.notification.body, /★★★★★ Айжан: Очень вкусно/);
+  assert.equal(m.data.type, "review");
+  assert.equal(m.data.venueID, "v9");
+});
+
+test("notifyHostOnReview молчит, если владелец пишет отзыв сам себе или токенов нет", async () => {
+  const h = makeHarness();
+  h.seed("venues/v9", { name: "Нават", ownerID: "owner1" });
+  h.seed("userTokens/tokA", { uid: "owner1" });
+  await h.mod.notifyHostOnReview.run(
+    createdEvent(h, "reviews/r10", { venueID: "v9", authorID: "owner1", rating: 4 }, { id: "r10" }));
+  assert.equal(h.messagingCalls.length, 0);
+
+  h.seed("venues/v10", { name: "Без токенов", ownerID: "owner2" });
+  await h.mod.notifyHostOnReview.run(
+    createdEvent(h, "reviews/r11", { venueID: "v10", authorID: "guest1", rating: 4 }, { id: "r11" }));
+  assert.equal(h.messagingCalls.length, 0);
+});
+
+/* ── notifyGuestOnHostReply: ответ владельца → push автору ───────────────── */
+
+test("notifyGuestOnHostReply шлёт push автору, когда появился ответ", async () => {
+  const { writtenEvent } = require("./helpers/harness");
+  const h = makeHarness();
+  h.seed("venues/v9", { name: "Нават", ownerID: "owner1" });
+  h.seed("userTokens/tokG", { uid: "guest1" });
+  const before = { venueID: "v9", authorID: "guest1", rating: 5, text: "Вкусно" };
+  const after = { ...before, hostReply: { text: "Спасибо, ждём снова!" } };
+  await h.mod.notifyGuestOnHostReply.run(writtenEvent(h, "reviews/r9", before, after, { id: "r9" }));
+
+  assert.equal(h.messagingCalls.length, 1);
+  assert.deepEqual(h.messagingCalls[0].tokens, ["tokG"]);
+  assert.equal(h.messagingCalls[0].notification.title, "Нават ответили на ваш отзыв");
+  assert.equal(h.messagingCalls[0].data.type, "hostReply");
+
+  // Правка отзыва без изменения ответа — второго push нет.
+  await h.mod.notifyGuestOnHostReply.run(writtenEvent(h, "reviews/r9", after, { ...after, text: "Очень вкусно" }, { id: "r9" }));
+  assert.equal(h.messagingCalls.length, 1);
+});
+
+/* ── warnExpiringPoints: предупреждение за 7 дней до сгорания ────────────── */
+
+test("warnExpiringPoints предупреждает один раз в окне и молчит вне его", async () => {
+  const h = makeHarness();
+  const DAY = 86400000;
+  h.seed("venues/v9", { name: "Нават", pointsExpiryMonths: 6 });
+  h.seed("userTokens/tokG", { uid: "guest1" });
+  // Порог = 180 дней с последней активности; активность 176 дней назад → 4 дня до сгорания.
+  h.seed("venuePoints/guest1_v9", { userID: "guest1", venueID: "v9", balance: 120,
+                                    lastActivityAt: new Date(Date.now() - 176 * DAY) });
+  // Далеко до порога — не трогаем.
+  h.seed("venuePoints/guest2_v9", { userID: "guest2", venueID: "v9", balance: 50,
+                                    lastActivityAt: new Date(Date.now() - 30 * DAY) });
+  h.seed("userTokens/tokH", { uid: "guest2" });
+
+  await h.mod.warnExpiringPoints.run({});
+  assert.equal(h.messagingCalls.length, 1);
+  assert.deepEqual(h.messagingCalls[0].tokens, ["tokG"]);
+  assert.match(h.messagingCalls[0].notification.body, /120 баллов/);
+  assert.ok(h.read("venuePoints/guest1_v9").expiryWarnedAt, "отметка о предупреждении");
+
+  await h.mod.warnExpiringPoints.run({});
+  assert.equal(h.messagingCalls.length, 1, "повторно в том же окне не шлём");
+});

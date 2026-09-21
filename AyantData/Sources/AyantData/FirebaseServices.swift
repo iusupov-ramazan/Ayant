@@ -376,6 +376,13 @@ public final class FirebaseDataRepository: DataRepository {
         try await db.collection(FS.Collection.reviews).document(id).delete()
     }
 
+    // Жалоба на отзыв: детерминированный id ⇒ повторная жалоба того же
+    // человека не плодит записей в очереди модерации.
+    public func reportReview(_ report: ReviewReport) async throws {
+        try await db.collection(FS.Collection.reviewReports).document(report.id)
+            .setData(report.firestoreData, merge: true)
+    }
+
     // Погашение купона: детерминированный id ⇒ повторно не дублируется.
     public func logRedemption(userID: String, dealID: String, venueID: String) async throws {
         try await db.collection(FS.Collection.redemptions).document("\(userID)_\(dealID)").setData([
@@ -464,6 +471,17 @@ public final class FirebaseDataRepository: DataRepository {
         }
         return out.isEmpty ? nil : out
     }
+
+    public func fetchAppSettings() async throws -> AppSettings? {
+        let snap = try await db.collection(FS.Collection.config)
+            .document(FS.Document.appSettings).getDocument()
+        guard snap.exists, let data = snap.data() else { return nil }
+        let cooldown = (data[FS.AppSettingsDoc.stampCooldownMinutes] as? NSNumber)?.intValue
+            ?? AppSettings.default.stampCooldownMinutes
+        return AppSettings(stampCooldownMinutes: cooldown,
+                           adPlaceholderText: data[FS.AppSettingsDoc.adPlaceholderText] as? String ?? "")
+    }
+
 }
 
 // MARK: - Analytics (Firestore)
@@ -658,6 +676,30 @@ public final class FirebaseHostRepository: HostRepository {
 // MARK: - Купоны (бэкенд-трекинг + сканер)
 
 public final class FirebaseCouponService: CouponService {
+    /// Каталог наград глобального кошелька из config/globalRewards.
+    ///
+    /// Награды без `venueID` отбрасываем здесь же: купон по такой награде
+    /// сотрудник не погасит (`scanCoupon` → `wrong_venue`), и показывать её
+    /// значит обещать то, что не сработает.
+    public func fetchGlobalRewards() async throws -> [Reward] {
+        let snap = try await db.collection(FS.Collection.config)
+            .document(FS.Document.globalRewards).getDocument()
+        guard snap.exists,
+              let items = snap.data()?[FS.GlobalRewardDoc.items] as? [[String: Any]]
+        else { return [] }
+        return items.compactMap { item in
+            guard let id = item[FS.GlobalRewardDoc.id] as? String,
+                  let title = item[FS.GlobalRewardDoc.title] as? String,
+                  let cost = (item[FS.GlobalRewardDoc.cost] as? NSNumber)?.intValue,
+                  let venueID = item[FS.GlobalRewardDoc.venueID] as? String,
+                  !venueID.isEmpty
+            else { return nil }
+            return Reward(id: id, title: title, cost: cost,
+                          emoji: item[FS.GlobalRewardDoc.emoji] as? String ?? "🎁",
+                          venueID: venueID,
+                          venueName: item[FS.GlobalRewardDoc.venueName] as? String ?? "")
+        }
+    }
     /// Пустой инициализатор нужен явно: синтезированный — internal.
     public init() {}
 

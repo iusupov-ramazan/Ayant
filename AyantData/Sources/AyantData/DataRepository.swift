@@ -7,26 +7,37 @@ public final class MockDataRepository: DataRepository {
     /// Пустой инициализатор нужен явно: синтезированный — internal.
     public init() {}
 
-    public func fetchVenues() async throws -> [Venue] { MockData.venues }
-    public func fetchDeals() async throws -> [Deal] { MockData.deals }
+    /// Каталог по умолчанию — `MockData`; витринные скриншоты подставляют свой.
+    public init(venues: [Venue], deals: [Deal], reviews: [Review]) {
+        self.venues = venues; self.deals = deals; self.reviews = reviews
+    }
+
+    private var venues: [Venue] = MockData.venues
+    private var deals: [Deal] = MockData.deals
+    private var reviews: [Review] = MockData.reviews
+
+    public func fetchVenues() async throws -> [Venue] { venues }
+    public func fetchDeals() async throws -> [Deal] { deals }
     // Mock работает на полном локальном наборе — фильтруем его в памяти,
     // но форму запроса повторяем 1:1, чтобы офлайн-режим вёл себя как боевой.
     public func fetchReviews(venueID: String, limit: Int) async throws -> [Review] {
-        Array(MockData.reviews.filter { $0.venueID == venueID }
+        Array(reviews.filter { $0.venueID == venueID }
             .sorted { $0.createdAt > $1.createdAt }.prefix(limit))
     }
     public func fetchReviews(venueIDs: [String], limit: Int) async throws -> [Review] {
         let ids = Set(venueIDs)
-        return Array(MockData.reviews.filter { ids.contains($0.venueID) }
+        return Array(reviews.filter { ids.contains($0.venueID) }
             .sorted { $0.createdAt > $1.createdAt }.prefix(limit))
     }
     public func fetchReviews(authorID: String, limit: Int) async throws -> [Review] {
-        Array(MockData.reviews.filter { $0.authorID == authorID }
+        Array(reviews.filter { $0.authorID == authorID }
             .sorted { $0.updatedAt > $1.updatedAt }.prefix(limit))
     }
     public func saveReview(_ review: Review) async throws {}
     public func deleteReview(id: String) async throws {}
     public func updateReviewReply(reviewID: String, reply: HostReply?) async throws {}
+    public func reportReview(_ report: ReviewReport) async throws {}
+
     public func logRedemption(userID: String, dealID: String, venueID: String) async throws {}
     public func recordReferral(inviteeID: String, referrerID: String) async throws {}
     public func claimBonusGrants(userID: String) async throws -> Int { 0 }
@@ -40,14 +51,35 @@ public final class MockDataRepository: DataRepository {
 
 /// Mock купон-сервиса: без бэкенда. Сканирование всегда «успех + штамп» для демо.
 public final class MockCouponService: CouponService {
+    /// Оффлайн-демо: те же награды, но привязанные к мок-заведению — иначе
+    /// каталог был бы пуст и экран нечем было бы посмотреть.
+    public func fetchGlobalRewards() async throws -> [Reward] {
+        guard let venue = MockData.venues.first else { return [] }
+        return CouponCatalog.builtIn.map {
+            Reward(id: $0.id, title: $0.title, cost: $0.cost, emoji: $0.emoji,
+                   venueID: venue.id, venueName: venue.name)
+        }
+    }
     /// Пустой инициализатор нужен явно: синтезированный — internal.
     public init() {}
 
+    /// Готовые купоны и карты штампов — для оффлайн-демо и витринных скриншотов.
+    public init(coupons: [Coupon], loyaltyCards: [LoyaltyCard]) {
+        self.coupons = coupons; self.cards = loyaltyCards
+    }
+
+    private var coupons: [Coupon] = []
+    private var cards: [LoyaltyCard] = []
+
     public func saveCoupon(_ coupon: Coupon, userID: String) async throws {}
-    public func fetchCoupons(userID: String) async throws -> [Coupon] { [] }
-    public func fetchLoyaltyCards(userID: String) async throws -> [LoyaltyCard] { [] }
+    public func fetchCoupons(userID: String) async throws -> [Coupon] { userID.isEmpty ? [] : coupons }
+    public func fetchLoyaltyCards(userID: String) async throws -> [LoyaltyCard] { userID.isEmpty ? [] : cards }
     public func loyaltyCards(userID: String) -> AsyncStream<[LoyaltyCard]> {
-        AsyncStream { $0.finish() }
+        let snapshot = userID.isEmpty ? [] : cards
+        return AsyncStream { continuation in
+            continuation.yield(snapshot)
+            continuation.finish()
+        }
     }
     public func fetchVenuePoints(userID: String) async throws -> [VenuePointsCard] { [] }
     public func scanCoupon(code: String, venueID: String, idToken: String,

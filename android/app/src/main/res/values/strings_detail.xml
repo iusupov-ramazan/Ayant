@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Строки экранов деталей (заведение, предложение, отзывы, просмотрщики).
+     Зеркалят `SAN/DetailViews.swift` и `SAN/Reviews/ReviewViews.swift`;
+     переводы — из `SAN/Localizable.xcstrings`. Общие ключи живут в strings.xml. -->
+<resources>
+    <!-- Предложение: блок купона -->
+    <string name="detail_coupon_used">Купон использован</string>
+    <string name="detail_coupon_locked_hint">Получите купон, чтобы показать QR</string>
+
+    <!-- Жалоба на отзыв -->
+    <string name="detail_report_sent_title">Жалоба отправлена</string>
+    <string name="detail_report_sent_body">Мы проверим отзыв. Если он нарушает правила, его удалят.</string>
+
+    <!-- Просмотр фото -->
+    <string name="detail_photo_report_title">Пожаловаться на фото</string>
+    <string name="detail_photo_report_thanks">Спасибо, жалоба отправлена</string>
+
+    <!-- PDF-меню -->
+    <string name="detail_pdf_title">Прайс-лист</string>
+    <string name="detail_pdf_error">Не удалось открыть меню</string>
+
+    <!-- Карта лояльности на странице заведения -->
+    <string name="detail_loyalty_stamp_hint">Штамп за визит: сотрудник сканирует QR вашей карты.</string>
+    <string name="detail_loyalty_rounds_hint">Наград получено: %1$d. Штамп за визит: сотрудник сканирует QR вашей карты.</string>
+
+    <!-- Написать отзыв -->
+    <string name="detail_review_item_label">Объект</string>
+    <string name="detail_review_section_rating">Оценка</string>
+    <string name="detail_review_section_text">Отзыв</string>
+    <string name="detail_review_text_placeholder">Расскажи о своём опыте…</string>
+    <string name="detail_review_section_photos">Фото (до 3)</string>
+    <string name="detail_review_add_photo">Добавить фото (до %1$d)</string>
+    <string name="detail_review_remove_photo">Удалить фото</string>
+    <string name="detail_review_verified_visit">Проверенный визит</string>
+</resources>

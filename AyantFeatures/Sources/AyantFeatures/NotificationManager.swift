@@ -15,21 +15,25 @@ public enum NotificationManager {
     }
 
     /// Включает или снимает напоминания в зависимости от прогресса.
-    public static func refresh(reachedGoalToday: Bool) {
+    /// Заголовок и текст передаёт приложение — уже на языке интерфейса:
+    /// у пакета нет доступа к каталогу переводов приложения.
+    public static func refresh(reachedGoalToday: Bool,
+                               title: String = "Бонусы ждут 🎁",
+                               body: String = "Залипни в Ayant на 30 активных минут и забери +50 бонусов") {
         if reachedGoalToday {
             cancel()
         } else {
-            schedule()
+            schedule(title: title, body: body)
         }
     }
 
-    private static func schedule() {
+    private static func schedule(title: String, body: String) {
         let center = UNUserNotificationCenter.current()
         center.removePendingNotificationRequests(withIdentifiers: [reminderID])
 
         let content = UNMutableNotificationContent()
-        content.title = "Бонусы ждут 🎁"
-        content.body = "Залипни в Ayant на 30 активных минут и забери +50 бонусов"
+        content.title = title
+        content.body = body
         content.sound = .default
 
         // Повторяющийся триггер каждые 4 часа
@@ -39,6 +43,10 @@ public enum NotificationManager {
             identifier: reminderID, content: content, trigger: trigger)
         center.add(request)
     }
+
+    /// Снимает напоминание насовсем — для сборок, где глобальный кошелёк
+    /// бонусов скрыт: пуш про «+50 бонусов» вёл бы в никуда.
+    public static func disable() { cancel() }
 
     private static func cancel() {
         UNUserNotificationCenter.current()
