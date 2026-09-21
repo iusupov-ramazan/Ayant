@@ -14,11 +14,13 @@ import AyantFeatures
 final class HostStoreTests: XCTestCase {
 
     private var repo: FakeHostRepository!
+    private var instagram: FakeInstagramService!
     private var owner = ""
 
     override func setUp() {
         super.setUp()
         repo = FakeHostRepository()
+        instagram = FakeInstagramService()
         owner = "test_\(UUID().uuidString.prefix(8))"
     }
 
@@ -44,7 +46,8 @@ final class HostStoreTests: XCTestCase {
     }
 
     private func makeStore() -> HostStore {
-        let store = HostStore(repo: repo, clock: FixedClock(Date(timeIntervalSince1970: 1_700_000_000)))
+        let store = HostStore(repo: repo, instagram: instagram,
+                              clock: FixedClock(Date(timeIntervalSince1970: 1_700_000_000)))
         store.send(.configure(ownerID: owner))
         return store
     }
@@ -116,6 +119,86 @@ final class HostStoreTests: XCTestCase {
         await waitUntil(self.repo.savedVenues.contains { $0.id == "hv_local" })
 
         XCTAssertEqual(repo.savedVenues.map(\.id), ["hv_local"])
+    }
+
+    // MARK: Instagram
+
+    private func igPost(_ id: String, caption: String = "Новое меню\nПриходите") -> InstagramPost {
+        InstagramPost(id: id, caption: caption, kind: .image,
+                      previewURL: "https://cdninstagram.test/\(id).jpg",
+                      imageURLs: ["https://cdninstagram.test/\(id).jpg"],
+                      permalink: "https://instagram.com/p/\(id)",
+                      timestamp: Date(timeIntervalSince1970: 1_700_000_000))
+    }
+
+    func testSyncInstagramFillsPosts() async {
+        instagram.posts = [igPost("p1"), igPost("p2")]
+        let store = makeStore()
+
+        store.send(.syncInstagram(venueID: "hv_1"))
+        await waitUntil(store.state.instagram(venueID: "hv_1").posts.count == 2)
+
+        XCTAssertEqual(store.state.instagram(venueID: "hv_1").posts.map(\.id), ["p1", "p2"])
+        XCTAssertFalse(store.state.instagram(venueID: "hv_1").sync.isSyncing)
+    }
+
+    /// Ошибка синхронизации не стирает уже показанные посты — она фаза поверх них.
+    func testFailedSyncKeepsPostsAndShowsError() async {
+        instagram.posts = [igPost("p1")]
+        let store = makeStore()
+        store.send(.syncInstagram(venueID: "hv_1"))
+        await waitUntil(!store.state.instagram(venueID: "hv_1").posts.isEmpty)
+
+        instagram.failure = .server(code: "reauth_required")
+        store.send(.syncInstagram(venueID: "hv_1"))
+        await waitUntil({ if case .failed = store.state.instagram(venueID: "hv_1").sync { return true }
+                          return false }())
+
+        XCTAssertEqual(store.state.instagram(venueID: "hv_1").sync, .failed(.server(code: "reauth_required")))
+        XCTAssertEqual(store.state.instagram(venueID: "hv_1").posts.map(\.id), ["p1"])
+    }
+
+    /// Импорт отдаёт форме ПОСТОЯННЫЕ ссылки: у инстаграма они протухают за часы,
+    /// и акция с оригинальной ссылкой осталась бы без фото на следующий день.
+    func testImportReturnsRehostedImagesOnce() async {
+        instagram.posts = [igPost("p1")]
+        let store = makeStore()
+
+        store.send(.importInstagramPost(venueID: "hv_1", postID: "p1"))
+        await waitUntil(store.pendingImport != nil)
+
+        let imported = store.consumeImport()
+        XCTAssertEqual(imported?.postID, "p1")
+        XCTAssertEqual(imported?.imageURLs, ["https://cdn.ayant.test/p1.jpg"])
+        XCTAssertNil(store.pendingImport, "импорт забирают один раз — иначе форма откроется повторно")
+        XCTAssertNil(store.state.instagram(venueID: "hv_1").importing)
+    }
+
+    /// Сохранённая из поста акция помечает пост добавленным — второй раз его
+    /// не предложат импортировать.
+    func testSavedImportedDealMarksPostAsImported() async {
+        let store = makeStore()
+        store.send(.saveDeal(existing: nil, fields: HostForms.DealFields(
+            venueID: "hv_1", type: .novelty, title: "Новое меню", details: "",
+            emoji: "🔥", newPrice: nil, discountPercent: nil, endDate: nil,
+            isDraft: true, imageURLs: ["https://cdn.ayant.test/p1.jpg"],
+            terms: [], sourcePostID: "p1")))
+
+        XCTAssertTrue(store.state.importedPostIDs.contains("p1"))
+        XCTAssertEqual(store.state.deals.first?.status, .draft, "импорт открывается черновиком")
+    }
+
+    /// Выход из аккаунта не должен оставлять посты чужого заведения на экране.
+    func testChangingOwnerClearsInstagramState() async {
+        instagram.posts = [igPost("p1")]
+        let store = makeStore()
+        store.send(.syncInstagram(venueID: "hv_1"))
+        await waitUntil(!store.state.instagram(venueID: "hv_1").posts.isEmpty)
+
+        store.send(.configure(ownerID: "someone_else"))
+
+        XCTAssertTrue(store.state.instagram.isEmpty)
+        XCTAssertNil(store.pendingImport)
     }
 
     func testSyncPrefersServerCopyForKnownVenue() async throws {

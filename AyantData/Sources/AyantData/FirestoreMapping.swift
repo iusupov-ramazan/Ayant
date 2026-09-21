@@ -607,6 +607,8 @@ extension HostDealDTO {
         d[FS.DealDoc.imageURL] = imageURL
         d[FS.DealDoc.imageURLs] = imageURLs
         d[FS.DealDoc.terms] = terms
+        // Источник импорта: по нему кабинет помечает пост как уже добавленный.
+        if let sourcePostID, !sourcePostID.isEmpty { d[FS.DealDoc.igPostID] = sourcePostID }
         return d
     }
 
@@ -627,7 +629,8 @@ extension HostDealDTO {
             statusRaw: status.rawValue,
             imageURL: d.string(FS.DealDoc.imageURL) ?? "",
             imageURLs: d[FS.DealDoc.imageURLs] as? [String] ?? [],
-            terms: d[FS.DealDoc.terms] as? [String] ?? [])
+            terms: d[FS.DealDoc.terms] as? [String] ?? [],
+            sourcePostID: d.string(FS.DealDoc.igPostID))
     }
 }
 

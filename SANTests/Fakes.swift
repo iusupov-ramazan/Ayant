@@ -183,3 +183,47 @@ final class FakePointsRepository: PointsRepository {
         return .success(Array((ledger[venueID] ?? []).prefix(limit)))
     }
 }
+
+/// Instagram заведения: программируемый дубль.
+///
+/// Посты задаются тестом, ошибки — через `failure`. Счётчики вызовов нужны,
+/// чтобы проверять то, чего не видно в состоянии: например, что при
+/// отключённом аккаунте в сеть вообще не ходили.
+final class FakeInstagramService: InstagramService {
+    var posts: [InstagramPost] = []
+    var connectionValue: InstagramConnection?
+    var failure: AppError?
+    private(set) var mediaCalls = 0
+    private(set) var importedPosts: [String] = []
+    private(set) var disconnected: [String] = []
+
+    func authURL(venueID: String) async throws -> URL {
+        if let failure { throw failure }
+        return URL(string: "https://instagram.test/authorize?venue=\(venueID)")!
+    }
+
+    func media(venueID: String, limit: Int) async throws -> [InstagramPost] {
+        mediaCalls += 1
+        if let failure { throw failure }
+        return posts
+    }
+
+    func importPost(venueID: String, postID: String) async throws -> InstagramImport {
+        importedPosts.append(postID)
+        if let failure { throw failure }
+        guard let post = posts.first(where: { $0.id == postID }) else { throw AppError.notFound }
+        return InstagramImport(postID: post.id,
+                               imageURLs: ["https://cdn.ayant.test/\(post.id).jpg"],
+                               caption: post.caption, permalink: post.permalink)
+    }
+
+    func disconnect(venueID: String) async throws { disconnected.append(venueID) }
+
+    func connection(ownerID: String, venueID: String) -> AsyncStream<InstagramConnection?> {
+        let value = connectionValue
+        return AsyncStream { continuation in
+            continuation.yield(value)
+            continuation.finish()
+        }
+    }
+}

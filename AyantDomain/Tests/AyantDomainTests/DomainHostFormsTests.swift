@@ -234,4 +234,21 @@ final class DomainHostFormsTests: XCTestCase {
                                    now: now, newID: "x")
         XCTAssertEqual(draft.statusRaw, DealStatus.draft.rawValue)
     }
+
+    /// Импорт из инстаграма: связь с постом ставится при создании и переживает
+    /// правку — иначе кабинет предложит импортировать тот же пост ещё раз.
+    func testImportedDealKeepsSourcePostThroughEditing() {
+        var fields = dealFields()
+        fields.sourcePostID = "post-1"
+        let created = HostForms.deal(existing: nil, fields: fields, now: now, newID: "hd_1")
+        XCTAssertEqual(created.sourcePostID, "post-1")
+
+        // Правка обычной формой (без поля источника) связь не теряет.
+        let edited = HostForms.deal(existing: created, fields: dealFields(), now: now, newID: "hd_2")
+        XCTAssertEqual(edited.sourcePostID, "post-1")
+    }
+
+    func testDealWithoutImportHasNoSourcePost() {
+        XCTAssertNil(HostForms.deal(existing: nil, fields: dealFields(), now: now, newID: "x").sourcePostID)
+    }
 }

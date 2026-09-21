@@ -145,6 +145,24 @@ public enum FS {
         public static let ownerID = "ownerID"
         /// Ключ партиционирования по городам — то же поле `city`, что у заведения.
         public static let city = "city"
+        /// id поста в инстаграме, из которого импортирована акция.
+        public static let igPostID = "igPostId"
+    }
+
+    // MARK: - igConnections/{ownerID}_{venueID}
+
+    /// Публичная половина подключения инстаграма. Токен лежит в закрытой
+    /// `igAccounts` и клиенту недоступен — см. firestore.rules.
+    public enum IgConnectionDoc {
+        public static let collection = "igConnections"
+        public static let ownerID = "ownerID"
+        public static let venueID = "venueID"
+        public static let username = "username"
+        public static let connectedAt = "connectedAt"
+        public static let needsReauth = "needsReauth"
+        public static let lastSyncAt = "lastSyncAt"
+
+        public static func id(ownerID: String, venueID: String) -> String { "\(ownerID)_\(venueID)" }
     }
 
     // MARK: - reviews/{id}

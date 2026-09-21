@@ -121,6 +121,13 @@ function makeRes() {
     return res;
   };
   res.getHeader = (k) => res.headers[String(k).toLowerCase()];
+  // Редирект (instagramAuthCallback возвращает браузер в приложение).
+  res.redirect = (code, url) => {
+    res.statusCode = code;
+    res.redirectedTo = url;
+    finish();
+    return res;
+  };
   res.end = () => {
     finish();
     return res;

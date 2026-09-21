@@ -104,6 +104,9 @@ struct HostVenuesView: View {
             .navigationDestination(for: HostPromoteTarget.self) {
                 HostPromoteCreateView(venueID: $0.venueID)
             }
+            .navigationDestination(for: HostInstagramTarget.self) {
+                HostInstagramView(venueID: $0.venueID)
+            }
             .navigationDestination(for: HostQuickAction.self) { action in
                 switch action {
                 case .promote: HostPromoteView()
@@ -897,6 +900,13 @@ struct HostVenueDetailView: View {
                 Button { activeSheet = .addDeal } label: { Label("Добавить", systemImage: "plus") }
                     .font(.caption.weight(.semibold))
             }
+            // Вход в импорт стоит ЗДЕСЬ, а не в общем списке действий внизу.
+            // Раньше это была строка «Посты из Instagram» среди «Изменить
+            // данные» и «Удалить заведение» — по ней было не понять, зачем
+            // жать и что произойдёт. Хост думает не «хочу инстаграм», а «надо
+            // добавить акцию», поэтому кнопка живёт в блоке предложений и
+            // называется действием, а не источником.
+            if ReleaseFlags.instagramImport { instagramImportRow(v) }
             let deals = host.state.deals(forVenue: v.id)
             if deals.isEmpty {
                 Text("Пока нет предложений. Добавьте, чтобы привлекать гостей.")
@@ -917,6 +927,51 @@ struct HostVenueDetailView: View {
             }
         }
         .padding(.horizontal, 16)
+    }
+
+    /// «Акция из поста Instagram» — состояние подключения видно до нажатия.
+    private func instagramImportRow(_ v: HostVenueDTO) -> some View {
+        let ig = host.state.instagram(venueID: v.id)
+        let username = ig.connection?.username ?? ""
+        return NavigationLink(value: HostInstagramTarget(venueID: v.id)) {
+            HStack(spacing: 12) {
+                Image(systemName: "camera.on.rectangle")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(Color.sanAccentText)
+                    .frame(width: 38, height: 38)
+                    .background(Color.sanAccent.opacity(0.12),
+                                in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Акция из поста Instagram")
+                        .font(.golos(14.5, .semibold)).foregroundStyle(Color.sanInk)
+                    // Подзаголовок отвечает ровно на вопрос «зачем жать сейчас».
+                    Text(ig.isConnected
+                         ? (username.isEmpty
+                            ? LS("Выберите пост — заголовок, описание и фото подставятся")
+                            : String(format: LS("@%@ — выберите пост, остальное заполнится само"), username))
+                         : LS("Подключите аккаунт — не придётся набирать вручную"))
+                        .font(.golos(12)).foregroundStyle(Color.sanInkSoft)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .multilineTextAlignment(.leading)
+                }
+                Spacer(minLength: 4)
+                if ig.isConnected {
+                    Circle().fill(Color.green).frame(width: 7, height: 7)
+                }
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color(hex: 0x9A9188))
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.sanSurface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Color.sanHairline, lineWidth: 0.5))
+        }
+        .buttonStyle(.plain)
+        // Слушатель подключения нужен уже здесь: иначе состояние («подключено /
+        // нет») стало бы известно только после перехода на экран.
+        .task { host.observeInstagram(venueID: v.id) }
     }
 
     private func dealCell(_ d: HostDealDTO, gradient: [Color]) -> some View {
@@ -1480,6 +1535,9 @@ struct HostBranchFormView: View {
 struct HostDealFormView: View {
     let venueID: String
     let existing: HostDealDTO?
+    /// Импорт из инстаграма: подпись и фото поста. Заполняет форму при
+    /// создании; у правки существующей акции его нет.
+    let imported: InstagramImport?
     @EnvironmentObject private var host: HostStore
     @Environment(\.dismiss) private var dismiss
 
@@ -1498,20 +1556,29 @@ struct HostDealFormView: View {
     /// фраз проще набрать в одном поле, чем в трёх отдельных.
     @State private var termsText: String
 
-    init(venueID: String, existing: HostDealDTO?) {
+    init(venueID: String, existing: HostDealDTO?, imported: InstagramImport? = nil) {
         self.venueID = venueID
         self.existing = existing
-        _title = State(initialValue: existing?.title ?? "")
-        _details = State(initialValue: existing?.details ?? "")
-        _type = State(initialValue: existing?.type ?? .discount)
+        self.imported = imported
+        // Подпись поста разбирается на заголовок и описание (`InstagramCaption`):
+        // первая строка — витрина, остальное — текст. Ничего не теряется, хост
+        // правит это руками.
+        let parsed = imported.map { InstagramCaption.parse($0.caption) }
+        _title = State(initialValue: existing?.title ?? parsed?.title ?? "")
+        _details = State(initialValue: existing?.details ?? parsed?.details ?? "")
+        // «Новинка» — самый безобидный тип для поста: скидку и срок хост
+        // выставит сам, если это действительно акция.
+        _type = State(initialValue: existing?.type ?? (imported != nil ? .novelty : .discount))
         _emoji = State(initialValue: existing?.emoji ?? "🔥")
         _newPrice = State(initialValue: existing?.newPrice.map(String.init) ?? "")
         _discount = State(initialValue: existing?.discountPercent.map(String.init) ?? "")
         _hasEnd = State(initialValue: existing?.endDate != nil)
         _endDate = State(initialValue: existing?.endDate ?? Calendar.current.date(byAdding: .day, value: 14, to: .now)!)
-        _isDraft = State(initialValue: existing?.status == .draft)
-        _imageURL = State(initialValue: existing?.imageURL ?? "")
-        let imgs = existing?.imageURLs ?? []
+        // Импорт всегда открывается черновиком: пост писался для инстаграма —
+        // без срока и условий, — и уходить в ленту не глядя он не должен.
+        _isDraft = State(initialValue: existing?.status == .draft || (existing == nil && imported != nil))
+        _imageURL = State(initialValue: existing?.imageURL ?? imported?.imageURLs.first ?? "")
+        let imgs = existing?.imageURLs ?? imported?.imageURLs ?? []
         _imageURLs = State(initialValue: imgs.isEmpty ? [existing?.imageURL].compactMap { $0 }.filter { !$0.isEmpty } : imgs)
         _termsText = State(initialValue: (existing?.terms ?? []).joined(separator: "\n"))
     }
@@ -1735,7 +1802,8 @@ struct HostDealFormView: View {
             venueID: venueID, type: type, title: title, details: details, emoji: emoji,
             newPrice: priceValue, discountPercent: discountValue,
             endDate: hasEnd ? endDate : nil, isDraft: isDraft, imageURLs: imageURLs,
-            terms: termsText.split(separator: "\n").map(String.init))))
+            terms: termsText.split(separator: "\n").map(String.init),
+            sourcePostID: imported?.postID)))
         dismiss()
     }
 }

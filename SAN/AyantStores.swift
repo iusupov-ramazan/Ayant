@@ -39,7 +39,10 @@ enum AyantStores {
     static func coupons() -> CouponStore { CouponStore(backend: AppConfig.makeCouponService()) }
     static func loyalty() -> LoyaltyStore { LoyaltyStore(backend: AppConfig.makeCouponService()) }
     static func points() -> PointsStore { PointsStore(repository: AppConfig.makePointsRepository()) }
-    static func host() -> HostStore { HostStore(repo: AppConfig.makeHostRepository()) }
+    static func host() -> HostStore {
+        HostStore(repo: AppConfig.makeHostRepository(),
+                  instagram: AppConfig.makeInstagramService())
+    }
 
     /// Без внешних зависимостей: состояние берут из хранилища устройства.
     static func bonus() -> BonusEngine { BonusEngine() }

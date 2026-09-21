@@ -37,6 +37,12 @@ enum AppConfig {
         useFirebase ? FirebaseHostRepository() : MockHostRepository()
     }
 
+    /// Instagram заведения: живой сервис ходит в наши Cloud Functions, мок
+    /// отдаёт выдуманные посты — так экран импорта работает и без аккаунта Meta.
+    static func makeInstagramService() -> InstagramService {
+        useFirebase ? FirebaseInstagramService(auth: makeAuthService()) : MockInstagramService()
+    }
+
     /// Показывать в «Аналитике» сгенерированные ряды вместо реальных.
     ///
     /// Выключено к релизу: хост должен видеть свои настоящие цифры, даже если

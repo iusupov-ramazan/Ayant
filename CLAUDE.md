@@ -207,6 +207,27 @@ One server behavior is deliberately mirrored even though it looks like a bug —
 
 **Key reuse is a collision, not a retry.** The same key sent for a *different* reward (or a different QR) → `409 key_reused`. Keep the key stable across retries of one attempt and fresh for a new one — `PointsStore`/`PointsViewModel` hold it until the attempt succeeds; the host scanners mint one per decoded QR.
 
+## Instagram → акции (импорт постов)
+
+Заведение подключает свой инстаграм в кабинете, жмёт «Синхронизировать», выбирает пост — и попадает в обычную форму акции с заполненными заголовком, описанием и фото. Отдельного типа контента нет: импорт создаёт **черновик `Deal`** обычным путём (`HostRepository.saveDeal`), то есть не проходит мимо правил владения.
+
+**Четыре вещи, которые ломаются молча — прочитайте до правок:**
+
+1. **Личные аккаунты не подключаются в принципе.** Basic Display API закрыт Meta 4 декабря 2024-го; работает только *Instagram API with Instagram Login* и только для профессиональных аккаунтов (Business/Creator). Экран предупреждает об этом до кнопки входа.
+2. **`media_url` с CDN инстаграма протухает за часы.** Поэтому `instagramImportMedia` перезаливает фото на Cloudinary (тот же аккаунт, что у iOS и админ-панели) и отдаёт клиенту постоянные ссылки. Положить ссылку Meta прямо в акцию — получить каталог с битыми фото назавтра. Это закреплено тестом (`functions/test/instagram.test.js`) и в `HostStoreTests`.
+3. **Токен не покидает сервер.** `igAccounts/{ownerID}_{venueID}` закрыта правилами целиком (`read, write: if false`); клиент читает только `igConnections/{...}` — имя аккаунта, дату, `needsReauth`, `lastSyncAt` — снапшот-листенером (`FirebaseInstagramService.connection`), без опроса. `igAuthStates/{nonce}` — одноразовый `state` OAuth, тоже закрыт.
+4. **Длинный токен живёт 60 дней.** `refreshInstagramTokens` (раз в сутки) продлевает всё, чему осталось меньше 10 дней; провал ставит `needsReauth`, и кабинет показывает «войдите заново» вместо пустого списка.
+
+**Функции** (`functions/src/index.ts`, секция INSTAGRAM): `instagramAuthStart` → `instagramAuthCallback` (публичная, редиректит в приложение по `san://ig/connected`) → `instagramMedia` (кнопка «Синхронизировать») → `instagramImportMedia` → `instagramDisconnect`, плюс `refreshInstagramTokens` и обязательные для App Review `instagramDeauthorize` / `instagramDataDeletion` (проверяют `signed_request` HMAC-подписью).
+
+**Конфигурация:** `INSTAGRAM_APP_ID`, `INSTAGRAM_REDIRECT_URI`, `INSTAGRAM_RETURN_URL` в `functions/.env`; `INSTAGRAM_APP_SECRET` — в Secret Manager (`firebase functions:secrets:set INSTAGRAM_APP_SECRET`). Redirect URI в приложении Meta должен совпадать с URL `instagramAuthCallback`.
+
+**Дедупликация:** `HostDealDTO.sourcePostID` (поле Firestore `igPostId`) — по нему кабинет помечает пост «Добавлено». `HostForms.deal` сохраняет связь при правке, как и `startDate`; потеря связи означает предложение импортировать тот же пост второй раз.
+
+**Разбор подписи** — чистый `InstagramCaption.parse` в домене: первая строка → заголовок, остальное → описание, хвост из хэштегов отрезается. Правило, закреплённое тестами: **описание ничего не теряет** — обрезается только заголовок-витрина.
+
+**Состояние фичи:** бэкенд готов и покрыт тестами; iOS-экран (`SAN/Host/HostInstagramView.swift`) скрыт за `ReleaseFlags.instagramImport` до одобрения `instagram_business_basic` в App Review — до него подключаются только аккаунты из ролей приложения Meta. **Android пока не портирован** — осознанное отставание, а не забытое зеркало.
+
 ## Release flags (iOS)
 
 `SAN/ReleaseFlags.swift` holds the switches for surfaces that are built but hidden in the shipped app: `searchTab`, `globalBonusWallet`, `referrals`, `promote`, `appleWallet`. Each is a `static let` gating the UI entry points only — the stores, models and backend paths stay compiled and tested. Flip one on only when its prerequisite is real (payment for promote, a real pass type ID for Wallet, a tested map screen for search). Android has no equivalent yet; the Android app still shows all of these.
