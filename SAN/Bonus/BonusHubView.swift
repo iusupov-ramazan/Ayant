@@ -20,6 +20,7 @@ struct BonusHubView: View {
     @State private var showGuestAlert = false
     @State private var showSnake = false
     @State private var showTetris = false
+    @State private var showMatch3 = false
     @State private var justClaimed: Coupon?
     @State private var pendingReward: Reward?
     @State private var pendingGift: Reward?
@@ -368,17 +369,36 @@ struct BonusHubView: View {
             }
             .buttonStyle(.plain)
             .fullScreenCover(isPresented: $showTetris) { TetrisGameView() }
+
+            Button { if session.isGuest { showGuestAlert = true } else { showMatch3 = true } } label: {
+                gameTile(icon: GemView(kind: .ruby, power: .none).padding(6),
+                         title: "Три в ряд",
+                         subtitle: "+1 / \(Match3.matchesPerBonus) совпадений",
+                         gradient: [Color(hex: 0xF2A03D), Color(hex: 0xE8556B)])
+            }
+            .buttonStyle(.plain)
+            .fullScreenCover(isPresented: $showMatch3) { Match3GameView() }
+
         }
         .padding(.top, 4)
     }
 
     private func gameTile(emoji: String, title: LocalizedStringKey, subtitle: LocalizedStringKey,
                           gradient: [Color]) -> some View {
+        gameTile(icon: Text(emoji).font(.system(size: 22)),
+                 title: title, subtitle: subtitle, gradient: gradient)
+    }
+
+    /// Та же плитка, но со своей картинкой вместо эмодзи: «Три в ряд» показывает
+    /// настоящий камень с поля, а не символ из шрифта.
+    private func gameTile<Icon: View>(icon: Icon, title: LocalizedStringKey,
+                                      subtitle: LocalizedStringKey,
+                                      gradient: [Color]) -> some View {
         HStack(spacing: 12) {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(LinearGradient(colors: gradient, startPoint: .topLeading, endPoint: .bottomTrailing))
                 .frame(width: 44, height: 44)
-                .overlay(Text(emoji).font(.system(size: 22)))
+                .overlay(icon)
             VStack(alignment: .leading, spacing: 1) {
                 Text(title).font(.golos(15, .bold)).foregroundStyle(Color.sanInk)
                 Text(subtitle).font(.golos(12, .medium)).foregroundStyle(Color.sanInkSoft)
