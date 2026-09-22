@@ -676,6 +676,7 @@ struct HostVenueDetailView: View {
                         loyaltySection(v)
                         itemsSection(v)
                         dealsSection(v)
+                        couponsSection(v)
                         actions(v)
                     }
                     // 14 вместо общего экранного отступа 20: на карточке
@@ -704,6 +705,10 @@ struct HostVenueDetailView: View {
             case .editDeal(let d): HostDealFormView(venueID: venueID, existing: d)
             case .addItem: HostItemFormView(venueID: venueID)
             case .scanCoupons: HostScannerView(fixedVenueID: venueID).environmentObject(host)
+            case .addCoupon:
+                HostCouponFormView(venueID: venueID, venueName: dto?.name ?? "", existing: nil)
+            case .editCoupon(let c):
+                HostCouponFormView(venueID: venueID, venueName: dto?.name ?? "", existing: c)
             }
         }
     }
@@ -974,6 +979,102 @@ struct HostVenueDetailView: View {
         .task { host.observeInstagram(venueID: v.id) }
     }
 
+    /// Купоны, которые гость покупает за бонусы.
+    ///
+    /// Отдельно от акций намеренно: акция — объявление и ничего не стоит,
+    /// купон — товар, у него цена, остаток и расход для заведения. Держать их
+    /// в одном списке значило бы снова смешать рекламу и обязательство.
+    private func couponsSection(_ v: HostVenueDTO) -> some View {
+        let offers = host.state.couponOffers(forVenue: v.id)
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Купоны за бонусы").font(.golos(18, .bold))
+                Spacer()
+                Button { activeSheet = .addCoupon } label: { Label("Добавить", systemImage: "plus") }
+                    .font(.caption.weight(.semibold))
+            }
+            if offers.isEmpty {
+                Text("Выпустите купон — гость купит его за бонусы, которые заработал в приложении, и придёт к вам.")
+                    .font(.subheadline).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                VStack(spacing: 8) {
+                    ForEach(offers) { offer in
+                        Menu {
+                            Button("Изменить") { activeSheet = .editCoupon(offer) }
+                            Button(offer.isPaused ? "Вернуть в продажу" : "Снять с продажи") {
+                                host.send(.toggleCouponPause(id: offer.id))
+                            }
+                            Button("Удалить", role: .destructive) {
+                                host.send(.deleteCouponOffer(id: offer.id))
+                            }
+                        } label: { couponRow(offer) }
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+    }
+
+    private func couponRow(_ offer: CouponOffer) -> some View {
+        HStack(spacing: 12) {
+            Text(offer.emoji).font(.system(size: 26))
+                .frame(width: 44, height: 44)
+                .background(Color.sanSurfaceMuted, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(offer.title)
+                    .font(.golos(14.5, .semibold)).foregroundStyle(Color.sanInk)
+                    .lineLimit(1)
+                // Одна строка вместо четырёх бейджей: цена — главное, остальное
+                // уточняет. Всё сразу превратило бы список в таблицу.
+                Text(couponSubtitle(offer))
+                    .font(.golos(12)).foregroundStyle(Color.sanInkSoft)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 4)
+            couponStatusChip(offer)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.sanSurface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .strokeBorder(Color.sanHairline, lineWidth: 0.5))
+    }
+
+    private func couponSubtitle(_ offer: CouponOffer) -> String {
+        var parts = [LF("%lld бонусов", offer.cost)]
+        if let remaining = offer.remaining {
+            parts.append(LF("осталось %lld", remaining))
+        }
+        if offer.soldCount > 0 { parts.append(LF("продано %lld", offer.soldCount)) }
+        return parts.joined(separator: " · ")
+    }
+
+    /// Что мешает продаже прямо сейчас — по одной причине за раз, в порядке
+    /// важности: снятый с продажи купон не нужно ещё и модерировать.
+    @ViewBuilder
+    private func couponStatusChip(_ offer: CouponOffer) -> some View {
+        if offer.isPaused {
+            hostChip("Не в продаже", color: Color.sanInkSoft)
+        } else if offer.status == .pending {
+            hostChip("На модерации", color: Color.orange)
+        } else if offer.status == .rejected {
+            hostChip("Отклонён", color: .red)
+        } else if offer.isSoldOut {
+            hostChip("Разобрали", color: Color.sanInkSoft)
+        } else {
+            hostChip("В продаже", color: Color(hex: 0x1F7D3A))
+        }
+    }
+
+    private func hostChip(_ text: LocalizedStringKey, color: Color) -> some View {
+        Text(text)
+            .font(.golos(11, .bold)).foregroundStyle(color)
+            .padding(.horizontal, 9).padding(.vertical, 5)
+            .background(color.opacity(0.12), in: Capsule())
+            .fixedSize()
+    }
+
     private func dealCell(_ d: HostDealDTO, gradient: [Color]) -> some View {
         // Color.clear задаёт квадрат по ширине колонки — размер не зависит от картинки.
         Color.clear
@@ -1083,6 +1184,8 @@ private enum HostVenueSheet: Identifiable {
     case editDeal(HostDealDTO)
     case addItem
     case scanCoupons
+    case addCoupon
+    case editCoupon(CouponOffer)
 
     var id: String {
         switch self {
@@ -1091,6 +1194,8 @@ private enum HostVenueSheet: Identifiable {
         case .editDeal(let d): return "editDeal_\(d.id)"
         case .addItem: return "addItem"
         case .scanCoupons: return "scanCoupons"
+        case .addCoupon: return "addCoupon"
+        case .editCoupon(let c): return "editCoupon_\(c.id)"
         }
     }
 }
@@ -1812,4 +1917,124 @@ struct HostDealFormView: View {
 enum HostQuickAction: Hashable {
     /// Список кампаний продвижения. Показывается только при `ReleaseFlags.promote`.
     case promote
+}
+
+// MARK: - Форма купона за бонусы
+
+/// Заведение выпускает купон: что отдаёт, во сколько бонусов ценит, сколько
+/// штук и до какой даты.
+///
+/// Цена и остаток — не украшения формы, а обязательство заведения: купленный
+/// купон придётся отдать. Поэтому цена обязательна (`HostForms.minCouponCost`),
+/// а остаток нельзя опустить ниже проданного — это делает `HostForms`, здесь
+/// только поля.
+struct HostCouponFormView: View {
+    let venueID: String
+    let venueName: String
+    let existing: CouponOffer?
+    @EnvironmentObject private var host: HostStore
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var title: String
+    @State private var details: String
+    @State private var emoji: String
+    @State private var cost: String
+    @State private var limited: Bool
+    @State private var stock: String
+    @State private var hasExpiry: Bool
+    @State private var expiresAt: Date
+    @State private var isPaused: Bool
+
+    init(venueID: String, venueName: String, existing: CouponOffer?) {
+        self.venueID = venueID
+        self.venueName = venueName
+        self.existing = existing
+        _title = State(initialValue: existing?.title ?? "")
+        _details = State(initialValue: existing?.details ?? "")
+        _emoji = State(initialValue: existing?.emoji ?? "🎁")
+        _cost = State(initialValue: existing.map { String($0.cost) } ?? "")
+        _limited = State(initialValue: existing?.stock != nil)
+        _stock = State(initialValue: existing?.stock.map(String.init) ?? "")
+        _hasExpiry = State(initialValue: existing?.expiresAt != nil)
+        _expiresAt = State(initialValue: existing?.expiresAt
+                           ?? Calendar.current.date(byAdding: .month, value: 1, to: .now)!)
+        _isPaused = State(initialValue: existing?.isPaused ?? false)
+    }
+
+    private var costValue: Int? { Int(cost.trimmingCharacters(in: .whitespaces)) }
+    private var stockValue: Int? { Int(stock.trimmingCharacters(in: .whitespaces)) }
+    private var canSave: Bool {
+        !title.trimmingCharacters(in: .whitespaces).isEmpty
+            && (costValue ?? 0) >= HostForms.minCouponCost
+            && (!limited || (stockValue ?? 0) > 0)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Что получает гость") {
+                    TextField("Например, бесплатный капучино", text: $title)
+                    TextField("Условия — необязательно", text: $details, axis: .vertical)
+                        .lineLimit(2...4)
+                    TextField("Эмодзи", text: $emoji)
+                }
+
+                Section("Цена в бонусах") {
+                    TextField("Например, 500", text: $cost)
+                        .keyboardType(.numberPad)
+                    Text("Гость копит бонусы в приложении и обменивает их на этот купон. Цену выбираете вы — купон вы и отдаёте.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+
+                Section("Сколько выпустить") {
+                    Toggle("Ограничить количество", isOn: $limited.animation())
+                    if limited {
+                        TextField("Например, 50", text: $stock)
+                            .keyboardType(.numberPad)
+                        if let sold = existing?.soldCount, sold > 0 {
+                            Text("Уже куплено: \(sold). Меньше этого числа выпуск не опустится.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    } else {
+                        Text("Без ограничения — купон можно купить сколько угодно раз.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+
+                Section("Срок") {
+                    Toggle("Ограничить сроком", isOn: $hasExpiry.animation())
+                    if hasExpiry {
+                        DatePicker("Действует до", selection: $expiresAt, displayedComponents: .date)
+                    }
+                }
+
+                Section {
+                    Toggle("Снять с продажи", isOn: $isPaused)
+                    Text(existing == nil
+                         ? "Новый купон проходит модерацию — он появится у гостей после проверки."
+                         : "Правка текста и цены модерацию не сбрасывает.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            .navigationTitle(existing == nil ? "Новый купон" : "Купон")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Отмена") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Сохранить") { save() }.disabled(!canSave)
+                }
+            }
+        }
+    }
+
+    private func save() {
+        host.send(.saveCouponOffer(existing: existing, fields: HostForms.CouponFields(
+            venueID: venueID, venueName: venueName,
+            title: title, details: details, emoji: emoji,
+            cost: costValue ?? HostForms.minCouponCost,
+            stock: limited ? stockValue : nil,
+            expiresAt: hasExpiry ? expiresAt : nil,
+            isPaused: isPaused)))
+        dismiss()
+    }
 }

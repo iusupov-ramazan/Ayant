@@ -643,6 +643,21 @@ public final class FirebaseHostRepository: HostRepository {
         return snap.documents.compactMap { HostDealDTO(firestore: $0.data(), id: $0.documentID) }
     }
 
+    public func saveCouponOffer(_ offer: CouponOffer, ownerID: String) async throws {
+        try await db.collection(FS.Collection.couponOffers).document(offer.id)
+            .setData(offer.firestoreData(ownerID: ownerID), merge: true)
+    }
+
+    public func deleteCouponOffer(id: String) async throws {
+        try await db.collection(FS.Collection.couponOffers).document(id).delete()
+    }
+
+    public func fetchOwnedCouponOffers(ownerID: String) async throws -> [CouponOffer] {
+        let snap = try await db.collection(FS.Collection.couponOffers)
+            .whereField(FS.CouponOfferDoc.ownerID, isEqualTo: ownerID).getDocuments()
+        return snap.documents.compactMap { CouponOffer(firestore: $0.data(), id: $0.documentID) }
+    }
+
     public func saveProfile(_ profile: HostProfile, ownerID: String) async throws {
         try await db.collection(FS.Collection.hosts).document(ownerID)
             .setData(profile.firestoreData, merge: true)

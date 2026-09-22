@@ -634,6 +634,52 @@ extension HostDealDTO {
     }
 }
 
+// MARK: - Купон заведения
+
+extension CouponOffer {
+    /// `soldCount` НЕ пишется: его считает сервер при покупке. Отправить его
+    /// отсюда — значит затереть чужие покупки своим устаревшим значением.
+    func firestoreData(ownerID: String) -> [String: Any] {
+        var d: [String: Any] = [
+            FS.CouponOfferDoc.venueID: venueID,
+            FS.CouponOfferDoc.venueName: venueName,
+            FS.CouponOfferDoc.title: title,
+            FS.CouponOfferDoc.details: details,
+            FS.CouponOfferDoc.emoji: emoji,
+            FS.CouponOfferDoc.imageURL: imageURL,
+            FS.CouponOfferDoc.cost: cost,
+            FS.CouponOfferDoc.status: statusRaw,
+            FS.CouponOfferDoc.isPaused: isPaused,
+            FS.CouponOfferDoc.ownerID: ownerID,
+            FS.CouponOfferDoc.city: citySlug,
+        ]
+        // Остаток отсутствует — выпуск без ограничения. Пишем NSNull, иначе
+        // «снять ограничение» не удалило бы старое значение при merge.
+        d[FS.CouponOfferDoc.stock] = stock ?? NSNull()
+        d[FS.CouponOfferDoc.expiresAt] = expiresAt.map { Timestamp(date: $0) } ?? NSNull()
+        return d
+    }
+
+    public init?(firestore d: [String: Any], id: String) {
+        guard let venueID = d.string(FS.CouponOfferDoc.venueID),
+              let title = d.string(FS.CouponOfferDoc.title) else { return nil }
+        self.init(
+            id: id, venueID: venueID,
+            venueName: d.string(FS.CouponOfferDoc.venueName) ?? "",
+            title: title,
+            details: d.string(FS.CouponOfferDoc.details) ?? "",
+            emoji: d.string(FS.CouponOfferDoc.emoji) ?? "🎁",
+            imageURL: d.string(FS.CouponOfferDoc.imageURL) ?? "",
+            cost: d.int(FS.CouponOfferDoc.cost) ?? 0,
+            stock: d.int(FS.CouponOfferDoc.stock),
+            soldCount: d.int(FS.CouponOfferDoc.soldCount) ?? 0,
+            expiresAt: d.date(FS.CouponOfferDoc.expiresAt),
+            statusRaw: d.string(FS.CouponOfferDoc.status) ?? ModerationStatus.pending.rawValue,
+            isPaused: d[FS.CouponOfferDoc.isPaused] as? Bool ?? false,
+            citySlug: d.string(FS.CouponOfferDoc.city) ?? City.bishkek.id)
+    }
+}
+
 // MARK: - Типизированное чтение полей документа
 
 /// Firestore отдаёт `[String: Any]`, поэтому каждое чтение — это приведение типа.

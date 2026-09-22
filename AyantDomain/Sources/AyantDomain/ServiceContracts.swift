@@ -18,6 +18,10 @@ public protocol HostRepository {
     func deleteDeal(id: String) async throws
     func fetchOwnedVenues(ownerID: String) async throws -> [HostVenueDTO]
     func fetchOwnedDeals(ownerID: String) async throws -> [HostDealDTO]
+    /// Купоны заведения на продажу за бонусы.
+    func saveCouponOffer(_ offer: CouponOffer, ownerID: String) async throws
+    func deleteCouponOffer(id: String) async throws
+    func fetchOwnedCouponOffers(ownerID: String) async throws -> [CouponOffer]
     /// Профиль хоста в коллекции hosts/{uid} (включая статус верификации).
     func saveProfile(_ profile: HostProfile, ownerID: String) async throws
     func fetchProfile(ownerID: String) async throws -> HostProfile?

@@ -149,6 +149,73 @@ public enum HostForms {
         return dto
     }
 
+    // MARK: Купоны заведения
+
+    /// Поля редактора купона. Остаток и счётчик продаж сюда не входят
+    /// намеренно: `soldCount` пишет только сервер, а `stock` заведение задаёт,
+    /// но уменьшать его вручную ниже проданного нельзя — см. `couponOffer`.
+    public struct CouponFields: Equatable {
+        public var venueID: String
+        public var venueName: String
+        public var title: String
+        public var details: String
+        public var emoji: String
+        public var imageURL: String
+        public var cost: Int
+        /// `nil` — выпуск без ограничения.
+        public var stock: Int?
+        public var expiresAt: Date?
+        public var isPaused: Bool
+
+        public init(venueID: String, venueName: String, title: String, details: String = "",
+                    emoji: String = "🎁", imageURL: String = "", cost: Int,
+                    stock: Int? = nil, expiresAt: Date? = nil, isPaused: Bool = false) {
+            self.venueID = venueID; self.venueName = venueName
+            self.title = title; self.details = details; self.emoji = emoji
+            self.imageURL = imageURL; self.cost = cost; self.stock = stock
+            self.expiresAt = expiresAt; self.isPaused = isPaused
+        }
+    }
+
+    /// Минимальная цена купона в бонусах.
+    ///
+    /// Не ноль: бесплатный купон — это снова раздача всем подряд, от которой и
+    /// уходили, убирая купон у акции. Цена — единственное, что отличает купон
+    /// от объявления.
+    public static let minCouponCost = 1
+
+    /// Купон из формы. Правки поверх существующего не трогают то, чем
+    /// распоряжается не заведение.
+    ///
+    /// Три правила, которые легко нарушить и трудно заметить:
+    ///
+    /// 1. `status` сохраняется. Иначе каждая правка текста возвращала бы
+    ///    одобренный купон на модерацию — как с заведением (`HostForms.venue`).
+    /// 2. `soldCount` сохраняется: его считает сервер при покупке, и запись с
+    ///    клиента затёрла бы чужие покупки.
+    /// 3. Остаток нельзя опустить НИЖЕ проданного. Иначе у купленных купонов
+    ///    «отрицательный» остаток, а `remaining` и отчётность разъезжаются.
+    public static func couponOffer(existing: CouponOffer?,
+                                   fields: CouponFields,
+                                   newID: @autoclosure () -> String) -> CouponOffer {
+        let sold = existing?.soldCount ?? 0
+        return CouponOffer(
+            id: existing?.id ?? newID(),
+            venueID: fields.venueID,
+            venueName: trim(fields.venueName),
+            title: trim(fields.title),
+            details: trim(fields.details),
+            emoji: fields.emoji,
+            imageURL: trim(fields.imageURL),
+            cost: max(minCouponCost, fields.cost),
+            stock: fields.stock.map { max($0, sold) },
+            soldCount: sold,
+            expiresAt: fields.expiresAt,
+            statusRaw: existing?.statusRaw ?? ModerationStatus.pending.rawValue,
+            isPaused: fields.isPaused,
+            citySlug: existing?.citySlug ?? City.bishkek.id)
+    }
+
     // MARK: Баллы САН
 
     /// Поля редактора баллов САН (вкладка «Лояльность»). Отдельная структура:

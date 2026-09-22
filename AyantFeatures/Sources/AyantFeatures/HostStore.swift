@@ -23,6 +23,7 @@ public final class HostStore: ObservableObject {
         static let venues = "san.host.venues"
         static let deals = "san.host.deals"
         static let campaigns = "san.host.campaigns"
+        static let couponOffers = "san.host.couponOffers"
         /// id заведений/акций, которые сервер хотя бы раз отдал этому владельцу.
         /// По ним `sync()` отличает «удалено на сервере» от «так и не доехало».
         static let knownVenues = "san.host.knownVenues"
@@ -46,6 +47,9 @@ public final class HostStore: ObservableObject {
     private var campaigns: [AdCampaign] {
         get { state.campaigns } set { state.campaigns = newValue }
     }
+    private var couponOffers: [CouponOffer] {
+        get { state.couponOffers } set { state.couponOffers = newValue }
+    }
     public private(set) var ownerID: String {
         get { state.ownerID } set { state.ownerID = newValue }
     }
@@ -58,6 +62,7 @@ public final class HostStore: ObservableObject {
         venueDTOs = decodeList(Key.venues)
         dealDTOs = decodeList(Key.deals)
         campaigns = decodeList(Key.campaigns)
+        couponOffers = decodeList(Key.couponOffers)
     }
 
     /// Единственный вход. Читать — через `state`.
@@ -92,6 +97,11 @@ public final class HostStore: ObservableObject {
         case .setDealStatus(let id, let status): setDealStatus(id: id, status: status)
         case .duplicateDeal(let id):         duplicateDeal(id: id)
         case .deleteDeal(let id):            deleteDeal(id: id)
+
+        case .saveCouponOffer(let existing, let fields):
+            saveCouponOfferForm(existing: existing, fields: fields)
+        case .toggleCouponPause(let id):     toggleCouponPause(id: id)
+        case .deleteCouponOffer(let id):     deleteCouponOffer(id: id)
 
         case .addCampaign(let c):            addCampaign(c)
         case .launchPush(let headline, let body, let venueID, let dealID):
@@ -238,6 +248,7 @@ public final class HostStore: ObservableObject {
         venueDTOs = decodeList(key(Key.venues))
         dealDTOs = decodeList(key(Key.deals))
         campaigns = decodeList(key(Key.campaigns))
+        couponOffers = decodeList(key(Key.couponOffers))
         knownVenueIDs = Set(decodeList(key(Key.knownVenues)) as [String])
         knownDealIDs = Set(decodeList(key(Key.knownDeals)) as [String])
 
@@ -294,6 +305,12 @@ public final class HostStore: ObservableObject {
             pushToAppStore()
             for dto in unsentV { remoteSaveVenue(dto) }
             for dto in unsentD { remoteSaveDeal(dto) }
+            // Купоны: сервер знает `soldCount` и `status`, которых у клиента
+            // нет и быть не может, поэтому серверная копия просто побеждает.
+            if let remoteOffers = try? await repo.fetchOwnedCouponOffers(ownerID: ownerID) {
+                couponOffers = remoteOffers
+                persistCouponOffers()
+            }
             // Профиль (включая статус верификации, выставленный админом).
             if let remoteProfile = try await repo.fetchProfile(ownerID: ownerID) {
                 profile = remoteProfile
@@ -534,6 +551,40 @@ public final class HostStore: ObservableObject {
     }
 
     public func newDealID() -> String { "hd_\(UUID().uuidString.prefix(8))" }
+
+    // MARK: Купоны заведения
+
+    private func saveCouponOfferForm(existing: CouponOffer?, fields: HostForms.CouponFields) {
+        let offer = HostForms.couponOffer(existing: existing, fields: fields,
+                                          newID: "co_\(UUID().uuidString.prefix(8))")
+        if let i = couponOffers.firstIndex(where: { $0.id == offer.id }) { couponOffers[i] = offer }
+        else { couponOffers.append(offer) }
+        persistCouponOffers()
+        remoteSaveCouponOffer(offer)
+    }
+
+    private func toggleCouponPause(id: String) {
+        guard let i = couponOffers.firstIndex(where: { $0.id == id }) else { return }
+        couponOffers[i].isPaused.toggle()
+        persistCouponOffers()
+        remoteSaveCouponOffer(couponOffers[i])
+    }
+
+    private func deleteCouponOffer(id: String) {
+        couponOffers.removeAll { $0.id == id }
+        persistCouponOffers()
+        Task { [repo] in try? await repo.deleteCouponOffer(id: id) }
+    }
+
+    private func remoteSaveCouponOffer(_ offer: CouponOffer) {
+        let owner = ownerID
+        Task { [weak self, repo] in
+            do { try await repo.saveCouponOffer(offer, ownerID: owner) }
+            catch { self?.reportRemoteFailure(error) }
+        }
+    }
+
+    private func persistCouponOffers() { persist(key(Key.couponOffers), couponOffers) }
 
     private func setDealStatus(id: String, status: DealStatus) {
         if let i = dealDTOs.firstIndex(where: { $0.id == id }) {

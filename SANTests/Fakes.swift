@@ -124,6 +124,9 @@ final class FakeHostRepository: HostRepository {
     var savedDeals: [HostDealDTO] = []
     var deletedVenueIDs: [String] = []
     var deletedDealIDs: [String] = []
+    var remoteCouponOffers: [CouponOffer] = []
+    var savedCouponOffers: [CouponOffer] = []
+    var deletedCouponOfferIDs: [String] = []
     var saveError: Error?
 
     func saveVenue(_ dto: HostVenueDTO, ownerID: String) async throws {
@@ -138,6 +141,12 @@ final class FakeHostRepository: HostRepository {
     func deleteDeal(id: String) async throws { deletedDealIDs.append(id) }
     func fetchOwnedVenues(ownerID: String) async throws -> [HostVenueDTO] { remoteVenues }
     func fetchOwnedDeals(ownerID: String) async throws -> [HostDealDTO] { remoteDeals }
+    func saveCouponOffer(_ offer: CouponOffer, ownerID: String) async throws {
+        if let saveError { throw saveError }
+        savedCouponOffers.append(offer)
+    }
+    func deleteCouponOffer(id: String) async throws { deletedCouponOfferIDs.append(id) }
+    func fetchOwnedCouponOffers(ownerID: String) async throws -> [CouponOffer] { remoteCouponOffers }
     func saveProfile(_ profile: HostProfile, ownerID: String) async throws { remoteProfile = profile }
     func fetchProfile(ownerID: String) async throws -> HostProfile? { remoteProfile }
     func queuePushCampaign(headline: String, body: String, city: String,

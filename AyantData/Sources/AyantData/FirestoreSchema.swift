@@ -26,6 +26,8 @@ public enum FS {
         public static let hosts = "hosts"
         public static let categories = "categories"
         public static let coupons = "coupons"
+        /// Купоны, которые заведение выпускает на продажу за бонусы.
+        public static let couponOffers = "couponOffers"
         public static let giftCoupons = "giftCoupons"
         public static let loyaltyCards = "loyaltyCards"
         public static let venuePoints = "venuePoints"
@@ -147,6 +149,28 @@ public enum FS {
         public static let city = "city"
         /// id поста в инстаграме, из которого импортирована акция.
         public static let igPostID = "igPostId"
+    }
+
+    // MARK: - couponOffers/{id}
+
+    /// Купон заведения. `soldCount` и `stock` — денежные поля: их меняет
+    /// только сервер при покупке, правила запрещают запись с клиента.
+    public enum CouponOfferDoc {
+        public static let venueID = "venueID"
+        public static let venueName = "venueName"
+        public static let title = "title"
+        public static let details = "details"
+        public static let emoji = "emoji"
+        public static let imageURL = "imageURL"
+        public static let cost = "cost"
+        public static let stock = "stock"
+        public static let soldCount = "soldCount"
+        public static let expiresAt = "expiresAt"
+        public static let status = "status"
+        public static let isPaused = "isPaused"
+        public static let ownerID = "ownerID"
+        /// Ключ партиционирования по городам — то же поле `city`, что у заведения.
+        public static let city = "city"
     }
 
     // MARK: - igConnections/{ownerID}_{venueID}

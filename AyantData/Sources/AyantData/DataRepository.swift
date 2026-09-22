@@ -197,6 +197,9 @@ public final class MockHostRepository: HostRepository {
     public func deleteDeal(id: String) async throws {}
     public func fetchOwnedVenues(ownerID: String) async throws -> [HostVenueDTO] { [] }
     public func fetchOwnedDeals(ownerID: String) async throws -> [HostDealDTO] { [] }
+    public func saveCouponOffer(_ offer: CouponOffer, ownerID: String) async throws {}
+    public func deleteCouponOffer(id: String) async throws {}
+    public func fetchOwnedCouponOffers(ownerID: String) async throws -> [CouponOffer] { [] }
     public func saveProfile(_ profile: HostProfile, ownerID: String) async throws {}
     public func fetchProfile(ownerID: String) async throws -> HostProfile? { nil }
     public func queuePushCampaign(headline: String, body: String, city: String,

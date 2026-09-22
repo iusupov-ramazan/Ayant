@@ -181,6 +181,7 @@
     <button onclick="showPage('hosts')"  id="navHosts">Хосты</button>
     <button onclick="showPage('boosts')" id="navBoosts">Реклама</button>
     <button onclick="showPage('reports')" id="navReports">Жалобы</button>
+    <button onclick="showPage('coupons')" id="navCoupons">Купоны</button>
     <button onclick="showPage('rewards')" id="navRewards">Награды</button>
     <button onclick="showPage('settings')" id="navSettings">Настройки</button>
     <button id="signOutBtn" onclick="signOut()">Выйти</button>
@@ -295,6 +296,29 @@
   <!-- Награды глобального кошелька (config/globalRewards).
        У каждой ОБЯЗАТЕЛЬНО заведение-партнёр: scanCoupon сверяет venueID
        купона с заведением сканера, и награда без партнёра не гасится. -->
+  <div class="page" id="pageCoupons">
+    <div class="toolbar">
+      <h2>Купоны заведений</h2>
+      <label style="display:flex;align-items:center;gap:6px;color:var(--muted);font-size:14px">
+        <input type="checkbox" id="couponsShowAll" onchange="loadCoupons()" /> показать все
+      </label>
+      <button class="btn btn-secondary" onclick="loadCoupons()">Обновить</button>
+    </div>
+    <p style="color:var(--muted);margin:0 0 12px">
+      Заведение выпускает купон и само назначает цену в бонусах — оно же его и отдаёт.
+      До одобрения купон в приложении не продаётся. Остаток и «продано» считает сервер,
+      отсюда они не меняются.
+    </p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Купон</th><th>Заведение</th><th>Цена</th><th>Остаток</th><th>Статус</th><th></th></tr>
+        </thead>
+        <tbody id="couponsBody"><tr><td colspan="6" class="spinner">Загрузка…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
   <div class="page" id="pageRewards">
     <div class="toolbar">
       <h2>Награды за бонусы</h2>
@@ -724,8 +748,8 @@
 import { initializeApp }           from 'https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js';
 import { getAuth, signInWithEmailAndPassword, signOut as fbSignOut, onAuthStateChanged }
   from 'https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js';
-import { getFirestore, collection, getDocs, getDoc, doc, setDoc, addDoc, deleteDoc, deleteField,
-         query, where, writeBatch, Timestamp }
+import { getFirestore, collection, getDocs, getDoc, doc, setDoc, updateDoc, addDoc, deleteDoc,
+         deleteField, query, where, writeBatch, Timestamp }
   from 'https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js';
 
 // ── PASTE YOUR FIREBASE CONFIG HERE ──────────────────────────────────────
@@ -1918,9 +1942,64 @@ window.showPage = (page) => {
   document.getElementById('nav'  + page.charAt(0).toUpperCase() + page.slice(1)).classList.add('active');
   if (page === 'boosts') loadBoosts();
   if (page === 'reports') loadReports();
+  if (page === 'coupons') loadCoupons();
   if (page === 'rewards') loadRewards();
   if (page === 'settings') loadSettings();
   if (page === 'categories') loadCategories();
+};
+
+// ── Купоны заведений ───────────────────────────────────────────────────────
+// Модерация: админ решает, можно ли продавать. Цену и текст задаёт заведение —
+// сюда они приходят только на проверку, править их отсюда незачем.
+async function loadCoupons() {
+  const body = document.getElementById('couponsBody');
+  const showAll = document.getElementById('couponsShowAll').checked;
+  try {
+    const snap = await getDocs(collection(db, 'couponOffers'));
+    let rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (!showAll) rows = rows.filter(r => (r.status ?? 'pending') === 'pending');
+    // Непроверенные сверху: очередь модерации, а не каталог.
+    rows.sort((a, b) => ((a.status ?? 'pending') === 'pending' ? -1 : 1));
+    if (!rows.length) {
+      body.innerHTML = `<tr><td colspan="6" class="spinner">${showAll ? 'Купонов нет' : 'Всё проверено'}</td></tr>`;
+      return;
+    }
+    body.innerHTML = rows.map(r => {
+      const status = r.status ?? 'pending';
+      const sold = r.soldCount ?? 0;
+      const stock = (r.stock === null || r.stock === undefined) ? null : r.stock;
+      const left = stock === null ? '∞' : Math.max(0, stock - sold);
+      const badge = status === 'approved' ? 'badge-approved'
+                  : status === 'rejected' ? 'badge-rejected' : 'badge-pending';
+      const label = status === 'approved' ? 'Одобрен'
+                  : status === 'rejected' ? 'Отклонён' : 'На модерации';
+      const paused = r.isPaused ? ' · снят заведением' : '';
+      return `
+        <tr>
+          <td>${escapeHtml(r.emoji ?? '')} ${escapeHtml(r.title ?? '')}
+            <div style="color:var(--muted);font-size:12px">${escapeHtml(r.details ?? '')}</div></td>
+          <td>${escapeHtml(r.venueName ?? r.venueID ?? '')}</td>
+          <td>${r.cost ?? 0}</td>
+          <td>${left}${sold ? ` <span style="color:var(--muted)">(продано ${sold})</span>` : ''}</td>
+          <td><span class="badge ${badge}">${label}</span>${paused}</td>
+          <td style="white-space:nowrap">
+            ${status !== 'approved' ? `<button class="btn btn-primary" onclick="setCouponStatus('${r.id}','approved')">Одобрить</button>` : ''}
+            ${status !== 'rejected' ? `<button class="btn btn-secondary" onclick="setCouponStatus('${r.id}','rejected')">Отклонить</button>` : ''}
+          </td>
+        </tr>`;
+    }).join('');
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="6" class="spinner">Ошибка: ${escapeHtml(e.message)}</td></tr>`;
+  }
+}
+
+window.setCouponStatus = async (id, status) => {
+  try {
+    await updateDoc(doc(db, 'couponOffers', id), { status });
+    loadCoupons();
+  } catch (e) {
+    alert('Не удалось сохранить: ' + e.message);
+  }
 };
 
 function categoryLabel(c) {

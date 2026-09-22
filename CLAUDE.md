@@ -175,6 +175,19 @@ There are **two independent wallets**, plus the older stamp card. Full design + 
 
 3. **Loyalty stamp card (older).** `AYANT-CARD:<userID>:<venueID>` → `scanCoupon` Branch A → +1 stamp in `loyaltyCards/{userID}_{venueID}`. Has its own anti-multi-scan cooldown: **`DEFAULT_STAMP_COOLDOWN_MIN=15`** (separate from the 60-min points cooldown; both keyed on `lastStampAt`/`lastEarnAt`).
 
+## Купоны: акция рекламирует, купон продаётся
+
+**Акция больше не выдаёт купон.** Раньше гость открывал акцию, получал QR, сотрудник сканировал — заведение обязано было держать сканер ради обычной скидки, а купон не стоил ничего и выдавался всем. Теперь роли разведены:
+
+- **`Deal` — объявление.** Приложение показывает («−20% на завтраки»), заведение применяет скидку у кассы само. У акции нет купона, нет QR, нет погашения. Флаг называется `isInformational` (бывший `isRedeemable` — старое имя обещало погашение, и под него путь отрастал обратно).
+- **`CouponOffer` — товар.** Заведение выпускает купон, назначает **цену в бонусах**, остаток и срок; гость покупает за бонусы, накопленные в приложении. Коллекция `couponOffers`, форма — `HostForms.couponOffer`, экран — «Купоны за бонусы» в карточке заведения у хоста, модерация — страница «Купоны» в админ-панели.
+
+**Уже выданные купоны акций (`kind: "deal"`) остаются рабочими** и гасятся через `scanCoupon` как раньше. Отнимать у людей выданное нельзя — путь создания убран, путь погашения оставлен.
+
+**Три поля `couponOffers` заведению не принадлежат**, и это закреплено в `firestore.rules`: `soldCount` считает сервер при покупке (клиентская запись затёрла бы чужие покупки), `status` ставит модерация (иначе заведение одобряет себя само, как было бы с `venues`), `ownerID` неизменен (смена = передача купона чужому аккаунту). `HostForms.couponOffer` держит ту же линию на клиенте: сохраняет `status`/`soldCount` при правке и не даёт опустить остаток ниже проданного.
+
+**Баланс бонусов пока живёт НА УСТРОЙСТВЕ** (`@AppStorage("san.bonus.balance")` в `BonusEngine`). Пока кошелёк зарабатывал ~3 в день и покупал награды, которые нельзя погасить, это ничего не стоило. С покупкой купонов, которые заведение отдаёт по-настоящему, редактируемое число на телефоне — это генератор бесплатного кофе. **Покупка купона (`buyCoupon`) и сам баланс должны переехать на сервер** (`bonusWallets/{userID}` + ledger, по образцу `venuePoints`) ДО того, как продажа купонов включится для гостей.
+
 **Cooldown constants** live in `functions/src/index.ts`: `DEFAULT_STAMP_COOLDOWN_MIN=15`, `DEFAULT_EARN_COOLDOWN_MIN=60`, `DEFAULT_EXPIRY_MONTHS=6`, `MAX_CASHBACK_PERCENT=20`, `MAX_POINTS_PER_EARN=10000`.
 
 **Global app settings live in one Firestore document, `config/appSettings`, edited on the admin panel's «Настройки» page.** Fields: `stampCooldownMinutes` (stamp cooldown, `0` = no cooldown, clamped 0…1440, absent → 15) and `adPlaceholderText` (the «Здесь может быть ваша реклама» watermark on the Snake board; empty → the localized default). `scanCoupon` reads the cooldown through `loadAppSettings()` with a 60-second per-instance cache and `intOrDefault` (explicit zero preserved); both clients load the document into `AppStore.settings` / `AppViewModel.settings` (domain model `AppSettings`, field constants in `FS.AppSettingsDoc`, `DataRepository.fetchAppSettings()`). The old `STAMP_COOLDOWN_MIN` env override is gone on purpose — a forgotten `=0` in `functions/.env` was how a test setting leaked toward production; change the value in the panel instead, and never leave `0` there outside a test session. The watermark text is fitted to the board on both platforms (word-wrap, then shrink), so any length is safe.
