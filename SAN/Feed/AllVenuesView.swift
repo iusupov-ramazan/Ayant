@@ -21,8 +21,14 @@ struct AllVenuesView: View {
 
     enum Sort { case rating, distance }
 
-    init(initialCategory: VenueCategory? = nil) {
+    /// Вкладка (корень стека) или пуш из другого экрана. От этого зависит
+    /// только «назад»: в корне вкладки возвращаться некуда, и стрелка вела бы
+    /// в никуда.
+    private let isTabRoot: Bool
+
+    init(initialCategory: VenueCategory? = nil, isTabRoot: Bool = false) {
         _category = State(initialValue: initialCategory)
+        self.isTabRoot = isTabRoot
     }
 
     /// Каталог категории в порядке ранжирования (`FeedStore.venues(category:)`),
@@ -73,7 +79,7 @@ struct AllVenuesView: View {
         .sanStatusBarCap()
         // Экран открывается пушем: системную панель прячем ради крупного
         // заголовка, но «назад» оставляем — как в «Сохранённом».
-        .sanNavBar { dismiss() }
+        .sanNavBar(showsBack: !isTabRoot) { dismiss() }
         .toolbar(.hidden, for: .navigationBar)
         .scrollDismissesKeyboard(.interactively)
         .onAppear {

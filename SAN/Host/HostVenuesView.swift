@@ -906,7 +906,7 @@ struct HostVenueDetailView: View {
             // жать и что произойдёт. Хост думает не «хочу инстаграм», а «надо
             // добавить акцию», поэтому кнопка живёт в блоке предложений и
             // называется действием, а не источником.
-            if ReleaseFlags.instagramImport { instagramImportRow(v) }
+            instagramImportRow(v)
             let deals = host.state.deals(forVenue: v.id)
             if deals.isEmpty {
                 Text("Пока нет предложений. Добавьте, чтобы привлекать гостей.")

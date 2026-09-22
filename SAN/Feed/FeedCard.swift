@@ -163,7 +163,7 @@ struct FeedDealCard: View {
             VStack(alignment: .leading, spacing: 0) {
                 header
                 FeedPostPhoto(urlString: photoURL, gradient: gradient,
-                              onOpen: onOpen, onDoubleTapLike: onLike) { badge }
+                              onOpen: onOpen, onDoubleTapLike: onLike) { EmptyView() }
                 actions
                 caption
             }
@@ -202,6 +202,7 @@ struct FeedDealCard: View {
             }
             .buttonStyle(.sanPress(0.98))
 
+            badge
         }
         .padding(.top, 11).padding(.horizontal, 14).padding(.bottom, 10)
     }
@@ -218,22 +219,37 @@ struct FeedDealCard: View {
         }
     }
 
-    // Бейдж: процент скидки, иначе тип предложения.
+    /// Бейдж: процент скидки, иначе тип предложения.
+    ///
+    /// Стоит в ШАПКЕ, справа от названия заведения, а не наклейкой на фото.
+    /// На фотографии он закрывал собой блюдо — то самое, ради чего карточку и
+    /// открывают, — и у каждого заведения попадал на разное место снимка. В
+    /// строке с названием у него постоянная позиция: глаз находит его, не
+    /// разглядывая картинку.
+    ///
+    /// Цвет разделён по смыслу. Скидка — обещание выгоды, её несёт заливка
+    /// акцентом; «Новинка» и «Объявление» — это вид публикации, им хватает
+    /// мягкой подложки. Одинаково яркими они спорили бы между собой, а
+    /// каждая вторая карточка выглядела бы распродажей.
     @ViewBuilder private var badge: some View {
-        // Процент — число, его переводить нечего; тип акции — ключ каталога.
-        let percent = deal.effectiveDiscountPercent.map { "−\($0)%" }
-        Text(percent.map { LocalizedStringKey($0) } ?? deal.type.locKey)
-            // Капслок именно так, а не `.uppercased()`: тот превратил бы ключ
-            // каталога в «СКИДКА» и перевод бы не нашёлся.
-            .textCase(.uppercase)
-            .font(.golos(15, .heavy))
-            .tracking(-0.5)
-            .foregroundStyle(.white)
-            .padding(.horizontal, 13).padding(.vertical, 8)
-            .background(LinearGradient.sanAccentGradient,
-                        in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .sanShadow(.badge)
-            .rotationEffect(.degrees(-3))
+        if let percent = deal.effectiveDiscountPercent {
+            Text(verbatim: "−\(percent)%")
+                .font(.golos(13.5, .heavy)).tracking(-0.3)
+                .foregroundStyle(.white)
+                .padding(.horizontal, 10).padding(.vertical, 6)
+                .background(LinearGradient.sanAccentGradient, in: Capsule())
+                .fixedSize()
+        } else {
+            // Капслок через `.textCase`, а не `.uppercased()`: тот превратил бы
+            // ключ каталога в «СКИДКА» и перевод бы не нашёлся.
+            Text(deal.type.locKey)
+                .textCase(.uppercase)
+                .font(.golos(10.5, .heavy)).tracking(0.8)
+                .foregroundStyle(Color.sanAccentText)
+                .padding(.horizontal, 10).padding(.vertical, 5)
+                .background(Color.sanAccent.opacity(0.12), in: Capsule())
+                .fixedSize()
+        }
     }
 
     // MARK: Ряд действий

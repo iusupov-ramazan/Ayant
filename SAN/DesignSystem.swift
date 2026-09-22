@@ -570,13 +570,20 @@ struct SanCircleButton: View {
 /// доскроллить обратно.
 struct SanNavBar<Trailing: View>: View {
     var title: LocalizedStringKey?
+    /// Корень вкладки: стрелка «назад» вела бы в никуда. Место под неё всё
+    /// равно резервируем — иначе заголовок съезжает от центра.
+    var showsBack: Bool = true
     var onBack: () -> Void
     @ViewBuilder var trailing: Trailing
 
     var body: some View {
         HStack(spacing: 10) {
-            SanCircleButton(systemName: "chevron.left", action: onBack)
-                .accessibilityLabel("Назад")
+            if showsBack {
+                SanCircleButton(systemName: "chevron.left", action: onBack)
+                    .accessibilityLabel("Назад")
+            } else {
+                Color.clear.frame(width: 44, height: 44)
+            }
             Spacer(minLength: 8)
             if let title {
                 Text(title)
@@ -598,9 +605,12 @@ struct SanNavBar<Trailing: View>: View {
 extension View {
     /// Прибивает панель навигации к верху экрана.
     func sanNavBar(_ title: LocalizedStringKey? = nil,
+                   showsBack: Bool = true,
                    onBack: @escaping () -> Void) -> some View {
         safeAreaInset(edge: .top, spacing: 0) {
-            SanNavBar(title: title, onBack: onBack) { Color.clear.frame(width: 44, height: 44) }
+            SanNavBar(title: title, showsBack: showsBack, onBack: onBack) {
+                Color.clear.frame(width: 44, height: 44)
+            }
         }
     }
 

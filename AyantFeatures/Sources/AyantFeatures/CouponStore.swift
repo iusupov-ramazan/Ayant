@@ -70,23 +70,10 @@ public final class CouponStore: ObservableObject {
         return c
     }
 
-    /// Создаёт купон за акцию заведения (сканируется сотрудником → штамп лояльности).
-    /// Пишется в бэкенд, чтобы заведение могло его отсканировать. Возвращает купон.
-    @discardableResult
-    public func createDealCoupon(dealID: String, title: String, venueID: String, venueName: String) -> Coupon {
-        // Уже есть непогашенный купон на эту акцию — переиспользуем.
-        if let existing = coupons.first(where: { $0.dealID == dealID && !$0.used }) { return existing }
-        let c = Coupon(id: "cp_\(UUID().uuidString.prefix(8))",
-                       title: title,
-                       code: "AYANT-\(UUID().uuidString.prefix(6).uppercased())",
-                       createdAt: clock.now, used: false,
-                       venueID: venueID, venueName: venueName, kind: "deal", dealID: dealID)
-        coupons.insert(c, at: 0)
-        save()
-        let uid = userID
-        Task { try? await backend.saveCoupon(c, userID: uid) }
-        return c
-    }
+    // `createDealCoupon` удалён вместе с купоном у акции: акция теперь
+    // объявление. Уже выданные купоны с `kind: "deal"` остаются в кошельках и
+    // гасятся как раньше — `scanCoupon` их по-прежнему понимает, и отнимать у
+    // людей то, что они успели получить, нельзя.
 
     /// Кладёт полученный в подарок купон в кошелёк.
     public func addGifted(title: String, code: String) {

@@ -13,10 +13,7 @@ struct DealDetailView: View {
     @EnvironmentObject private var loyalty: LoyaltyStore
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
-    @Environment(\.requestReview) private var requestReview
-    @AppStorage("san.redeemCount") private var redeemCount = 0
     @State private var showMapOptions = false
-    @State private var presentedCoupon: Coupon?
     @State private var showGuestAlert = false
 
     private var venue: Venue? { store.venue(for: deal) }
@@ -54,7 +51,7 @@ struct DealDetailView: View {
                         .font(.subheadline).foregroundStyle(.secondary)
                 }
                 .padding(.horizontal, 16)
-                showAtVenue
+                howToUse
                 if venue != nil { venueSection }
             }
             .padding(.bottom, 24)
@@ -90,36 +87,12 @@ struct DealDetailView: View {
         }
     }
 
-    /// QR есть только у купона, который записан в Firestore. Пока купона нет —
-    /// замок поверх размытой заглушки: сканируемого кода без документа на
-    /// сервере быть не должно, иначе сотрудник отсканирует «пустоту».
-    @ViewBuilder
-    private func couponQR(_ coupon: Coupon?, used: Bool) -> some View {
-        if let coupon {
-            QRCodeView(text: coupon.code, size: 92)
-                .opacity(used ? 0.4 : 1)
-        } else {
-            QRCodeView(text: Self.lockedQRPlaceholder, size: 92)
-                .blur(radius: 6)
-                .opacity(0.35)
-                .overlay {
-                    Image(systemName: "lock.fill")
-                        .font(.system(size: 22, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                }
-                .accessibilityLabel("Получите купон, чтобы показать QR")
-        }
-    }
-
-    /// Константа под размытым QR: не код купона и ни к чему на сервере не ведёт.
-    private static let lockedQRPlaceholder = "AYANT-LOCKED"
-
     private var hero: some View {
         ImageCarousel(urls: deal.allImages, gradient: venue?.gradientColors ?? [.sanAccent, .orange],
                       emoji: deal.emoji, height: 300)
             .overlay(alignment: .topLeading) {
                 if let percent = deal.discountPercent {
-                    Text("−\(percent)%")
+                    Text(verbatim: "−\(percent)%")
                         .font(.title.weight(.heavy)).foregroundStyle(.white)
                         .padding(.horizontal, 16).padding(.vertical, 8)
                         .background(.black.opacity(0.35), in: Capsule())
@@ -128,75 +101,40 @@ struct DealDetailView: View {
             }
     }
 
+    /// Как воспользоваться предложением.
+    ///
+    /// Купона у акции больше нет. Раньше экран выдавал QR, сотрудник его
+    /// сканировал — то есть заведение обязано было держать сканер ради обычной
+    /// скидки, а гость не мог просто прийти и попросить. Теперь акция — это
+    /// объявление: приложение её показывает, заведение применяет у кассы как
+    /// любую другую свою скидку. Купоны стали отдельной сущностью: их
+    /// выпускает заведение, а гость покупает за бонусы.
     @ViewBuilder
-    private var showAtVenue: some View {
-        // Купон есть только у скидок и акций, и только если заведение принимает купоны.
-        // У новинок и объявлений показывать нечего.
-        if deal.isRedeemable && (venue?.couponsEnabled ?? true) {
-            let dealCoupon = coupons.coupons.first { $0.dealID == deal.id }
-            let used = dealCoupon?.used ?? false
-            VStack(spacing: 12) {
-                HStack(spacing: 14) {
-                    couponQR(dealCoupon, used: used)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(used ? "Купон использован" : "Купон на предложение")
-                            .font(.subheadline.weight(.semibold))
-                        Text(dealCoupon == nil
-                             ? "Получите купон, чтобы показать QR"
-                             : "Сотрудник сканирует QR и применяет предложение перед оплатой.")
-                            .font(.caption).foregroundStyle(.secondary)
-                        if let c = dealCoupon {
-                            Text(c.code).font(.caption2.monospaced()).foregroundStyle(.secondary)
-                        }
-                    }
-                    Spacer(minLength: 0)
-                }
-                if used {
-                    Label("Купон использован", systemImage: "checkmark.seal.fill")
+    private var howToUse: some View {
+        if deal.isInformational {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "storefront.fill")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Color.sanAccentText)
+                    .frame(width: 34, height: 34)
+                    .background(Color.sanAccent.opacity(0.12),
+                                in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Предложение действует в заведении")
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.green)
-                        .frame(maxWidth: .infinity)
-                } else if store.isGuest {
-                    Text("Войдите в аккаунт, чтобы получить купон.")
-                        .font(.caption).foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                } else {
-                    Button {
-                        let vID = venue?.id ?? deal.venueID
-                        let vName = venue?.name ?? ""
-                        let c = coupons.createDealCoupon(dealID: deal.id, title: deal.title,
-                                                         venueID: vID, venueName: vName)
-                        presentedCoupon = c
-                        bumpRatingPrompt()
-                    } label: {
-                        Text(dealCoupon == nil ? "Получить купон" : "Показать купон")
-                            .font(.subheadline.weight(.bold))
-                            .frame(maxWidth: .infinity).padding(.vertical, 11)
-                            .background(Color.sanAccent, in: RoundedRectangle(cornerRadius: 12))
-                            .foregroundStyle(.white)
-                    }
-                    .buttonStyle(.plain)
+                        .foregroundStyle(Color.sanInk)
+                    Text("Скажите о нём при заказе — ничего показывать и сканировать не нужно.")
+                        .font(.caption).foregroundStyle(Color.sanInkSoft)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
+                Spacer(minLength: 0)
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.sanAccent.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+            .background(Color.sanSurface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Color.sanHairline, lineWidth: 0.5))
             .padding(.horizontal, 16)
-            .sheet(item: $presentedCoupon) { c in
-                NavigationStack { CouponDetailView(coupon: c) }
-                    .environmentObject(coupons)
-            }
-        }
-    }
-
-    /// Просим оценить приложение после 1-го и каждого 5-го полученного купона.
-    private func bumpRatingPrompt() {
-        redeemCount += 1
-        if redeemCount == 1 || redeemCount % 5 == 0 {
-            Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 900_000_000)
-                requestReview()
-            }
         }
     }
 
@@ -506,10 +444,19 @@ struct VenueDetailView: View {
 
     // MARK: Сегментированный переключатель
 
+    /// Есть ли что показать на вкладке «Отзывы».
+    ///
+    /// Отзывы в Ayant оставляют на КОНКРЕТНОЕ блюдо или услугу, поэтому без
+    /// объектов оценивать нечего, а без отзывов — читать нечего. Вкладка,
+    /// которая гарантированно открывается в пустоту, хуже отсутствующей: она
+    /// обещает содержимое и обманывает. Если объекты есть — вкладка остаётся
+    /// даже без единого отзыва: иначе первый отзыв некому оставить.
+    private var hasReviewsTab: Bool { !venue.items.isEmpty || !venueReviews.isEmpty }
+
     private var segmentedTabs: some View {
         HStack(spacing: 4) {
             tabButton("Публикации", .deals)
-            tabButton("Отзывы", .reviews)
+            if hasReviewsTab { tabButton("Отзывы", .reviews) }
             tabButton("Инфо", .info)
         }
         .padding(4)
@@ -549,7 +496,7 @@ struct VenueDetailView: View {
                 publicationsGrid
             }
         case .reviews:
-            reviewsSection
+            if hasReviewsTab { reviewsSection }
         case .info:
             VStack(alignment: .leading, spacing: 20) {
                 actionRow
@@ -1136,21 +1083,19 @@ struct VenueDetailView: View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Отзывы").font(.headline).padding(.horizontal, 16)
 
-            HStack(alignment: .center, spacing: 20) {
-                VStack(spacing: 2) {
-                    Text(String(format: "%.1f", agg.rating)).font(.system(size: 40, weight: .bold))
-                    StarRatingView(rating: agg.rating, size: 12)
-                    Text("\(agg.count) \(Self.reviewsWord(agg.count))").font(.caption2).foregroundStyle(.secondary)
+            if agg.count > 0 {
+                HStack(alignment: .center, spacing: 20) {
+                    VStack(spacing: 2) {
+                        Text(String(format: "%.1f", agg.rating)).font(.system(size: 40, weight: .bold))
+                        StarRatingView(rating: agg.rating, size: 12)
+                        Text("\(agg.count) \(Self.reviewsWord(agg.count))").font(.caption2).foregroundStyle(.secondary)
+                    }
+                    RatingBreakdownView(breakdown: detail.state.ratingBreakdown)
                 }
-                RatingBreakdownView(breakdown: detail.state.ratingBreakdown)
+                .padding(.horizontal, 16)
             }
-            .padding(.horizontal, 16)
 
-            if venue.items.isEmpty {
-                Text("Отзывы оставляются на конкретные блюда и услуги. Заведение пока не добавило объекты для оценки.")
-                    .font(.caption).foregroundStyle(.secondary)
-                    .padding(.horizontal, 16)
-            } else {
+            if !venue.items.isEmpty {
                 Button {
                     if session.isGuest { guestMessage = GuestGate.review; showGuestPrompt = true }
                     else { activeSheet = .writeReview(nil) }
