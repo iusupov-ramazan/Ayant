@@ -85,26 +85,42 @@ public struct LoyaltyStampEvent: Identifiable, Equatable, Sendable {
     public let goal: Int
     public let rewardIssued: Bool
     public let reward: String
+    /// Имя карты штампов (пусто у безымянной первой).
+    public let cardTitle: String
 
     public init(id: String, venueID: String, venueName: String, stamps: Int, goal: Int,
-                rewardIssued: Bool, reward: String) {
+                rewardIssued: Bool, reward: String, cardTitle: String = "") {
+        self.cardTitle = cardTitle
         self.id = id; self.venueID = venueID; self.venueName = venueName
         self.stamps = stamps; self.goal = goal; self.rewardIssued = rewardIssued; self.reward = reward
     }
 }
 
+/// Карта штампов гостя в одном заведении.
+///
+/// У заведения может быть несколько карт (`StampCards`), поэтому `id` — это
+/// заведение плюс карта. У первой карты `id` по-прежнему равен `venueID`:
+/// так его знают кэш на устройстве и экраны, писавшиеся до нескольких карт.
 public struct LoyaltyCard: Identifiable, Codable, Hashable {
-    public var id: String { venueID }
+    public var id: String { Self.id(venueID: venueID, cardID: cardID) }
     public var venueID: String
     public var venueName: String
     public var stamps: Int = 0            // штампы в текущем круге
     public var completedRounds: Int = 0   // сколько наград уже получено
     public var goal: Int = 6              // штампов до награды (задаёт заведение)
     public var reward: String = "Награда за лояльность"  // что получает гость
+    public var cardID: String = StampCard.defaultID
+    /// Имя карты («Кофе»); пусто — у безымянной первой.
+    public var title: String = ""
+
+    public static func id(venueID: String, cardID: String) -> String {
+        cardID.isEmpty || cardID == StampCard.defaultID ? venueID : "\(venueID)#\(cardID)"
+    }
 
     public init(
         venueID: String, venueName: String, stamps: Int = 0, completedRounds: Int = 0,
-        goal: Int = 6, reward: String = "Награда за лояльность"
+        goal: Int = 6, reward: String = "Награда за лояльность",
+        cardID: String = StampCard.defaultID, title: String = ""
     ) {
         self.venueID = venueID
         self.venueName = venueName
@@ -112,6 +128,21 @@ public struct LoyaltyCard: Identifiable, Codable, Hashable {
         self.completedRounds = completedRounds
         self.goal = goal
         self.reward = reward
+        self.cardID = cardID.isEmpty ? StampCard.defaultID : cardID
+        self.title = title
+    }
+
+    /// Кэш прежних версий не знает `cardID`/`title` — это первая карта.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        venueID = try c.decode(String.self, forKey: .venueID)
+        venueName = try c.decodeIfPresent(String.self, forKey: .venueName) ?? ""
+        stamps = try c.decodeIfPresent(Int.self, forKey: .stamps) ?? 0
+        completedRounds = try c.decodeIfPresent(Int.self, forKey: .completedRounds) ?? 0
+        goal = try c.decodeIfPresent(Int.self, forKey: .goal) ?? 6
+        reward = try c.decodeIfPresent(String.self, forKey: .reward) ?? "Награда за лояльность"
+        cardID = try c.decodeIfPresent(String.self, forKey: .cardID) ?? StampCard.defaultID
+        title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
     }
 }
 

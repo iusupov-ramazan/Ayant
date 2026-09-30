@@ -173,9 +173,33 @@ public struct VenueItem: Identifiable, Hashable, Codable, Sendable {
     public var emoji: String
     public var kind: String   // "food" | "service" | "other"
     public var imageURL: String = ""   // фото объекта (фолбэк — эмодзи)
+    /// Цена в сомах; `nil` — не указана. Приходит из разбора PDF-меню
+    /// (`MenuImport`) или из правки блюда хозяином.
+    public var price: Int? = nil
+    /// Состав / описание из меню.
+    public var details: String = ""
+    /// Раздел меню («Супы», «Напитки»); пусто — без раздела.
+    public var section: String = ""
 
-    public init(id: String, name: String, emoji: String, kind: String, imageURL: String = "") {
+    public init(id: String, name: String, emoji: String, kind: String, imageURL: String = "",
+                price: Int? = nil, details: String = "", section: String = "") {
         self.id = id; self.name = name; self.emoji = emoji; self.kind = kind; self.imageURL = imageURL
+        self.price = price; self.details = details; self.section = section
+    }
+
+    /// Кэш прежних версий не знает цены, описания и раздела — синтезированный
+    /// декодер счёл бы такой объект битым, и вместе с ним не прочиталось бы
+    /// всё заведение.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        emoji = try c.decodeIfPresent(String.self, forKey: .emoji) ?? "🍽"
+        kind = try c.decodeIfPresent(String.self, forKey: .kind) ?? "food"
+        imageURL = try c.decodeIfPresent(String.self, forKey: .imageURL) ?? ""
+        price = try c.decodeIfPresent(Int.self, forKey: .price)
+        details = try c.decodeIfPresent(String.self, forKey: .details) ?? ""
+        section = try c.decodeIfPresent(String.self, forKey: .section) ?? ""
     }
 
     public var kindTitle: String {
@@ -341,6 +365,8 @@ public struct Venue: Identifiable, Hashable {
     public var loyaltyEnabled: Bool = false          // включена ли карта лояльности
     public var loyaltyGoal: Int = 6                   // штампов до награды
     public var loyaltyReward: String = "Награда за лояльность"  // что получает гость
+    public var loyaltyTitle: String = ""              // имя первой карты («Кофе»); пусто — без имени
+    public var extraStampCards: [StampCard] = []      // остальные карты штампов (см. `StampCards`)
     public var couponsEnabled: Bool = true            // принимает ли заведение купоны (по умолчанию да)
     // --- Бонусы САН (баллы заведения, System 1) ---
     public var pointsEnabled: Bool = false            // включены ли баллы САН
@@ -372,7 +398,9 @@ public struct Venue: Identifiable, Hashable {
                 pointsEnabled: Bool = false, pointsMode: String = "flat", pointsFlat: Int = 0,
                 pointsBands: [PointsBand] = [], cashbackPercent: Double = 0,
                 pointsRewards: [PointsReward] = [], pointsExpiryMonths: Int = 6,
-                redeemMode: String = "staffScan", earnCooldownMinutes: Int = 60) {
+                redeemMode: String = "staffScan", earnCooldownMinutes: Int = 60,
+                loyaltyTitle: String = "", extraStampCards: [StampCard] = []) {
+        self.loyaltyTitle = loyaltyTitle; self.extraStampCards = extraStampCards
         self.id = id; self.name = name; self.category = category; self.district = district
         self.address = address; self.phone = phone; self.emoji = emoji
         self.gradient = gradient; self.imageURL = imageURL
@@ -392,6 +420,19 @@ public struct Venue: Identifiable, Hashable {
         self.cashbackPercent = cashbackPercent; self.pointsRewards = pointsRewards
         self.pointsExpiryMonths = pointsExpiryMonths; self.redeemMode = redeemMode
         self.earnCooldownMinutes = earnCooldownMinutes
+    }
+
+    /// Есть ли у заведения такая карта. Первая есть всегда — её прогресс
+    /// показываем, даже когда программа выключена (как и до нескольких карт);
+    /// дополнительная — только пока она активна.
+    public func offersStampCard(_ cardID: String) -> Bool {
+        StampCards.isFirstCard(cardID) || stampCards.contains { $0.id == cardID }
+    }
+
+    /// Карты штампов, которые сейчас принимают штампы; первая — впереди.
+    public var stampCards: [StampCard] {
+        StampCards.active(enabled: loyaltyEnabled, title: loyaltyTitle, goal: loyaltyGoal,
+                          reward: loyaltyReward, extras: extraStampCards)
     }
 
     /// Активен ли платный буст в момент `now`.

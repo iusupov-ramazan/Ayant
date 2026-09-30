@@ -321,6 +321,23 @@
         }
       }
     },
+    "%@ · награда: %@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · reward: %@"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · сыйлык: %@"
+          }
+        }
+      }
+    },
     "%@ %@" : {
       "localizations" : {
         "en" : {
@@ -434,6 +451,7 @@
       }
     },
     "%@, %@, %@" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -456,6 +474,7 @@
       }
     },
     "%@, %@, %lld акций" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -558,6 +577,9 @@
           }
         }
       }
+    },
+    "%lld 🍎 = 1 бонус" : {
+
     },
     "%lld адреса" : {
       "localizations" : {
@@ -806,6 +828,9 @@
         }
       }
     },
+    "%lld линий = 1 бонус" : {
+
+    },
     "%lld м" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -889,12 +914,18 @@
         }
       }
     },
-    "%lld совпадений = 1 бонус · до %lld/день" : {
+    "%lld совпадений = 1 бонус · до %lld в день" : {
       "localizations" : {
-        "ru" : {
+        "en" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$lld совпадений = 1 бонус · до %2$lld/день"
+            "state" : "translated",
+            "value" : "%lld matches = 1 bonus · up to %lld a day"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld дал келүү = 1 бонус · күнүнө %lld чейин"
           }
         }
       }
@@ -937,6 +968,9 @@
         }
       }
     },
+    "%lld/100" : {
+
+    },
     "%lld+ сом" : {
       "localizations" : {
         "en" : {
@@ -954,6 +988,7 @@
       }
     },
     "%lldд" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1019,6 +1054,7 @@
       }
     },
     "+%lld / линия" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1030,6 +1066,16 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "+%lld / сап"
+          }
+        }
+      }
+    },
+    "+%lld %@" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "+%1$lld %2$@"
           }
         }
       }
@@ -1116,10 +1162,33 @@
         }
       }
     },
-    "+1 / %lld совпадений" : {
+    "+1 / %lld линий" : {
+
+    },
+    "+1 / %lld совпадений · до %lld в день" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+1 / %lld matches · up to %lld a day"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+1 / %lld дал келүү · күнүнө %lld чейин"
+          }
+        }
+      }
+    },
+    "+1 / %lld яблок" : {
+
+    },
+    "+1 / плитка от %lld" : {
 
     },
     "+1 / яблоко" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1131,6 +1200,23 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "+1 / алма"
+          }
+        }
+      }
+    },
+    "+1 штамп · %@ ✓" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+1 stamp · %@ ✓"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+1 штамп · %@ ✓"
           }
         }
       }
@@ -1167,6 +1253,9 @@
           }
         }
       }
+    },
+    "×%lld" : {
+
     },
     "= %lld сом скидки" : {
       "localizations" : {
@@ -1444,6 +1533,7 @@
       }
     },
     "1 🍎 = 1 бонус · до %lld/день" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1492,6 +1582,7 @@
       }
     },
     "1 линия = %lld бонусов · до %lld/день" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1753,6 +1844,12 @@
         }
       }
     },
+    "2048" : {
+
+    },
+    "2048! 🎉" : {
+
+    },
     "Apple Wallet" : {
       "localizations" : {
         "en" : {
@@ -1965,6 +2062,7 @@
       }
     },
     "Payme / Click" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1992,6 +2090,56 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "PDF жүктөлдү"
+          }
+        }
+      }
+    },
+    "PDF защищён паролем. Снимите защиту и попробуйте снова." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The PDF is password-protected. Remove the protection and try again."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PDF сырсөз менен корголгон. Коргоону алып, кайра аракет кылыңыз."
+          }
+        }
+      }
+    },
+    "PDF, Excel (.xlsx) или CSV. Всё читается на телефоне — бесплатно и без интернета. Лучше всего — меню с текстом или таблица; сканы тоже подойдут, если текст на них чёткий." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PDF, Excel (.xlsx) or CSV. Everything is read on your phone — free and offline. Menus with real text or spreadsheets work best; scans work too if the text is sharp."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PDF, Excel (.xlsx) же CSV. Баары телефондо окулат — акысыз жана интернетсиз. Тексти бар меню же таблица жакшы окулат; сканер да ылайыктуу, эгер тексти так болсо."
+          }
+        }
+      }
+    },
+    "PDF, Excel или CSV — блюда, цены и описания заполнятся сами" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PDF, Excel or CSV — dishes, prices and descriptions fill in by themselves"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PDF, Excel же CSV — тамактар, баалар жана сүрөттөмөлөр өзү толот"
           }
         }
       }
@@ -2255,6 +2403,7 @@
       }
     },
     "активных акций" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -2335,7 +2484,28 @@
         }
       }
     },
+    "Акции видят гости в ленте. Скидку заведение применяет само, на кассе." : {
+
+    },
+    "Акции, которые гости видят в ленте" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Promotions guests see in the feed"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Коноктор лентада көргөн акциялар"
+          }
+        }
+      }
+    },
     "Акция" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -2350,9 +2520,6 @@
           }
         }
       }
-    },
-    "Акция из поста Instagram" : {
-
     },
     "Аналитика" : {
       "localizations" : {
@@ -2581,6 +2748,9 @@
         }
       }
     },
+    "Баллы САН — свои у каждого заведения: их начисляет само заведение за покупки, и потратить их можно только там же.\n\nБонусы — общий кошелёк приложения: копятся в играх и за время в приложении, тратятся на купоны." : {
+
+    },
     "Баллы САН в каждом заведении" : {
       "localizations" : {
         "en" : {
@@ -2680,6 +2850,9 @@
         }
       }
     },
+    "Без ограничения — купон можно купить сколько угодно раз." : {
+
+    },
     "Без ответа" : {
       "localizations" : {
         "en" : {
@@ -2692,6 +2865,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Жоопсуз"
+          }
+        }
+      }
+    },
+    "без цены" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "no price"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "баасыз"
           }
         }
       }
@@ -2726,6 +2916,22 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "Мөөнөтсүз — %lld сом"
+          }
+        }
+      }
+    },
+    "Бизнес" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Business"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Бизнес"
           }
         }
       }
@@ -2780,7 +2986,24 @@
         }
       }
     },
+    "Блюда и услуги, которые гости могут оценить" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dishes and services guests can rate"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Коноктор баалай турган тамактар жана кызматтар"
+          }
+        }
+      }
+    },
     "Блюда и услуги, которые гости смогут оценивать отдельно." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -2844,6 +3067,22 @@
         }
       }
     },
+    "бонусов сегодня: ещё %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "bonuses left today: %lld"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "бүгүн дагы %lld бонус"
+          }
+        }
+      }
+    },
     "Бонусы" : {
       "localizations" : {
         "en" : {
@@ -2876,6 +3115,9 @@
         }
       }
     },
+    "Бонусы — валюта приложения: гость копит их в играх и за время в приложении, а не покупками у вас.\n\nПоэтому цену купона стоит ставить как за подарок постоянному гостю, а не как за товар: выпуск ограничен вами, и больше выпущенного не купят." : {
+
+    },
     "Бонусы ждут 🎁" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -2906,6 +3148,22 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "Бонустарды тиркеменин ичинде купондорго алмаштырса болот. Бул купондор өнөктөш мекемелерде арзандатуу берет."
+          }
+        }
+      }
+    },
+    "бонусы на сегодня собраны" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "today's bonuses collected"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "бүгүнкү бонустар чогултулду"
           }
         }
       }
@@ -3051,6 +3309,9 @@
         }
       }
     },
+    "В продаже" : {
+
+    },
     "В своём профиле скопируйте уникальную ссылку и отправьте её другу. Как только он зарегистрируется, и вы, и ваш друг получите приветственные бонусы." : {
       "extractionState" : "stale",
       "localizations" : {
@@ -3064,6 +3325,23 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "Профилиңизден уникалдуу шилтемени көчүрүп, досуңузга жөнөтүңүз. Ал катталары менен сиз да, досуңуз да саламдашуу бонустарын аласыздар."
+          }
+        }
+      }
+    },
+    "В файле не нашлось блюд. Проверьте, что это меню." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No dishes found in the file. Check that it's a menu."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Файлдан тамак табылган жок. Бул меню экенин текшериңиз."
           }
         }
       }
@@ -3182,6 +3460,25 @@
         }
       }
     },
+    "Ваши заведения" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your venues"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сиздин мекемелер"
+          }
+        }
+      }
+    },
+    "Ваши заведения · %lld" : {
+
+    },
     "Ваши кампании" : {
       "localizations" : {
         "en" : {
@@ -3264,7 +3561,27 @@
         }
       }
     },
+    "Вернуть в продажу" : {
+
+    },
+    "Вернуться в приложение гостя" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Back to the guest app"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Коноктун колдонмосуна кайтуу"
+          }
+        }
+      }
+    },
     "Вернуться в режим пользователя" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -3363,6 +3680,9 @@
         }
       }
     },
+    "Включено — гость спишет баллы сам, в любой момент и без сотрудника; вам останется выдать награду. Выключено — списание только через скан QR гостя" : {
+
+    },
     "Включены" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -3429,6 +3749,7 @@
       }
     },
     "Включите, чтобы гости копили штампы за визиты и получали награду." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -4131,6 +4452,22 @@
     "Выберите пост — заголовок, описание и фото подставятся в акцию. Перед публикацией их можно поправить." : {
 
     },
+    "Выбрано" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Selected"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Тандалды"
+          }
+        }
+      }
+    },
     "Выбрать" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -4148,6 +4485,58 @@
         }
       }
     },
+    "Выбрать все" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select all"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Баарын тандоо"
+          }
+        }
+      }
+    },
+    "Выбрать другое заведение" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose another venue"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Башка мекемени тандоо"
+          }
+        }
+      }
+    },
+    "Выбрать другой файл" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose another file"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Башка файл тандоо"
+          }
+        }
+      }
+    },
+    "Выбрать или добавить заведение" : {
+
+    },
     "Выбрать точку на карте" : {
       "localizations" : {
         "en" : {
@@ -4160,6 +4549,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Картадан чекит тандоо"
+          }
+        }
+      }
+    },
+    "Выбрать файл" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose file"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Файл тандоо"
           }
         }
       }
@@ -4245,6 +4650,7 @@
       }
     },
     "Выключено — награду сканирует сотрудник по QR гостя" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -4277,7 +4683,14 @@
         }
       }
     },
+    "Выключите на ремонт или отпуск — данные сохранятся" : {
+
+    },
+    "Выпустите купон — гость купит его за бонусы, которые заработал в приложении, и придёт к вам." : {
+
+    },
     "Галочка повышает доверие гостей." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -4341,6 +4754,22 @@
         }
       }
     },
+    "Гости перестанут видеть эту карту и собранные на ней штампы." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guests will no longer see this card or the stamps collected on it."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Коноктор бул картаны жана андагы штамптарды көрбөй калышат."
+          }
+        }
+      }
+    },
     "Гости смогут получать и гасить купоны на ваши акции. Рекомендуем оставить включённым — купоны заметно повышают посещаемость." : {
       "localizations" : {
         "en" : {
@@ -4389,7 +4818,75 @@
         }
       }
     },
+    "Гость копит бонусы в приложении и обменивает их на этот купон. Цену выбираете вы — купон вы и отдаёте." : {
+
+    },
+    "Гость показывает карту на кассе, сотрудник сканирует — +1 штамп. На %lld-м штампе гость получает «%@»." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The guest shows the card at the counter, staff scan it — +1 stamp. On stamp %lld the guest gets “%@”."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Конок картаны кассада көрсөтөт, кызматкер сканерлейт — +1 штамп. %lld-штампта конок «%@» алат."
+          }
+        }
+      }
+    },
+    "Гость показывает карту на кассе, сотрудник сканирует и выбирает, какой карте засчитать штамп." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The guest shows the card at the counter; staff scan it and choose which card gets the stamp."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Конок картаны кассада көрсөтөт, кызматкер сканерлеп, штампты кайсы картага коюуну тандайт."
+          }
+        }
+      }
+    },
+    "Гость показывает одну и ту же карту на кассе. Если карт несколько, после скана сотрудник выбирает, какой начислить штамп." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The guest shows the same card at the counter. With several cards, staff choose which one gets the stamp after the scan."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Конок кассада бир эле картаны көрсөтөт. Карта бир нечеше болсо, сканерден кийин кызматкер штампты кайсы картага коюуну тандайт."
+          }
+        }
+      }
+    },
+    "Гость получает штамп за визит: сотрудник сканирует QR его карты и, если карт несколько, выбирает нужную." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The guest gets a stamp per visit: staff scan their card QR and, if there are several cards, pick the right one."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Конок ар бир келүүгө штамп алат: кызматкер картанын QR кодун сканерлеп, карта бир нечеше болсо, керектүүсүн тандайт."
+          }
+        }
+      }
+    },
     "Гость получает штамп за визит: сотрудник сканирует QR его карты. На %lld-м штампе — «%@»." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -4412,6 +4909,7 @@
       }
     },
     "Гость получает штамп за каждое погашение вашего купона/акции. На %lld-м штампе ему автоматически выдаётся купон «%@», который он показывает вам." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -4434,6 +4932,7 @@
       }
     },
     "Гость получает штамп за каждое погашение купона у вас. На %lld-м штампе — «%@» купоном." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -4666,6 +5165,9 @@
         }
       }
     },
+    "Два разных счёта" : {
+
+    },
     "Действует" : {
       "localizations" : {
         "en" : {
@@ -4681,6 +5183,9 @@
           }
         }
       }
+    },
+    "Действует до" : {
+
     },
     "Действует до %@" : {
       "localizations" : {
@@ -4798,6 +5303,7 @@
       }
     },
     "Для какого заведения?" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -4945,6 +5451,7 @@
       }
     },
     "До 100 символов — пусто, чтобы убрать" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -4993,6 +5500,7 @@
       }
     },
     "Добавить акцию" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5052,6 +5560,22 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "Мекемени азыр кошуу"
+          }
+        }
+      }
+    },
+    "Добавить карту" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add card"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Карта кошуу"
           }
         }
       }
@@ -5266,6 +5790,9 @@
           }
         }
       }
+    },
+    "Ещё" : {
+
     },
     "Ещё %lld %@ — и «%@» в подарок." : {
       "extractionState" : "stale",
@@ -5490,6 +6017,7 @@
       }
     },
     "Заведение на проверке. Появится в ленте после одобрения." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5539,6 +6067,7 @@
       }
     },
     "Заведение отклонено. Отредактируйте данные и сохраните повторно." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5555,6 +6084,7 @@
       }
     },
     "Заведение проверено" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5768,8 +6298,27 @@
         }
       }
     },
+    "Загружаем остальные карты заведения — добавить новую можно будет через минуту." : {
+
+    },
     "Загружаем посты…" : {
 
+    },
+    "Загрузите меню — найдём блюда, цены и описания" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Upload your menu — we'll find dishes, prices and descriptions"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Менюну жүктөңүз — тамактарды, бааларды жана сүрөттөмөлөрдү табабыз"
+          }
+        }
+      }
     },
     "Загрузить PDF" : {
       "localizations" : {
@@ -5932,6 +6481,9 @@
         }
       }
     },
+    "Заново" : {
+
+    },
     "Запланирована" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -5945,6 +6497,23 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "Пландалган"
+          }
+        }
+      }
+    },
+    "Заполнить" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fill in"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Толтуруу"
           }
         }
       }
@@ -5966,7 +6535,25 @@
         }
       }
     },
+    "Запросить" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Request"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Суроо"
+          }
+        }
+      }
+    },
     "Запросить «Проверено»" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5978,6 +6565,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "«Текшерилген» суроо"
+          }
+        }
+      }
+    },
+    "Запросить «Проверено»?" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Request “Verified”?"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "«Текшерилген» белгисин суройсузбу?"
           }
         }
       }
@@ -6191,6 +6794,9 @@
           }
         }
       }
+    },
+    "Из Instagram" : {
+
     },
     "Извините за ожидание" : {
       "extractionState" : "stale",
@@ -6596,6 +7202,9 @@
         }
       }
     },
+    "Исправьте данные в «Изменить данные заведения» и сохраните — отправим на проверку снова." : {
+
+    },
     "История" : {
       "localizations" : {
         "en" : {
@@ -6643,6 +7252,9 @@
           }
         }
       }
+    },
+    "Каждая новая плитка от %lld = 1 бонус" : {
+
     },
     "Каждый день до 12:00\nОдин напиток на гостя" : {
       "localizations" : {
@@ -6758,6 +7370,22 @@
         }
       }
     },
+    "Какой карте штамп?" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Which card gets the stamp?"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Штамп кайсы картага?"
+          }
+        }
+      }
+    },
     "Капучино в подарок" : {
       "localizations" : {
         "en" : {
@@ -6770,6 +7398,22 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "Капучино белекке"
+          }
+        }
+      }
+    },
+    "Карта %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Card %lld"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld-карта"
           }
         }
       }
@@ -6927,6 +7571,22 @@
         }
       }
     },
+    "Когда карт несколько, дайте каждой название — по нему сотрудник выбирает карту на кассе." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "With several cards, give each a name — staff pick the card by it at the counter."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Карта бир нечеше болсо, ар бирине ат бериңиз — кызматкер кассада картаны ошол боюнча тандайт."
+          }
+        }
+      }
+    },
     "Код купона" : {
       "localizations" : {
         "en" : {
@@ -6958,6 +7618,26 @@
           }
         }
       }
+    },
+    "Короткая строка на карточке заведения — до 100 символов" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A short line on the venue card — up to 100 characters"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Мекеменин карточкасындагы кыска сап — 100 белгиге чейин"
+          }
+        }
+      }
+    },
+    "Короткая строка на карточке заведения: гости видят её в ленте." : {
+
     },
     "Кофейня" : {
       "extractionState" : "stale",
@@ -7208,6 +7888,22 @@
         }
       }
     },
+    "Купоны за бонусы" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Coupons for bonuses"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Бонуска купондор"
+          }
+        }
+      }
+    },
     "Купоны на акции заведений" : {
       "localizations" : {
         "en" : {
@@ -7340,6 +8036,9 @@
         }
       }
     },
+    "лимит бонусов на сегодня" : {
+
+    },
     "Линий: %lld" : {
       "localizations" : {
         "en" : {
@@ -7422,6 +8121,19 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Лоялдуулук"
+          }
+        }
+      }
+    },
+    "лучшая %lld" : {
+
+    },
+    "Лучшая плитка %lld, очков: %lld → +%lld %@" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Лучшая плитка %1$lld, очков: %2$lld → +%3$lld %4$@"
           }
         }
       }
@@ -7523,7 +8235,72 @@
         }
       }
     },
-    "Меняй соседние фишки местами: 4 в ряд — полоска, 5 — бомба" : {
+    "Меню" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Menu"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Меню"
+          }
+        }
+      }
+    },
+    "Меню из PDF" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Menu from PDF"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PDF'тен меню"
+          }
+        }
+      }
+    },
+    "Меню из файла" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Menu from a file"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Файлдан меню"
+          }
+        }
+      }
+    },
+    "Меню с текстом — секунды, сканы — около секунды на страницу." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Text menus take seconds, scans about a second per page."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Тексти бар меню — бир нече секунд, сканерлер — бир бетке болжол менен бир секунд."
+          }
+        }
+      }
+    },
+    "Меняй соседние камни местами: 4 в ряд — полоска, 5 — бомба" : {
 
     },
     "Местоположение" : {
@@ -7603,6 +8380,22 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "Модерация"
+          }
+        }
+      }
+    },
+    "Модерация проверит реквизиты — заполните их заранее, так быстрее." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Moderators will check your business details — fill them in first, it's faster."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Модерация реквизиттерди текшерет — алдын ала толтуруңуз, ошондо тезирээк болот."
           }
         }
       }
@@ -7737,7 +8530,6 @@
       }
     },
     "На модерации" : {
-      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -7820,6 +8612,7 @@
       }
     },
     "на сегодня всё" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -8066,6 +8859,7 @@
       }
     },
     "Награда: %@" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -8173,6 +8967,25 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Каалаган сунушту бул жерге сактоо үчүн кыстырманы басыңыз."
+          }
+        }
+      }
+    },
+    "Нажмите на акцию, чтобы изменить. Удержите — пауза, копия, удаление." : {
+
+    },
+    "Нажмите на блюдо, чтобы добавить фото или поправить цену." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tap a dish to add a photo or fix the price."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сүрөт кошуу же бааны оңдоо үчүн тамакты басыңыз."
           }
         }
       }
@@ -8387,6 +9200,28 @@
         }
       }
     },
+    "Например, 50" : {
+
+    },
+    "Например, 350" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "For example, 350"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Мисалы, 350"
+          }
+        }
+      }
+    },
+    "Например, 500" : {
+
+    },
     "Например, Sierra Coffee" : {
       "localizations" : {
         "en" : {
@@ -8399,6 +9234,73 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "Мисалы, Sierra Coffee"
+          }
+        }
+      }
+    },
+    "Например, бесплатный капучино" : {
+
+    },
+    "Например: Кофе" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "For example: Coffee"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Мисалы: Кофе"
+          }
+        }
+      }
+    },
+    "Например: Лагман" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "For example: Lagman"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Мисалы: Лагман"
+          }
+        }
+      }
+    },
+    "Например: суп дня — борщ" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "For example: soup of the day — borscht"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Мисалы: күндүн шорпосу — борщ"
+          }
+        }
+      }
+    },
+    "Например: Супы" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "For example: Soups"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Мисалы: Шорполор"
           }
         }
       }
@@ -8604,6 +9506,57 @@
         }
       }
     },
+    "Нашли %lld позиций" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Found %lld items"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld позиция табылды"
+          }
+        }
+      }
+    },
+    "Не больше %lld карт у заведения." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A venue can have up to %lld cards."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Мекемеде %lld картадан ашпайт."
+          }
+        }
+      }
+    },
+    "Не в продаже" : {
+
+    },
+    "Не добавлять" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Don't add"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Кошпоо"
+          }
+        }
+      }
+    },
     "Не запрошена" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -8654,6 +9607,7 @@
       }
     },
     "Не подтверждено" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -8817,6 +9771,23 @@
         }
       }
     },
+    "Не удалось открыть файл." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't open the file."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Файлды ачуу мүмкүн болгон жок."
+          }
+        }
+      }
+    },
     "Не удалось отправить ответ. Проверьте соединение." : {
       "extractionState" : "stale",
       "localizations" : {
@@ -8851,6 +9822,23 @@
         }
       }
     },
+    "Не удалось прочитать меню. Попробуйте ещё раз или выберите другой файл." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't read the menu. Try again or choose another file."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Менюну окуу мүмкүн болгон жок. Кайра аракет кылыңыз же башка файл тандаңыз."
+          }
+        }
+      }
+    },
     "Не удалось прочитать фото" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -8880,6 +9868,23 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "Сервер менен синхрондоштуруу мүмкүн болгон жок."
+          }
+        }
+      }
+    },
+    "Не удалось скачать PDF. Проверьте интернет или выберите файл." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't download the PDF. Check the internet or choose a file."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PDF жүктөлгөн жок. Интернетти текшериңиз же файл тандаңыз."
           }
         }
       }
@@ -9165,6 +10170,40 @@
         }
       }
     },
+    "Нет соединения с интернетом." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No internet connection."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Интернет байланышы жок."
+          }
+        }
+      }
+    },
+    "Ничего не выбрано" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nothing selected"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Эч нерсе тандалган жок"
+          }
+        }
+      }
+    },
     "Ничего не нашлось" : {
       "localizations" : {
         "en" : {
@@ -9180,6 +10219,9 @@
           }
         }
       }
+    },
+    "Новая акция" : {
+
     },
     "Новая кампания" : {
       "localizations" : {
@@ -9377,6 +10419,12 @@
         }
       }
     },
+    "Новый купон" : {
+
+    },
+    "Новый купон проходит модерацию — он появится у гостей после проверки." : {
+
+    },
     "Новый объект" : {
       "localizations" : {
         "en" : {
@@ -9556,6 +10604,23 @@
         }
       }
     },
+    "Обновить цены и добавить новые блюда из файла" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Update prices and add new dishes from a file"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Файлдан бааларды жаңыртып, жаңы тамактарды кошуу"
+          }
+        }
+      }
+    },
     "Обновлено %@" : {
 
     },
@@ -9592,6 +10657,7 @@
       }
     },
     "Объекты для отзывов" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -9623,6 +10689,15 @@
           }
         }
       }
+    },
+    "Обычно в течение суток. После одобрения заведение появится в ленте." : {
+
+    },
+    "Ограничить количество" : {
+
+    },
+    "Ограничить сроком" : {
+
     },
     "Одинаково за любой чек, до 10 000" : {
       "localizations" : {
@@ -9786,6 +10861,9 @@
           }
         }
       }
+    },
+    "Опубликовано" : {
+
     },
     "Опубликовать" : {
       "localizations" : {
@@ -10096,6 +11174,9 @@
         }
       }
     },
+    "Отклонён" : {
+
+    },
     "Отклонено" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -10112,6 +11193,9 @@
           }
         }
       }
+    },
+    "Отклонено модерацией" : {
+
     },
     "Отключить аккаунт" : {
 
@@ -10273,6 +11357,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Кампанияны жокко чыгаруу"
+          }
+        }
+      }
+    },
+    "Отправить запрос" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Send request"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Суроо жөнөтүү"
           }
         }
       }
@@ -10539,6 +11639,25 @@
         }
       }
     },
+    "Первая акция появится здесь плиткой — как пост в Instagram." : {
+
+    },
+    "Перед сохранением вы проверите список: поправите цены и названия, уберёте лишнее. Фото к каждому блюду можно добавить потом, в «Меню»." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You'll review the list before saving: fix prices and names, remove extras. Add a photo to each dish later, in “Menu”."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сактоодон мурун тизмени текшересиз: бааларды жана аттарды оңдоп, ашыгын алып саласыз. Ар бир тамакка сүрөттү кийин «Меню» бөлүмүнөн кошсоңуз болот."
+          }
+        }
+      }
+    },
     "Перейти без сохранения" : {
       "localizations" : {
         "en" : {
@@ -10556,6 +11675,7 @@
       }
     },
     "Период" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -10587,6 +11707,9 @@
           }
         }
       }
+    },
+    "плитка %lld — бонус" : {
+
     },
     "По заведениям" : {
       "localizations" : {
@@ -10846,6 +11969,23 @@
         }
       }
     },
+    "Поддерживаются PDF, Excel (.xlsx) и CSV." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PDF, Excel (.xlsx) and CSV are supported."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PDF, Excel (.xlsx) жана CSV колдоого алынат."
+          }
+        }
+      }
+    },
     "Поддержка" : {
       "localizations" : {
         "en" : {
@@ -10911,6 +12051,7 @@
       }
     },
     "Подключение платёжных методов появится позже." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -11141,6 +12282,23 @@
         }
       }
     },
+    "Пока нет" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "None yet"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Азырынча жок"
+          }
+        }
+      }
+    },
     "Пока нет активных кампаний. Запустите первую — и заведение начнёт получать больше просмотров." : {
       "localizations" : {
         "en" : {
@@ -11172,6 +12330,9 @@
           }
         }
       }
+    },
+    "Пока нет акций" : {
+
     },
     "Пока нет баллов" : {
       "localizations" : {
@@ -11222,6 +12383,7 @@
       }
     },
     "Пока нет объектов." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -11286,6 +12448,7 @@
       }
     },
     "Пока нет предложений. Добавьте, чтобы привлекать гостей." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -11313,6 +12476,39 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "Азырынча бир да диапазон жок — конок эч нерсе албайт."
+          }
+        }
+      }
+    },
+    "Пока пусто. Добавьте первое блюдо или услугу." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nothing here yet. Add your first dish or service."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Азырынча бош. Биринчи тамакты же кызматты кошуңуз."
+          }
+        }
+      }
+    },
+    "Пока пусто. Загрузите PDF меню или добавьте первое блюдо вручную." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nothing here yet. Upload a PDF menu or add the first dish by hand."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Азырынча бош. PDF меню жүктөңүз же биринчи тамакты кол менен кошуңуз."
           }
         }
       }
@@ -11532,6 +12728,22 @@
         }
       }
     },
+    "Показывайте QR сотруднику при каждом визите — он сканирует его и выбирает, какой карте засчитать штамп. На каждой карте своя награда." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show the QR to staff on every visit — they scan it and choose which card gets the stamp. Each card has its own reward."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ар бир келгенде QR кодду кызматкерге көрсөтүңүз — ал сканерлеп, штампты кайсы картага коюуну тандайт. Ар бир картанын өз сыйлыгы бар."
+          }
+        }
+      }
+    },
     "Показывайте свой QR на кассе в заведениях с баллами САН — карта заведения появится в кошельке после первого начисления." : {
       "localizations" : {
         "en" : {
@@ -11563,6 +12775,9 @@
           }
         }
       }
+    },
+    "Показывать гостям" : {
+
     },
     "Политика конфиденциальности" : {
       "localizations" : {
@@ -11658,6 +12873,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Түшүнүктүү"
+          }
+        }
+      }
+    },
+    "Попробовать снова" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try again"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Кайра аракет кылуу"
           }
         }
       }
@@ -11780,6 +13011,9 @@
           }
         }
       }
+    },
+    "Правка текста и цены модерацию не сбрасывает." : {
+
     },
     "Прайс-лист" : {
       "localizations" : {
@@ -12045,6 +13279,7 @@
       }
     },
     "Проверено" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -12093,6 +13328,22 @@
         }
       }
     },
+    "Проверьте цены и названия — нажмите на блюдо, чтобы поправить." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Check prices and names — tap a dish to fix it."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Бааларды жана аттарды текшериңиз — оңдоо үчүн тамакты басыңыз."
+          }
+        }
+      }
+    },
     "Проверяем код…" : {
       "localizations" : {
         "en" : {
@@ -12110,6 +13361,7 @@
       }
     },
     "Программа лояльности" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -12125,7 +13377,11 @@
         }
       }
     },
+    "Продвигать заведение" : {
+
+    },
     "Продвигать это заведение" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -12222,6 +13478,7 @@
       }
     },
     "Просмотры" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -12317,6 +13574,22 @@
         }
       }
     },
+    "Пусто — цена не указана" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Empty — no price"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Бош — баасы көрсөтүлгөн эмес"
+          }
+        }
+      }
+    },
     "Пустой код купона." : {
       "extractionState" : "stale",
       "localizations" : {
@@ -12334,6 +13607,22 @@
         }
       }
     },
+    "Раздел меню" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Menu section"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Меню бөлүмү"
+          }
+        }
+      }
+    },
     "Размер списка" : {
       "localizations" : {
         "en" : {
@@ -12346,6 +13635,26 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "Тизменин өлчөмү"
+          }
+        }
+      }
+    },
+    "Разобрали" : {
+
+    },
+    "Разобрать загруженное меню" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Read the uploaded menu"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Жүктөлгөн менюну окуу"
           }
         }
       }
@@ -12478,6 +13787,22 @@
         }
       }
     },
+    "Режим пользователя" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "User mode"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Колдонуучу режими"
+          }
+        }
+      }
+    },
     "Рейтинг" : {
       "localizations" : {
         "en" : {
@@ -12510,7 +13835,24 @@
         }
       }
     },
+    "Реквизиты" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Business details"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Реквизиттер"
+          }
+        }
+      }
+    },
     "Реквизиты и контакты" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -12753,6 +14095,9 @@
         }
       }
     },
+    "Свайп сдвигает поле, одинаковые плитки сливаются" : {
+
+    },
     "Свайпай, чтобы поворачивать" : {
       "localizations" : {
         "en" : {
@@ -12898,6 +14243,9 @@
         }
       }
     },
+    "сегодня +%lld" : {
+
+    },
     "Сегодня в избранном" : {
       "localizations" : {
         "en" : {
@@ -12931,6 +14279,7 @@
       }
     },
     "сегодня ещё %lld" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -12947,6 +14296,7 @@
       }
     },
     "Сегодняшний специал" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -12961,6 +14311,9 @@
           }
         }
       }
+    },
+    "Сейчас гости видят заведение в ленте." : {
+
     },
     "Сервер отклонил сохранение: у аккаунта нет прав на это заведение. Данные видны только на этом устройстве." : {
       "localizations" : {
@@ -13053,6 +14406,7 @@
       }
     },
     "Сканировать купоны гостей" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -13064,6 +14418,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Конактардын купондорун скандоо"
+          }
+        }
+      }
+    },
+    "Скачиваем PDF…" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Downloading PDF…"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PDF жүктөлүүдө…"
           }
         }
       }
@@ -13215,6 +14586,9 @@
         }
       }
     },
+    "Сколько выпустить" : {
+
+    },
     "Скопировано" : {
       "localizations" : {
         "en" : {
@@ -13262,6 +14636,29 @@
           }
         }
       }
+    },
+    "Скоро" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Soon"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Жакында"
+          }
+        }
+      }
+    },
+    "Скрыто от гостей" : {
+
+    },
+    "Скрыто: заведения и его акций нет в ленте и поиске." : {
+
     },
     "Скрыть QR" : {
       "localizations" : {
@@ -13412,6 +14809,25 @@
         }
       }
     },
+    "Снять все" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deselect all"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Баарын алып салуу"
+          }
+        }
+      }
+    },
+    "Снять с продажи" : {
+
+    },
     "Создать аккаунт" : {
       "localizations" : {
         "en" : {
@@ -13472,6 +14888,22 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "Коноктордго акция жөнүндө билдирме менен кабарлаңыз."
+          }
+        }
+      }
+    },
+    "Состав или пара слов о блюде" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ingredients or a few words about the dish"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Курамы же тамак жөнүндө эки ооз сөз"
           }
         }
       }
@@ -13574,6 +15006,23 @@
         }
       }
     },
+    "Сохранить %lld в меню" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save %lld to menu"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Менюга %lld сактоо"
+          }
+        }
+      }
+    },
     "Сохранить как черновик" : {
       "localizations" : {
         "en" : {
@@ -13591,6 +15040,7 @@
       }
     },
     "Сохранить специал" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -13702,6 +15152,9 @@
           }
         }
       }
+    },
+    "Специал дня" : {
+
     },
     "специальные и ограниченные предложения." : {
       "localizations" : {
@@ -13923,6 +15376,7 @@
       }
     },
     "Способ оплаты" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -13937,6 +15391,9 @@
           }
         }
       }
+    },
+    "Срок" : {
+
     },
     "Срок сгорания" : {
       "localizations" : {
@@ -14321,6 +15778,7 @@
 
     },
     "У вас есть синяя галочка." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -14386,6 +15844,38 @@
         }
       }
     },
+    "У заведения включены баллы САН — пока они включены, штампы не начисляются. Механика лояльности одна: либо баллы, либо штампы." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This venue has SAN points on — while they are on, stamps are not awarded. A venue runs one loyalty mechanic: points or stamps."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Мекемеде САН упайлары күйгүзүлгөн — алар күйүп турганда штамптар берилбейт. Лоялдуулуктун бир гана механикасы: же упайлар, же штамптар."
+          }
+        }
+      }
+    },
+    "У заведения несколько карт — выберите, за что гость платит сейчас." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This venue has several cards — choose what the guest is paying for now."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Мекемеде бир нече карта бар — конок азыр эмне үчүн төлөп жатканын тандаңыз."
+          }
+        }
+      }
+    },
     "У заведения пока нет объектов для отзыва. Оценить можно конкретное блюдо или услугу — попросите заведение добавить их." : {
       "localizations" : {
         "en" : {
@@ -14398,6 +15888,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Мекемеде азырынча пикир калтыруу үчүн объекттер жок. Белгилүү тамакка же кызматка баа берсе болот — мекемеден кошууну сураныңыз."
+          }
+        }
+      }
+    },
+    "У каждой карты должна быть награда." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Every card needs a reward."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ар бир картанын сыйлыгы болушу керек."
           }
         }
       }
@@ -14446,6 +15952,22 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "«Жагат» белгисин алып салуу"
+          }
+        }
+      }
+    },
+    "Убрать специал" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remove special"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сунушту алып салуу"
           }
         }
       }
@@ -14562,6 +16084,38 @@
         }
       }
     },
+    "Удалить карту" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete card"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Картаны өчүрүү"
+          }
+        }
+      }
+    },
+    "Удалить карту?" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete card?"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Картаны өчүрөсүзбү?"
+          }
+        }
+      }
+    },
     "Удалить награду" : {
       "localizations" : {
         "en" : {
@@ -14577,6 +16131,25 @@
           }
         }
       }
+    },
+    "Уже есть в меню: %lld — у них обновятся цена и описание, фото и отзывы останутся." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Already on the menu: %lld — their price and description will update; photos and reviews stay."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Менюда бар: %lld — баасы жана сүрөттөмөсү жаңырат, сүрөттөр жана пикирлер калат."
+          }
+        }
+      }
+    },
+    "Уже куплено: %lld. Меньше этого числа выпуск не опустится." : {
+
     },
     "Управляйте своим бизнесом" : {
       "localizations" : {
@@ -14595,14 +16168,17 @@
       }
     },
     "Уровень %lld" : {
-
-    },
-    "Уровень %lld, очков: %lld → +%lld бонусов" : {
       "localizations" : {
-        "ru" : {
+        "en" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Уровень %1$lld, очков: %2$lld → +%3$lld бонусов"
+            "state" : "translated",
+            "value" : "Level %lld"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld-деңгээл"
           }
         }
       }
@@ -14623,6 +16199,9 @@
         }
       }
     },
+    "Условия — необязательно" : {
+
+    },
     "Услуга" : {
       "localizations" : {
         "en" : {
@@ -14635,6 +16214,57 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Кызмат"
+          }
+        }
+      }
+    },
+    "Файл больше 60 МБ. Сожмите его или загрузите меню по частям." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The file is over 60 MB. Compress it or upload the menu in parts."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Файл 60 МБдан чоң. Аны кичирейтиңиз же менюну бөлүк-бөлүк жүктөңүз."
+          }
+        }
+      }
+    },
+    "Файл не открывается как Excel. Сохраните его как .xlsx или CSV." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The file doesn't open as Excel. Save it as .xlsx or CSV."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Файл Excel катары ачылбайт. Аны .xlsx же CSV катары сактаңыз."
+          }
+        }
+      }
+    },
+    "Файл не открывается как PDF. Попробуйте сохранить его заново." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The file doesn't open as a PDF. Try saving it again."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Файл PDF катары ачылбайт. Кайра сактап көрүңүз."
           }
         }
       }
@@ -14849,10 +16479,7 @@
         }
       }
     },
-    "ходов: %lld" : {
-
-    },
-    "Ходы закончились" : {
+    "Ходов больше нет" : {
 
     },
     "Цена — целое число сомов, не меньше 0" : {
@@ -14867,6 +16494,25 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "Баа — бүтүн сом саны, 0дөн кем эмес"
+          }
+        }
+      }
+    },
+    "Цена в бонусах" : {
+
+    },
+    "Цена, сом" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Price, som"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Баасы, сом"
           }
         }
       }
@@ -14903,6 +16549,9 @@
           }
         }
       }
+    },
+    "Чем платит гость" : {
+
     },
     "Черновик" : {
       "extractionState" : "stale",
@@ -14949,6 +16598,22 @@
           "stringUnit" : {
             "state" : "needs_review",
             "value" : "Кара нускасы конокторго көрүнбөйт — даяр болгондо жарыялаңыз."
+          }
+        }
+      }
+    },
+    "Читаем меню…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reading the menu…"
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Меню окулууда…"
           }
         }
       }
@@ -15002,6 +16667,9 @@
         }
       }
     },
+    "Что получает гость" : {
+
+    },
     "Что продвигаем" : {
       "localizations" : {
         "en" : {
@@ -15050,6 +16718,9 @@
           }
         }
       }
+    },
+    "Что это" : {
+
     },
     "Широта" : {
       "localizations" : {
@@ -15133,6 +16804,7 @@
       }
     },
     "штамп за каждый визит" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -15232,6 +16904,7 @@
       }
     },
     "Штампов до награды: %lld" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -15324,6 +16997,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Эмодзи (сүрөтсүз болсо)"
+          }
+        }
+      }
+    },
+    "Эта карта штампов выключена или удалена. Обновите настройки и попробуйте снова." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This stamp card is off or deleted. Refresh the settings and try again."
+          }
+        },
+        "ky" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Бул штамп картасы өчүрүлгөн же жок кылынган. Жөндөөлөрдү жаңыртып, кайра аракет кылыңыз."
           }
         }
       }

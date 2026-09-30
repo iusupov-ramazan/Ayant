@@ -46,6 +46,26 @@ public struct HostState: Equatable {
 
     public func venue(id: String) -> HostVenueDTO? { venues.first { $0.id == id } }
 
+    /// Заведение, которое открыто на первой вкладке кабинета.
+    ///
+    /// Выбор хранится на устройстве по id, а заведение за это время могли
+    /// удалить (здесь или с другого телефона) — тогда показываем первое, а не
+    /// пустой экран: пустой экран означал бы «у вас нет заведений», что неправда.
+    /// `nil` — только когда заведений нет вовсе.
+    public func currentVenue(preferredID: String?) -> HostVenueDTO? {
+        if let preferredID, let v = venue(id: preferredID) { return v }
+        return venues.first
+    }
+
+    /// Какое заведение появилось с момента `before` — чтобы сразу открыть
+    /// только что созданное. Ровно одно новое или ничего: несколько новых
+    /// приходят не из формы, а с синхронизацией, и угадывать среди них
+    /// «то самое» значило бы перескакивать на случайное.
+    public func addedVenueID(since before: Set<String>) -> String? {
+        let added = venues.map(\.id).filter { !before.contains($0) }
+        return added.count == 1 ? added[0] : nil
+    }
+
     public func instagram(venueID: String) -> InstagramVenueState {
         instagram[venueID] ?? InstagramVenueState()
     }
@@ -124,6 +144,10 @@ public enum HostIntent: Equatable {
     case deleteVenue(id: String)
     case addItem(venueID: String, name: String, emoji: String, kind: String, imageURL: String)
     case deleteItem(venueID: String, itemID: String)
+    /// Правка одного блюда (название, цена, описание, раздел, фото).
+    case updateItem(venueID: String, item: VenueItem)
+    /// Проверенные хозяином блюда из разбора PDF — слияние по `MenuImport.merge`.
+    case importMenu(venueID: String, drafts: [MenuDraftItem])
     case boostVenue(id: String, until: Date)
     /// Конфиг баллов САН заведения из редактора «Лояльность». Значения режутся
     /// до серверных ограничений в `HostForms.applyPoints`.

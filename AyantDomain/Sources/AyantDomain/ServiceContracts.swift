@@ -84,8 +84,11 @@ public struct ScanOutcome: Equatable {
     public var balance: Int = 0       // новый баланс баллов
     /// true — запрос с этим idempotencyKey уже выполнялся; ничего не начислено повторно.
     public var replayed: Bool = false
+    /// Имя карты штампов, на которую лёг штамп (пусто — у безымянной первой).
+    public var cardTitle: String = ""
 
-    public init(ok: Bool, title: String, loyalty: Bool, stamps: Int, goal: Int, rewardIssued: Bool, rewardTitle: String, errorCode: String?, points: Bool = false, awarded: Int = 0, balance: Int = 0, replayed: Bool = false) {
+    public init(ok: Bool, title: String, loyalty: Bool, stamps: Int, goal: Int, rewardIssued: Bool, rewardTitle: String, errorCode: String?, points: Bool = false, awarded: Int = 0, balance: Int = 0, replayed: Bool = false, cardTitle: String = "") {
+        self.cardTitle = cardTitle
         self.ok = ok
         self.title = title
         self.loyalty = loyalty
@@ -144,8 +147,11 @@ public protocol CouponService {
     /// billAmount — сумма чека (mode=cashback), bandIndex — выбранный диапазон (mode=bands).
     /// `idempotencyKey` — один на распознанный QR, повторяется при ретрае:
     /// сервер вернёт исходный результат вместо второго штампа/начисления.
+    /// `cardID` — какую карту штампов выбрал сотрудник (для `AYANT-CARD:`);
+    /// `nil` — первая карта, как у клиентов, не знающих о нескольких картах.
     func scanCoupon(code: String, venueID: String, idToken: String,
-                    billAmount: Int?, bandIndex: Int?, idempotencyKey: String) async throws -> ScanOutcome
+                    billAmount: Int?, bandIndex: Int?, idempotencyKey: String,
+                    cardID: String?) async throws -> ScanOutcome
     /// Списание баллов САН на награду (через Cloud Function redeemVenuePoints).
     /// `idempotencyKey` генерируется вызывающим ОДИН раз на попытку и повторяется
     /// при ретрае — сервер вернёт тот же результат вместо второго списания.
@@ -166,4 +172,12 @@ public protocol PushService {
     /// `userTokens` и сам FCM-токен. Без этого следующий владелец устройства
     /// (или сам вышедший) продолжает получать адресные кампании старого uid.
     func unregisterDevice(topics: [String]) async
+}
+
+/// Разбор файла меню (PDF, CSV, Excel) в блюда — на устройстве, без сети
+/// и без оплаты. Ничего не сохраняет: возвращает черновик для проверки
+/// хозяином. `progress` — доля 0…1 (распознавание сканов идёт постранично).
+public protocol MenuParsingService: Sendable {
+    func parseMenu(file: Data, kind: MenuFileKind,
+                   progress: @escaping @Sendable (Double) -> Void) async throws -> [MenuDraftItem]
 }

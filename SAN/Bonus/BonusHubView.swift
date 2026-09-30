@@ -21,6 +21,7 @@ struct BonusHubView: View {
     @State private var showSnake = false
     @State private var showTetris = false
     @State private var showMatch3 = false
+    @State private var show2048 = false
     @State private var justClaimed: Coupon?
     @State private var pendingReward: Reward?
     @State private var pendingGift: Reward?
@@ -39,7 +40,11 @@ struct BonusHubView: View {
     /// перешли на баллы, остаются в «Все карты», но карусель не засоряют.
     private var stampCards: [LoyaltyCard] {
         loyalty.cards.filter { card in
-            card.stamps > 0 || (venuesByID[card.venueID]?.stampsActive ?? false)
+            // Дополнительную карту заведение удалило или выключило — её больше
+            // не показываем: собрать её всё равно нельзя (сервер ответит
+            // `card_not_found`).
+            if let venue = venuesByID[card.venueID], !venue.offersStampCard(card.cardID) { return false }
+            return card.stamps > 0 || (venuesByID[card.venueID]?.stampsActive ?? false)
         }
     }
     /// Порядок карусели: сначала баллы (главное), потом штампы.
@@ -160,9 +165,20 @@ struct BonusHubView: View {
                 Text("Бонусы")
                     .sanEditorialTitle(44)
                     .foregroundStyle(Color.sanInk)
-                Text("Баллы САН в каждом заведении")
-                    .font(.golos(14)).foregroundStyle(Color.sanInkSoft)
-                    .padding(.top, 9)
+                // На экране две валюты сразу: капсула «БОНУСЫ» справа и баллы
+                // САН в карусели. Их путают, и в подпись объяснение не влезает.
+                // Справка нужна только при включённом глобальном кошельке —
+                // без него никаких «бонусов» на экране нет и путать не с чем.
+                HStack(spacing: 2) {
+                    Text("Баллы САН в каждом заведении")
+                        .font(.golos(14)).foregroundStyle(Color.sanInkSoft)
+                    if ReleaseFlags.globalBonusWallet {
+                        SanInfoDot(
+                            title: "Два разных счёта",
+                            text: "Баллы САН — свои у каждого заведения: их начисляет само заведение за покупки, и потратить их можно только там же.\n\nБонусы — общий кошелёк приложения: копятся в играх и за время в приложении, тратятся на купоны.")
+                    }
+                }
+                .padding(.top, 9)
             }
             Spacer(minLength: 8)
             // Глобальный кошелёк BonusEngine — визуально подчинённый: он
@@ -344,19 +360,21 @@ struct BonusHubView: View {
             HStack(spacing: 10) {
                 SanSectionHeader("Играй и копи бонусы")
                 SanHairline().frame(maxWidth: .infinity)
-                // Дневной потолок — часть правил игры, а не сюрприз: без этой
-                // строки человек доходит до лимита и думает, что игра сломалась.
-                Text(bonus.remainingGameplayToday > 0
-                     ? "сегодня ещё \(bonus.remainingGameplayToday)"
-                     : "на сегодня всё")
-                    .font(.golos(11.5, .semibold))
-                    .foregroundStyle(Color.sanInkSoft)
-                    .fixedSize()
+                // Потолка больше нет, поэтому и обещать «сегодня ещё N» нечего.
+                // Показываем заработанное за день: это единственная цифра,
+                // которая здесь что-то значит, — и молчим, пока она нулевая.
+                if bonus.gameEarnedToday > 0 {
+                    Text("сегодня +\(bonus.gameEarnedToday)")
+                        .font(.golos(11.5, .semibold))
+                        .foregroundStyle(Color.sanInkSoft)
+                        .fixedSize()
+                }
             }
             // Игры начисляют бонусы в кошелёк аккаунта, поэтому гостю закрыты —
             // иначе он «зарабатывает» в запись, которая исчезнет вместе с выходом.
             Button { if session.isGuest { showGuestAlert = true } else { showSnake = true } } label: {
-                gameTile(emoji: "🐍", title: "Змейка", subtitle: "+1 / яблоко",
+                gameTile(emoji: "🐍", title: "Змейка",
+                         subtitle: "+1 / \(GameEconomy.applesPerBonus) яблок",
                          gradient: [Color(hex: 0x1FBF75), Color(hex: 0x0E9E86)])
             }
             .buttonStyle(.plain)
@@ -364,7 +382,7 @@ struct BonusHubView: View {
 
             Button { if session.isGuest { showGuestAlert = true } else { showTetris = true } } label: {
                 gameTile(emoji: "🧱", title: "Тетрис",
-                         subtitle: "+\(Tetris.bonusPerLine) / линия",
+                         subtitle: "+1 / \(Tetris.linesPerBonus) линий",
                          gradient: [Color(hex: 0x7C6BE8), Color(hex: 0xB39CF0)])
             }
             .buttonStyle(.plain)
@@ -373,12 +391,24 @@ struct BonusHubView: View {
             Button { if session.isGuest { showGuestAlert = true } else { showMatch3 = true } } label: {
                 gameTile(icon: GemView(kind: .ruby, power: .none).padding(6),
                          title: "Три в ряд",
-                         subtitle: "+1 / \(Match3.matchesPerBonus) совпадений",
+                         // Партия бесконечная — дневной потолок виден ещё до входа.
+                         subtitle: "+1 / \(Match3.matchesPerBonus) совпадений · до \(GameEconomy.endlessDailyBonusCap) в день",
                          gradient: [Color(hex: 0xF2A03D), Color(hex: 0xE8556B)])
             }
             .buttonStyle(.plain)
             .fullScreenCover(isPresented: $showMatch3) { Match3GameView() }
 
+            Button { if session.isGuest { showGuestAlert = true } else { show2048 = true } } label: {
+                // Иконка — само число: у игры нет ни эмодзи, ни фишки, по
+                // которой её узнают, узнают её именно по «2048».
+                gameTile(icon: Text("2048").font(.golos(12, .heavy)).tracking(-0.4)
+                            .foregroundStyle(.white),
+                         title: "2048",
+                         subtitle: "+1 / плитка от \(Game2048.bonusFromValue)",
+                         gradient: [Color(hex: 0xC92E76), Color(hex: 0x8B3BC9)])
+            }
+            .buttonStyle(.plain)
+            .fullScreenCover(isPresented: $show2048) { Game2048View() }
         }
         .padding(.top, 4)
     }

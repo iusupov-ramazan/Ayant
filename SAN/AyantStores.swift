@@ -44,6 +44,10 @@ enum AyantStores {
                   instagram: AppConfig.makeInstagramService())
     }
 
+    static func menuImport() -> MenuImportStore {
+        MenuImportStore(service: AppConfig.makeMenuParsingService())
+    }
+
     /// Без внешних зависимостей: состояние берут из хранилища устройства.
     static func bonus() -> BonusEngine { BonusEngine() }
     static func theme() -> ThemeStore { ThemeStore() }

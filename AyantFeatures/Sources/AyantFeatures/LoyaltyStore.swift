@@ -26,13 +26,32 @@ public final class LoyaltyStore: ObservableObject {
         load()
     }
 
-    public func card(for venueID: String) -> LoyaltyCard? { cards.first { $0.venueID == venueID } }
+    /// Первая карта заведения (та, что была единственной до нескольких карт).
+    public func card(for venueID: String) -> LoyaltyCard? {
+        card(venueID: venueID, cardID: StampCard.defaultID)
+    }
+
+    public func card(venueID: String, cardID: String) -> LoyaltyCard? {
+        let id = LoyaltyCard.id(venueID: venueID, cardID: cardID)
+        return cards.first { $0.id == id }
+    }
 
     /// Карта для заведения — существующая (с синхронизированными штампами) или
     /// новая на 0 штампов (чтобы можно было добавить в Wallet до первого штампа).
     public func cardOrNew(venueID: String, venueName: String, goal: Int, reward: String) -> LoyaltyCard {
         card(for: venueID) ?? LoyaltyCard(venueID: venueID, venueName: venueName,
                                           goal: max(goal, 2), reward: reward)
+    }
+
+    /// То же для конкретной карты заведения: прогресс гостя, если он есть, а
+    /// цель, награда и имя — всегда текущие из настроек заведения.
+    public func cardOrNew(venueID: String, venueName: String, stampCard: StampCard) -> LoyaltyCard {
+        var card = card(venueID: venueID, cardID: stampCard.id)
+            ?? LoyaltyCard(venueID: venueID, venueName: venueName, cardID: stampCard.id)
+        card.goal = max(stampCard.goal, 2)
+        card.reward = stampCard.reward
+        card.title = stampCard.title
+        return card
     }
 
     /// Подписка на живой поток карт лояльности.
@@ -57,19 +76,21 @@ public final class LoyaltyStore: ObservableObject {
     /// Снимок с сервера поверх известных карт; рост штампов или собранный круг
     /// у уже известной карты — событие для экрана «Начислено».
     private func apply(_ fetched: [LoyaltyCard]) {
-        let before = Dictionary(cards.map { ($0.venueID, $0) }, uniquingKeysWith: { a, _ in a })
+        // Ключ — id карты, а не заведение: у заведения их может быть несколько,
+        // и по `venueID` вторая карта затирала бы первую.
+        let before = Dictionary(cards.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         var map = before
-        for c in fetched { map[c.venueID] = c }   // бэкенд — источник правды
+        for c in fetched { map[c.id] = c }   // бэкенд — источник правды
         if hasBaseline, pendingStamp == nil {
             for c in fetched {
-                guard let was = before[c.venueID] else { continue }
+                guard let was = before[c.id] else { continue }
                 let completed = c.completedRounds > was.completedRounds
                 guard completed || c.stamps > was.stamps else { continue }
                 pendingStamp = LoyaltyStampEvent(
-                    id: "\(c.venueID)-\(c.completedRounds)-\(c.stamps)",
+                    id: "\(c.id)-\(c.completedRounds)-\(c.stamps)",
                     venueID: c.venueID, venueName: c.venueName,
                     stamps: c.stamps, goal: max(c.goal, 1),
-                    rewardIssued: completed, reward: c.reward)
+                    rewardIssued: completed, reward: c.reward, cardTitle: c.title)
                 break
             }
         }

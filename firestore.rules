@@ -299,6 +299,18 @@ service cloud.firestore {
       }
     }
 
+    // Дополнительные карты штампов заведения ({userID}_{venueID}_{cardID}).
+    // Отдельная коллекция, чтобы клиенты, читающие `loyaltyCards` по userID и
+    // склеивающие карты по заведению (Android, старые iOS), их не видели.
+    // Права — те же: гость читает свои, пишет только Cloud Function.
+    match /extraLoyaltyCards/{id} {
+      allow read:  if isSignedIn() && resource.data.userID == uid();
+      allow write: if false;
+      match /{sub=**} {
+        allow read, write: if false;
+      }
+    }
+
     // ── Баллы САН (per-venue ledger) ─────────────────────────────────────
     // Кошелёк баллов заведения. Начисление/списание/сгорание — ТОЛЬКО Cloud
     // Functions (scanCoupon Ветка C / redeemVenuePoints / expireVenuePoints,

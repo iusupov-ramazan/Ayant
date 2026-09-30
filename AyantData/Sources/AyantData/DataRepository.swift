@@ -83,7 +83,8 @@ public final class MockCouponService: CouponService {
     }
     public func fetchVenuePoints(userID: String) async throws -> [VenuePointsCard] { [] }
     public func scanCoupon(code: String, venueID: String, idToken: String,
-                    billAmount: Int?, bandIndex: Int?, idempotencyKey: String) async throws -> ScanOutcome {
+                    billAmount: Int?, bandIndex: Int?, idempotencyKey: String,
+                    cardID: String?) async throws -> ScanOutcome {
         ScanOutcome(ok: true, title: "Демо-купон", loyalty: true, stamps: 1, goal: 6,
                     rewardIssued: false, rewardTitle: "", errorCode: nil)
     }

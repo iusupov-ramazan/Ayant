@@ -88,6 +88,10 @@ public final class HostStore: ObservableObject {
             addItem(venueID: venueID, name: name, emoji: emoji, kind: kind, imageURL: imageURL)
         case .deleteItem(let venueID, let itemID):
             deleteItem(venueID: venueID, itemID: itemID)
+        case .updateItem(let venueID, let item):
+            updateItem(venueID: venueID, item: item)
+        case .importMenu(let venueID, let drafts):
+            importMenu(venueID: venueID, drafts: drafts)
         case .boostVenue(let id, let until):  boostVenue(id: id, until: until)
         case .savePointsConfig(let venueID, let fields):
             savePointsConfig(venueID: venueID, fields: fields)
@@ -522,6 +526,29 @@ public final class HostStore: ObservableObject {
                              name: name.trimmingCharacters(in: .whitespaces),
                              emoji: emoji.isEmpty ? "🍽" : emoji, kind: kind, imageURL: imageURL)
         venueDTOs[i].items.append(item)
+        persistVenues()
+        remoteSaveVenue(venueDTOs[i])
+    }
+
+    private func updateItem(venueID: String, item: VenueItem) {
+        guard let i = venueDTOs.firstIndex(where: { $0.id == venueID }),
+              let j = venueDTOs[i].items.firstIndex(where: { $0.id == item.id }) else { return }
+        var clean = item
+        clean.name = MenuImport.clip(item.name, MenuImport.nameLimit)
+        guard !clean.name.isEmpty else { return }
+        clean.section = MenuImport.clip(item.section, MenuImport.sectionLimit)
+        clean.details = MenuImport.clip(item.details, MenuImport.detailsLimit)
+        clean.price = MenuImport.validPrice(item.price)
+        clean.imageURL = item.imageURL.trimmingCharacters(in: .whitespaces)
+        venueDTOs[i].items[j] = clean
+        persistVenues()
+        remoteSaveVenue(venueDTOs[i])
+    }
+
+    private func importMenu(venueID: String, drafts: [MenuDraftItem]) {
+        guard let i = venueDTOs.firstIndex(where: { $0.id == venueID }) else { return }
+        venueDTOs[i].items = MenuImport.merge(existing: venueDTOs[i].items, drafts: drafts,
+                                              newID: { "it_\(UUID().uuidString.prefix(8))" })
         persistVenues()
         remoteSaveVenue(venueDTOs[i])
     }

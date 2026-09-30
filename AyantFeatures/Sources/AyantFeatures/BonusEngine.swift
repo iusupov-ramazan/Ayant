@@ -12,12 +12,14 @@ import AyantDomain
 @MainActor
 public final class BonusEngine: ObservableObject {
 
-    // Глобальный кошелёк намеренно почти «не минтит» — награды близки к нулю, чтобы
-    // не создавать денежных обязательств (реальная ценность — per-venue баллы САН).
+    // Глобальный кошелёк минтит медленно — настоящая ценность живёт в per-venue
+    // баллах САН. Дневного потолка у игр больше НЕТ: сколько наиграл, столько и
+    // получил. Значит, единственный тормоз — цена бонуса внутри самой игры
+    // (яблоко, линия, двенадцать совпадений), и менять её теперь нельзя «на
+    // глазок»: это прямая ставка обмена игрового времени на купоны заведений.
     public let goalSeconds: Int = 30 * 60          // цель: 30 минут
     public let rewardPerGoal: Int = 1              // бонусов за цикл (почти ноль)
     public let dailyGoalCap: Int = 4               // не больше 4 циклов активности в день (≤4/день)
-    public let dailyGameplayCap: Int = 3           // не больше 3 бонусов в день с мини-игры
     private let idleTimeout: TimeInterval = 25  // сек без действий = простой
 
     // Состояние (персистентное)
@@ -28,7 +30,10 @@ public final class BonusEngine: ObservableObject {
     // Дневные счётчики (сбрасываются по смене календарного дня).
     @AppStorage("san.bonus.counterDate") private var counterDate: String = ""
     @AppStorage("san.bonus.awardsToday") private var awardsToday: Int = 0
-    @AppStorage("san.bonus.gameEarnedToday") private var gameEarnedToday: Int = 0
+    // Ключ прежний: на устройствах уже лежит счётчик под этим именем.
+    @AppStorage("san.bonus.gameEarnedToday") private var gameEarnedTodayStored: Int = 0
+    /// Сколько принесли за сегодня бесконечные игры — для их дневного потолка.
+    @AppStorage("san.bonus.endlessEarnedToday") private var endlessEarnedTodayStored: Int = 0
 
     @Published public var activeSeconds: Int = 0
     @Published public var isCounting = false
@@ -111,24 +116,52 @@ public final class BonusEngine: ObservableObject {
         NotificationManager.refresh(reachedGoalToday: true)
     }
 
-    /// Бонусы за мини-игру — с дневным лимитом. Возвращает реально начисленное.
+    /// Бонусы за мини-игру. Начисляет всё, что заработано: дневного потолка нет.
+    ///
+    /// Возвращаемое значение осталось — вью показывает «+N» именно по нему, и
+    /// врать пользователю нельзя. Сейчас оно всегда равно `amount`, но подпись
+    /// сохранена: вернуть любой тормоз (ступенька, лимит за сессию) можно, не
+    /// переписывая четыре экрана.
     @discardableResult
     public func awardGameplay(_ amount: Int) -> Int {
         guard amount > 0 else { return 0 }
         resetDailyIfNeeded()
-        let grant = min(amount, max(0, dailyGameplayCap - gameEarnedToday))
-        guard grant > 0 else { lastReward = 0; return 0 }
-        gameEarnedToday += grant
-        balance += grant
-        lastReward = grant
+        gameEarnedTodayStored += amount
+        balance += amount
+        lastReward = amount
         UINotificationFeedbackGenerator().notificationOccurred(.success)
-        return grant
+        return amount
     }
 
-    /// Сколько ещё бонусов можно получить с игр сегодня.
-    public var remainingGameplayToday: Int {
-        max(0, dailyGameplayCap - gameEarnedToday)
+    /// Начисление за БЕСКОНЕЧНУЮ игру — с дневным потолком.
+    ///
+    /// Обычные игры потолка не имеют: их партия кончается сама. Бесконечная не
+    /// кончается никогда, и без потолка это был бы станок для бонусов.
+    /// Возвращает реально начисленное — вью показывает именно его.
+    @discardableResult
+    public func awardEndlessGameplay(_ amount: Int,
+                                     dailyCap: Int = GameEconomy.endlessDailyBonusCap) -> Int {
+        guard amount > 0 else { return 0 }
+        resetDailyIfNeeded()
+        let grant = min(amount, max(0, dailyCap - endlessEarnedTodayStored))
+        guard grant > 0 else { return 0 }
+        endlessEarnedTodayStored += grant
+        return awardGameplay(grant)
     }
+
+    /// Сколько бесконечная игра ещё может принести сегодня.
+    ///
+    /// Чистое чтение, без сброса счётчиков: его зовёт `body` вью, а менять
+    /// опубликованное состояние посреди отрисовки SwiftUI запрещает. Смену
+    /// суток учитываем сравнением ключа дня.
+    public func remainingEndlessToday(dailyCap: Int = GameEconomy.endlessDailyBonusCap) -> Int {
+        let spent = counterDate == Self.dayKey(clock.now) ? endlessEarnedTodayStored : 0
+        return max(0, dailyCap - spent)
+    }
+
+    /// Сколько бонусов игры принесли сегодня. Уже не лимит, а счётчик: экран
+    /// показывает по нему «сегодня +N», и он обнуляется сменой суток.
+    public var gameEarnedToday: Int { gameEarnedTodayStored }
 
     /// Прямое начисление без дневного лимита — только для реферальных/серверных
     /// наград (разовые, не фармятся). Мини-игры используют `awardGameplay`.
@@ -145,7 +178,8 @@ public final class BonusEngine: ObservableObject {
         if counterDate != key {
             counterDate = key
             awardsToday = 0
-            gameEarnedToday = 0
+            gameEarnedTodayStored = 0
+            endlessEarnedTodayStored = 0
         }
     }
 
@@ -181,7 +215,8 @@ public final class BonusEngine: ObservableObject {
         lastAwardAt = 0
         counterDate = ""
         awardsToday = 0
-        gameEarnedToday = 0
+        gameEarnedTodayStored = 0
+        endlessEarnedTodayStored = 0
         lastReward = nil
     }
 }

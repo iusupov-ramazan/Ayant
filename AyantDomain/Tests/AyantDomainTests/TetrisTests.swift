@@ -47,9 +47,23 @@ final class TetrisTests: XCTestCase {
         XCTAssertTrue(Tetris.fits(s.piece!, in: s.board))
         let after = Tetris.hardDrop(s)
         XCTAssertEqual(after.lines, 1, "полная строка сгорела")
-        XCTAssertEqual(after.bonuses, Tetris.bonusPerLine)
+        XCTAssertEqual(after.bonuses, 0,
+                       "одна линия бонуса не даёт: цена бонуса — \(Tetris.linesPerBonus) линий")
         XCTAssertTrue(after.board[Tetris.rows - 1].contains { $0 == nil },
                       "нижняя строка больше не заполнена целиком")
+    }
+
+    func testBonusCostsAWholeStackOfLines() {
+        var s = Tetris.start()
+        s.lines = Tetris.linesPerBonus - 1
+        XCTAssertEqual(s.bonuses, 0)
+        s.lines += 1
+        XCTAssertEqual(s.bonuses, 1, "цена бонуса берётся из общего курса игр")
+        // Остаток не сгорает: линии считаются от начала партии.
+        s.lines += Tetris.linesPerBonus - 1
+        XCTAssertEqual(s.bonuses, 1)
+        s.lines += 1
+        XCTAssertEqual(s.bonuses, 2)
     }
 
     func testGameOverWhenSpawnIsBlocked() {

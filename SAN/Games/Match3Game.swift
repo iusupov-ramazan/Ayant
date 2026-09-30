@@ -29,10 +29,12 @@ struct Match3GameView: View {
     @State private var awarded = 0
 
     // Украшения, живущие только в вью.
-    @State private var sparks: [Spark] = []
+    // Искры и проезжающий по полю блик убраны: на поле из 49 камней они
+    // превращались в мельтешение, за которым терялся сам ход. Вспышка
+    // сгорающих камней и всплывающие очки остались — они показывают, ЧТО
+    // сгорело и сколько это дало, а не украшают.
     @State private var popups: [ScorePopup] = []
     @State private var levelBanner: Int?
-    @State private var shimmer: CGFloat = -1
     @State private var wiggle: Match3.Point?
 
     private let spacing: CGFloat = 5
@@ -46,7 +48,6 @@ struct Match3GameView: View {
                 header
                 Spacer(minLength: 0)
                 board
-                    .overlay { if state.isOver { gameOverOverlay } }
                     .overlay { levelBannerView }
                 Spacer(minLength: 0)
                 hint
@@ -62,7 +63,6 @@ struct Match3GameView: View {
                 }
             }
         }
-        .task { await runShimmer() }
         // Уровень растёт внутри каскада, а не по кнопке, — иначе это событие
         // проходит незамеченным: цифра в шапке молча меняется.
         .onChange(of: state.level) { previous, current in
@@ -100,7 +100,6 @@ struct Match3GameView: View {
                     cascade += 1
                     lastBurnCenter = centre(of: burning)
                     SanHaptics.selection()
-                    burst(burning, cascade: cascade)
                 } else if index > 0, frame.score > scoreBefore {
                     // Кадр падения приносит очки предыдущей вспышки — показываем
                     // их там же, где горело, пока искры ещё в воздухе.
@@ -149,11 +148,13 @@ struct Match3GameView: View {
     }
 
     /// Начисляет бонусы за НОВЫЕ совпадения — по одному за каждые
-    /// `Match3.matchesPerBonus`, дневной лимит держит `BonusEngine`.
+    /// `Match3.matchesPerBonus`. Партия бесконечная, поэтому начисление идёт
+    /// через дневной потолок (`GameEconomy.endlessDailyBonusCap`): без него
+    /// игра превращалась бы в станок для бонусов.
     private func award() {
         let earned = state.bonuses
         guard earned > credited else { return }
-        let granted = bonus.awardGameplay(earned - credited)
+        let granted = bonus.awardEndlessGameplay(earned - credited)
         credited = earned
         guard granted > 0 else { return }
         withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) { awarded += granted }
@@ -171,39 +172,8 @@ struct Match3GameView: View {
         SanHaptics.save()
     }
 
-    private func restart() {
-        credited = 0
-        awarded = 0
-        selected = nil
-        sparks = []
-        popups = []
-        withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
-            state = Match3.start(seed: UInt64(Date().timeIntervalSince1970))
-        }
-    }
 
-    // MARK: Искры и всплывающие очки
-
-    /// Искры из сгоревших клеток. Живут полсекунды и удаляются пачкой —
-    /// накапливать их нельзя, иначе за партию на поле повиснут сотни вью.
-    private func burst(_ cells: Set<Match3.Point>, cascade: Int) {
-        guard !reduceMotion else { return }
-        let fresh = cells.flatMap { point -> [Spark] in
-            let color = GemPalette.of(state.board[point.y][point.x].kind).glow
-            return (0..<4).map { i in
-                Spark(point: point,
-                      angle: Double(i) / 4 * 2 * .pi + Double.random(in: -0.4...0.4),
-                      distance: CGFloat.random(in: 18...34),
-                      color: color)
-            }
-        }
-        sparks.append(contentsOf: fresh)
-        let ids = Set(fresh.map(\.id))
-        Task {
-            try? await Task.sleep(for: .seconds(0.6))
-            sparks.removeAll { ids.contains($0.id) }
-        }
-    }
+    // MARK: Всплывающие очки
 
     private func popScore(_ amount: Int, cascade: Int) {
         guard let anchor = lastBurnCenter else { return }
@@ -243,11 +213,13 @@ struct Match3GameView: View {
                     Text("\(state.score) / \(state.goal)")
                         .font(.golos(15, .bold)).foregroundStyle(Color.sanInk)
                         .contentTransition(.numericText())
-                    Text("ходов: \(state.movesLeft)")
+                    // Потолок дня виден заранее: упереться в невидимый лимит —
+                    // значит решить, что игра сломалась и перестала платить.
+                    let left = bonus.remainingEndlessToday()
+                    Text(left > 0 ? "бонусов сегодня: ещё \(left)" : "бонусы на сегодня собраны")
                         .font(.golos(12.5, .semibold))
-                        .foregroundStyle(state.movesLeft <= 3 ? Color(hex: 0xE8556B) : Color.sanInkSoft)
+                        .foregroundStyle(left > 0 ? Color.sanInkSoft : Color(hex: 0xE8556B))
                         .contentTransition(.numericText())
-                        .scaleEffect(state.movesLeft <= 3 ? 1.08 : 1)
                 }
             }
             progressBar
@@ -294,13 +266,7 @@ struct Match3GameView: View {
                 .frame(width: total, height: total, alignment: .topLeading)
                 .clipped()
 
-                // Искры и очки рисуются поверх и НЕ обрезаются: они специально
-                // вылетают за границы поля.
-                ForEach(sparks) { spark in
-                    SparkView(spark: spark)
-                        .position(x: CGFloat(spark.point.x) * step + side / 2,
-                                  y: CGFloat(spark.point.y) * step + side / 2)
-                }
+                // Очки рисуются поверх и НЕ обрезаются: всплывают за край поля.
                 ForEach(popups) { popup in
                     ScorePopupView(popup: popup)
                         .position(x: CGFloat(popup.point.x) * step + side / 2,
@@ -308,7 +274,6 @@ struct Match3GameView: View {
                 }
             }
             .frame(width: total, height: total, alignment: .topLeading)
-            .overlay { shimmerSweep(total: total) }
             .contentShape(Rectangle())
             // Один жест на всё поле: короткое касание — выбор фишки, свайп —
             // обмен с соседом. Два отдельных жеста на ячейках дрались бы между
@@ -316,7 +281,7 @@ struct Match3GameView: View {
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onEnded { value in
-                        guard !busy, !state.isOver,
+                        guard !busy,
                               let from = cell(at: value.startLocation, side: side) else { return }
                         let dx = value.translation.width, dy = value.translation.height
                         if max(abs(dx), abs(dy)) < side * 0.4 {
@@ -367,38 +332,11 @@ struct Match3GameView: View {
         return Match3.inside(point) ? point : nil
     }
 
-    /// Блик, медленно проезжающий по полю. Экран без движения выглядит
-    /// замершим, даже когда игрок просто думает над ходом.
-    @ViewBuilder private func shimmerSweep(total: CGFloat) -> some View {
-        if !reduceMotion {
-            LinearGradient(colors: [.clear, .white.opacity(0.22), .clear],
-                           startPoint: .top, endPoint: .bottom)
-                .frame(width: total * 0.5, height: total * 1.6)
-                .rotationEffect(.degrees(65))
-                .offset(x: shimmer * total * 1.3)
-                .blendMode(.plusLighter)
-                .allowsHitTesting(false)
-                .clipped()
-        }
-    }
-
-    private func runShimmer() async {
-        guard !reduceMotion else { return }
-        while !Task.isCancelled {
-            try? await Task.sleep(for: .seconds(3.4))
-            guard !Task.isCancelled else { return }
-            shimmer = -1
-            withAnimation(.easeInOut(duration: 1.5)) { shimmer = 1 }
-        }
-    }
-
     @ViewBuilder private var levelBannerView: some View {
         if let level = levelBanner {
             VStack(spacing: 4) {
                 Text("Уровень \(level)")
                     .font(.golos(26, .heavy)).foregroundStyle(.white)
-                Text("+\(Match3.movesPerLevel) ходов")
-                    .font(.golos(14, .semibold)).foregroundStyle(.white.opacity(0.9))
             }
             .padding(.horizontal, 26).padding(.vertical, 16)
             .background(LinearGradient(colors: [Color(hex: Palette.orange), Color(hex: Palette.accent)],
@@ -413,29 +351,13 @@ struct Match3GameView: View {
     private var hint: some View {
         VStack(spacing: 2) {
             Text("Меняй соседние камни местами: 4 в ряд — полоска, 5 — бомба")
-            Text("\(Match3.matchesPerBonus) совпадений = 1 бонус · до \(bonus.dailyGameplayCap)/день")
+            Text("\(Match3.matchesPerBonus) совпадений = 1 бонус · до \(GameEconomy.endlessDailyBonusCap) в день")
         }
         .font(.caption)
         .multilineTextAlignment(.center)
         .foregroundStyle(.secondary)
     }
 
-    private var gameOverOverlay: some View {
-        VStack(spacing: 12) {
-            Text("Ходы закончились").font(.golos(20, .heavy)).foregroundStyle(.white)
-            Text("Уровень \(state.level), очков: \(state.score) → +\(awarded) бонусов")
-                .font(.golos(14)).foregroundStyle(.white.opacity(0.85))
-                .multilineTextAlignment(.center)
-            Button("Ещё раз") { restart() }
-                .font(.golos(15, .bold)).foregroundStyle(Color.sanInk)
-                .padding(.horizontal, 20).frame(height: 44)
-                .background(Color.white, in: Capsule())
-                .buttonStyle(.sanPress(0.94))
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.black.opacity(0.55))
-        .transition(.opacity.combined(with: .scale(scale: 1.05)))
-    }
 }
 
 // MARK: - Мелкие типы вью
@@ -447,36 +369,6 @@ private struct PlacedTile: Identifiable {
     let x: Int
     let y: Int
     var id: Int { tile.id }
-}
-
-private struct Spark: Identifiable {
-    let id = UUID()
-    let point: Match3.Point
-    let angle: Double
-    let distance: CGFloat
-    let color: Color
-}
-
-/// Искра разлетается сама: анимация живёт внутри, поэтому родителю не нужно
-/// хранить фазу каждой частицы.
-private struct SparkView: View {
-    let spark: Spark
-    @State private var flown = false
-
-    var body: some View {
-        Circle()
-            .fill(spark.color)
-            .frame(width: 7, height: 7)
-            .shadow(color: spark.color.opacity(0.8), radius: 4)
-            .scaleEffect(flown ? 0.2 : 1)
-            .opacity(flown ? 0 : 0.95)
-            .offset(x: flown ? cos(spark.angle) * spark.distance : 0,
-                    y: flown ? sin(spark.angle) * spark.distance : 0)
-            .allowsHitTesting(false)
-            .onAppear {
-                withAnimation(.easeOut(duration: 0.55)) { flown = true }
-            }
-    }
 }
 
 private struct ScorePopup: Identifiable {

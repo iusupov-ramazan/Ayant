@@ -12,18 +12,16 @@ public enum Match3 {
     public static let columns = 7
     public static let rows = 7
 
-    /// Ходов на уровень. Кончились и цель не набрана — партия окончена.
-    public static let movesPerLevel = 20
+    // Лимита ходов нет: партия бесконечная и заканчивается, только когда игрок
+    // выходит. Застрять нельзя — поле без ходов перемешивается (`shuffled`).
+    // Заработок за бесконечную игру ограничивает дневной потолок
+    // `GameEconomy.endlessDailyBonusCap`, который держит `BonusEngine`.
 
-    /// Сколько совпадений даёт один бонус.
+    /// Сколько совпадений даёт один бонус — из общего курса мини-игр.
     ///
-    /// Своей экономики у игры нет: начисление всё равно проходит через дневной
-    /// потолок мини-игр (`BonusEngine.dailyGameplayCap`, 3 бонуса). Двенадцать —
-    /// чтобы дневной максимум стоил примерно полутора уровней: у «Змейки» это
-    /// три яблока, у «Тетриса» три линии, а здесь совпадения сыплются
-    /// каскадами, и за одно совпадение бонус превратил бы потолок в десять
-    /// секунд игры.
-    public static let matchesPerBonus = 12
+    /// Своего числа у игры больше нет: цена выводится из `GameEconomy`, иначе
+    /// игры снова разъедутся по курсу, как разъехались под дневным потолком.
+    public static var matchesPerBonus: Int { GameEconomy.matchesPerBonus }
 
     /// Очков за одну сгоревшую фишку (до множителя каскада).
     public static let pointsPerTile = 10
@@ -84,11 +82,9 @@ public enum Match3 {
         /// в том же шаге досыпается сверху.
         public var board: [[Tile]]
         public var score: Int
-        public var movesLeft: Int
         public var level: Int
         /// Сколько совпадений собрано за партию — из этого считаются бонусы.
         public var matches: Int
-        public var isOver: Bool
         /// Свой генератор, чтобы состояние оставалось воспроизводимым в тестах.
         public var seed: UInt64
         /// Клетки, которые сгорают на этом кадре. Нужны только вью — показать
@@ -99,18 +95,18 @@ public enum Match3 {
         /// сгоревшей вместо падения сверху.
         public var nextID: Int
 
-        public init(board: [[Tile]], score: Int, movesLeft: Int, level: Int,
-                    matches: Int, isOver: Bool, seed: UInt64, clearing: Set<Point>,
+        public init(board: [[Tile]], score: Int, level: Int,
+                    matches: Int, seed: UInt64, clearing: Set<Point>,
                     nextID: Int = 1) {
-            self.board = board; self.score = score; self.movesLeft = movesLeft
-            self.level = level; self.matches = matches; self.isOver = isOver
+            self.board = board; self.score = score
+            self.level = level; self.matches = matches
             self.seed = seed; self.clearing = clearing; self.nextID = nextID
         }
 
         /// Цель текущего уровня (очки копятся за партию, а не за уровень).
         public var goal: Int { Match3.goal(forLevel: level) }
 
-        /// Заработанные бонусы (до дневного лимита — его считает `BonusEngine`).
+        /// Заработанные бонусы (до дневного потолка — его держит `BonusEngine`).
         public var bonuses: Int { matches / Match3.matchesPerBonus }
 
         /// Прогресс внутри уровня, 0…1. Очки копятся за партию, поэтому
@@ -152,8 +148,8 @@ public enum Match3 {
             }
             board.append(row)
         }
-        var state = State(board: board, score: 0, movesLeft: movesPerLevel, level: 1,
-                          matches: 0, isOver: false, seed: s, clearing: [], nextID: id)
+        var state = State(board: board, score: 0, level: 1,
+                          matches: 0, seed: s, clearing: [], nextID: id)
         if !hasMoves(state) { state = shuffled(state) }
         return state
     }
@@ -259,7 +255,7 @@ public enum Match3 {
             // раздаём поле заново, лишь бы экран не оставался без ходов.
             if attempt == 39 {
                 var fresh = start(seed: seed)
-                fresh.score = state.score; fresh.movesLeft = state.movesLeft
+                fresh.score = state.score
                 fresh.level = state.level; fresh.matches = state.matches
                 return fresh
             }
@@ -276,11 +272,8 @@ public enum Match3 {
     /// запрещён или не собирает ни одной тройки: такой обмен не засчитывается
     /// и фишки остаются на местах (вью просто ничего не применяет).
     public static func swap(_ state: State, _ a: Point, _ b: Point) -> [State] {
-        guard !state.isOver, state.movesLeft > 0,
-              var swapped = exchanged(state, a, b) else { return [] }
+        guard let swapped = exchanged(state, a, b) else { return [] }
         guard !matches(on: swapped.board).isEmpty else { return [] }
-
-        swapped.movesLeft -= 1
         return [swapped] + resolve(swapped, origin: [a, b])
     }
 
@@ -342,13 +335,13 @@ public enum Match3 {
 
         var final = frames.last ?? state
         final.clearing = []
-        // Цель взята — следующий уровень и новая порция ходов.
+        // Цель взята — следующий уровень. Уровни теперь только прогресс:
+        // ходов они не выдают, потому что ходов больше не считают.
         while final.score >= goal(forLevel: final.level) {
             final.level += 1
-            final.movesLeft += movesPerLevel
         }
-        if final.movesLeft <= 0 { final.isOver = true }
-        if !final.isOver && !hasMoves(final) { final = shuffled(final) }
+        // Бесконечной партии нельзя застревать: поле без ходов перемешиваем.
+        if !hasMoves(final) { final = shuffled(final) }
         if frames.last != final { frames.append(final) }
         return frames
     }

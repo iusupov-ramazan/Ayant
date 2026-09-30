@@ -323,7 +323,9 @@ struct SignedInRootView: View {
                           content: .points(delta: e.delta, newBalance: e.newBalance))
         }
         if let e = loyalty.pendingStamp {
-            return Earned(id: "stamp-" + e.id, venueID: e.venueID, venueName: e.venueName,
+            // У заведения может быть несколько карт — называем, на какую лёг штамп.
+            let name = e.cardTitle.isEmpty ? e.venueName : "\(e.venueName) · \(e.cardTitle)"
+            return Earned(id: "stamp-" + e.id, venueID: e.venueID, venueName: name,
                           content: .stamp(stamps: e.stamps, goal: e.goal,
                                           rewardIssued: e.rewardIssued, reward: e.reward))
         }

@@ -21,7 +21,8 @@ enum WalletPage: Identifiable, Hashable {
     var id: String {
         switch self {
         case .points(let card): return "points-\(card.venueID)"
-        case .stamps(let card): return "stamps-\(card.venueID)"
+        // `card.id`, а не заведение: у заведения бывает несколько карт штампов.
+        case .stamps(let card): return "stamps-\(card.id)"
         }
     }
 }
@@ -218,7 +219,8 @@ struct WalletStampCard: View {
                     Text(card.venueName)
                         .font(.golos(14.5, .heavy)).tracking(-0.3)
                         .foregroundStyle(.white).lineLimit(1)
-                    Text("штамп за каждый визит")
+                    // Имя карты («Кофе», «Пицца») — когда их у заведения несколько.
+                    Text(card.title.isEmpty ? LS("штамп за каждый визит") : card.title)
                         .font(.golos(12)).foregroundStyle(.white.opacity(0.82))
                 }
                 Spacer(minLength: 8)

@@ -481,11 +481,26 @@
       </div>
       <div class="field">
         <label>Штампов до награды</label>
-        <input id="vLoyaltyGoal" type="number" min="2" max="12" placeholder="6" />
+        <input id="vLoyaltyGoal" type="number" min="2" placeholder="6" />
       </div>
       <div class="field span2">
         <label>Награда лояльности (текст)</label>
         <input id="vLoyaltyReward" placeholder="напр. Бесплатный кофе" />
+      </div>
+      <div class="field span2">
+        <label>Название первой карты (необязательно)</label>
+        <input id="vLoyaltyTitle" maxlength="30" placeholder="напр. Кофе — нужно, если карт несколько" />
+      </div>
+      <!-- Дополнительные карты штампов (stampCards). Первая карта — поля выше;
+           её штампы в loyaltyCards/{user}_{venue}, у остальных — в отдельной
+           коллекции extraLoyaltyCards/{user}_{venue}_{id} (Android её не читает).
+           Сотрудник выбирает карту после скана (iOS). Android пока ставит штамп
+           только на первую карту. -->
+      <div class="field span2">
+        <label>Дополнительные карты штампов</label>
+        <div id="vStampCardsList" style="display:flex;flex-direction:column;gap:6px"></div>
+        <button type="button" class="btn btn-secondary btn-sm" style="margin-top:6px" onclick="addStampCard()">+ Карта</button>
+        <small style="color:var(--muted)">До 4 дополнительных карт. У каждой — название, цель (2–12) и награда. Удаление скрывает карту и её штампы у гостей.</small>
       </div>
 
       <!-- ══ Бонусы САН (баллы заведения) ═══════════════════════════════════ -->
@@ -862,6 +877,49 @@ window.removeVenueBranch = (id) => {
   currentBranches = currentBranches.filter(b => b.id !== id);
   renderVenueBranches();
 };
+
+// ── Дополнительные карты штампов (stampCards) ────────────────────────────────
+// Зеркало StampCards.swift / activeStampCards в functions: id латиницей без
+// «_» (он разделяет части id документа), цель 2–12, без награды — не карта.
+let currentStampCards = [];   // [{ id, title, goal, reward, active }]
+const STAMP_CARD_MAX_EXTRAS = 4;
+
+function renderStampCards() {
+  const box = document.getElementById('vStampCardsList');
+  if (!currentStampCards.length) { box.innerHTML = '<small style="color:var(--muted)">Только первая карта</small>'; return; }
+  box.innerHTML = currentStampCards.map((c, i) => `
+    <div style="display:grid;grid-template-columns:1.2fr 70px 1.6fr auto auto;gap:6px;align-items:center">
+      <input placeholder="Название" maxlength="30" value="${escapeHtml(c.title)}" oninput="editStampCard(${i},'title',this.value)" />
+      <input type="number" min="2" max="12" value="${c.goal}" oninput="editStampCard(${i},'goal',this.value)" />
+      <input placeholder="Награда" maxlength="60" value="${escapeHtml(c.reward)}" oninput="editStampCard(${i},'reward',this.value)" />
+      <label style="display:flex;gap:4px;align-items:center;font-size:12px"><input type="checkbox" ${c.active ? 'checked' : ''} onchange="editStampCard(${i},'active',this.checked)" />вкл</label>
+      <span style="cursor:pointer;color:var(--danger);font-weight:700" title="Удалить" onclick="removeStampCard(${i})">×</span>
+    </div>`).join('');
+}
+window.addStampCard = () => {
+  if (currentStampCards.length >= STAMP_CARD_MAX_EXTRAS) { toast('Не больше 5 карт у заведения', 'error'); return; }
+  currentStampCards.push({ id: 'card-' + Math.random().toString(36).slice(2, 10), title: '', goal: 6, reward: '', active: true });
+  renderStampCards();
+};
+window.editStampCard = (i, key, value) => {
+  const c = currentStampCards[i]; if (!c) return;
+  c[key] = key === 'goal' ? (parseInt(value) || 6) : value;
+};
+window.removeStampCard = (i) => {
+  if (!confirm('Удалить карту? Гости перестанут видеть её и собранные на ней штампы.')) return;
+  currentStampCards.splice(i, 1);
+  renderStampCards();
+};
+function collectStampCards() {
+  const seen = new Set(['default']);
+  return currentStampCards
+    // Обрезка по кодовым точкам — как на сервере: .slice режет эмодзи пополам.
+    .map(c => ({ id: String(c.id || ''), title: Array.from(String(c.title || '').trim()).slice(0, 30).join(''),
+                 goal: (parseInt(c.goal) > 0 ? Math.min(Math.max(parseInt(c.goal), 2), 12) : 6),
+                 reward: Array.from(String(c.reward || '').trim()).slice(0, 60).join(''), active: c.active !== false }))
+    .filter(c => /^[A-Za-z0-9-]{1,32}$/.test(c.id) && !seen.has(c.id) && c.reward && seen.add(c.id))
+    .slice(0, STAMP_CARD_MAX_EXTRAS);
+}
 
 // ── Бонусы САН: диапазоны начисления + каталог наград ────────────────────────
 let currentPointsBands = [];    // [{ id, maxAmount, points }]
@@ -1650,6 +1708,12 @@ window.openVenueModal = (id) => {
   document.getElementById('vLoyaltyEnabled').value = String(v?.loyaltyEnabled ?? false);
   document.getElementById('vLoyaltyGoal').value  = v?.loyaltyGoal ?? 6;
   document.getElementById('vLoyaltyReward').value = v?.loyaltyReward ?? '';
+  document.getElementById('vLoyaltyTitle').value = v?.loyaltyTitle ?? '';
+  currentStampCards = Array.isArray(v?.stampCards)
+    ? v.stampCards.map(c => ({ id: c.id || '', title: c.title || '', goal: c.goal ?? 6,
+        reward: c.reward || '', active: c.active !== false }))
+    : [];
+  renderStampCards();
   // Бонусы САН (баллы заведения).
   document.getElementById('vPointsEnabled').value      = String(v?.pointsEnabled ?? false);
   document.getElementById('vPointsMode').value         = v?.pointsMode ?? 'flat';
@@ -1802,8 +1866,12 @@ window.saveVenue = async () => {
     instagram:    document.getElementById('vInstagram').value.trim(),
     telegram:     document.getElementById('vTelegram').value.trim(),
     loyaltyEnabled: document.getElementById('vLoyaltyEnabled').value === 'true',
-    loyaltyGoal:  Math.min(Math.max(parseInt(document.getElementById('vLoyaltyGoal').value) || 6, 2), 12),
+    // Первая карта — без верхнего предела, как на сервере и в приложении
+    // (activeStampCards / StampCards.firstGoal); 0 и мусор — «не задано» (6).
+    loyaltyGoal:  Math.max(parseInt(document.getElementById('vLoyaltyGoal').value) || 6, 2),
     loyaltyReward: document.getElementById('vLoyaltyReward').value.trim() || 'Награда за лояльность',
+    loyaltyTitle:  document.getElementById('vLoyaltyTitle').value.trim().slice(0, 30),
+    stampCards:    collectStampCards(),
     // Бонусы САН — баллы заведения (гардрейлы дублируют серверные).
     pointsEnabled: document.getElementById('vPointsEnabled').value === 'true',
     pointsMode:    document.getElementById('vPointsMode').value,

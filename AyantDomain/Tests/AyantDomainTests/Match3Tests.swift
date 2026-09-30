@@ -36,13 +36,13 @@ final class Match3Tests: XCTestCase {
         }
     }
 
-    private func state(_ layout: [String], score: Int = 0, movesLeft: Int = Match3.movesPerLevel,
+    private func state(_ layout: [String], score: Int = 0,
                        level: Int = 1, file: StaticString = #filePath, line: UInt = #line) -> Match3.State {
         let b = board(layout, file: file, line: line)
         XCTAssertTrue(Match3.matches(on: b).isEmpty,
                       "стартовая раскладка теста не должна собираться сама", file: file, line: line)
-        return Match3.State(board: b, score: score, movesLeft: movesLeft, level: level,
-                            matches: 0, isOver: false, seed: 777, clearing: [],
+        return Match3.State(board: b, score: score, level: level,
+                            matches: 0, seed: 777, clearing: [],
                             nextID: Match3.rows * Match3.columns + 1)
     }
 
@@ -61,9 +61,7 @@ final class Match3Tests: XCTestCase {
         XCTAssertTrue(s.board.allSatisfy { $0.count == Match3.columns })
         XCTAssertTrue(Match3.matches(on: s.board).isEmpty, "поле не должно собираться само на старте")
         XCTAssertTrue(Match3.hasMoves(s), "на старте обязан быть хотя бы один ход")
-        XCTAssertEqual(s.movesLeft, Match3.movesPerLevel)
         XCTAssertEqual(s.level, 1)
-        XCTAssertFalse(s.isOver)
     }
 
     func testSameSeedGivesSameGame() {
@@ -107,19 +105,12 @@ final class Match3Tests: XCTestCase {
         XCTAssertTrue(Match3.swap(s, p(0, 0), p(-1, 0)).isEmpty)
     }
 
-    func testFinishedGameTakesNoMoves() {
-        var s = state(base)
-        s.isOver = true
-        XCTAssertTrue(Match3.swap(s, p(2, 5), p(2, 6)).isEmpty)
-    }
-
     func testExchangedSwapsTilesWithoutSpendingAMove() {
         let s = state(base)
         let a = p(0, 0), b = p(1, 0)
         let swapped = Match3.exchanged(s, a, b)
         XCTAssertEqual(swapped?.board[0][0].kind, s.board[0][1].kind)
         XCTAssertEqual(swapped?.board[0][1].kind, s.board[0][0].kind)
-        XCTAssertEqual(swapped?.movesLeft, s.movesLeft, "показ обмена — не ход")
         XCTAssertEqual(swapped?.score, s.score)
         XCTAssertNil(Match3.exchanged(s, a, p(3, 3)), "несоседние не меняются местами")
     }
@@ -140,7 +131,6 @@ final class Match3Tests: XCTestCase {
         XCTAssertEqual(firstBurn(frames), [p(0, 6), p(1, 6), p(2, 6)])
 
         let final = frames.last!
-        XCTAssertEqual(final.movesLeft, Match3.movesPerLevel - 1, "ход списан один раз")
         XCTAssertGreaterThanOrEqual(final.score, 3 * Match3.pointsPerTile)
         XCTAssertGreaterThanOrEqual(final.matches, 1)
         XCTAssertTrue(final.clearing.isEmpty, "итоговый кадр уже без вспышки")
@@ -242,7 +232,7 @@ final class Match3Tests: XCTestCase {
                        "спецэлемент — это превращение фишки, а не новая фишка")
     }
 
-    // MARK: Бонусы, уровни и конец партии
+    // MARK: Бонусы, уровни и бесконечная партия
 
     func testBonusesCountedPerMatches() {
         var s = state(base)
@@ -252,20 +242,31 @@ final class Match3Tests: XCTestCase {
         XCTAssertEqual(s.bonuses, 2, "бонус за каждые \(Match3.matchesPerBonus) совпадений")
     }
 
-    func testGoalReachedRaisesLevelAndAddsMoves() {
-        let s = state(tripleLayout, score: Match3.goal(forLevel: 1) - 10, movesLeft: 5)
+    func testGoalReachedRaisesLevel() {
+        let s = state(tripleLayout, score: Match3.goal(forLevel: 1) - 10)
         let final = Match3.swap(s, p(2, 5), p(2, 6)).last!
         XCTAssertEqual(final.level, 2, "цель взята — следующий уровень")
-        XCTAssertEqual(final.movesLeft, 4 + Match3.movesPerLevel, "и новая порция ходов")
-        XCTAssertFalse(final.isOver)
     }
 
-    func testLastMoveEndsTheGame() {
-        let s = state(tripleLayout, movesLeft: 1)
-        let final = Match3.swap(s, p(2, 5), p(2, 6)).last!
-        XCTAssertEqual(final.movesLeft, 0)
-        XCTAssertTrue(final.isOver, "ходы кончились, а цель не взята")
-        XCTAssertTrue(Match3.swap(final, p(2, 5), p(2, 6)).isEmpty)
+    /// Ходов не считаем: партия не кончается, после любого хода на поле
+    /// обязан остаться следующий (тупик перемешивается сам).
+    func testGameNeverEnds() {
+        var s = Match3.start(seed: 9)
+        var played = 0
+        outer: for _ in 0..<60 {
+            for y in 0..<Match3.rows { for x in 0..<Match3.columns - 1 {
+                let frames = Match3.swap(s, p(x, y), p(x + 1, y))
+                if let last = frames.last { s = last; played += 1; continue outer }
+            } }
+            for y in 0..<Match3.rows - 1 { for x in 0..<Match3.columns {
+                let frames = Match3.swap(s, p(x, y), p(x, y + 1))
+                if let last = frames.last { s = last; played += 1; continue outer }
+            } }
+            XCTFail("после \(played) ходов не осталось ни одного — партия упёрлась в тупик")
+            return
+        }
+        XCTAssertEqual(played, 60)
+        XCTAssertTrue(Match3.hasMoves(s))
     }
 
     // MARK: Тупик

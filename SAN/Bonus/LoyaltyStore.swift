@@ -8,10 +8,18 @@ import AyantFeatures
 
 struct LoyaltyView: View {
     @EnvironmentObject private var loyalty: LoyaltyStore
+    @EnvironmentObject private var store: AppStore
+
+    /// Без дополнительных карт, которые заведение удалило или выключило.
+    private var cards: [LoyaltyCard] {
+        loyalty.cards.filter { card in
+            store.venue(id: card.venueID).map { $0.offersStampCard(card.cardID) } ?? true
+        }
+    }
 
     var body: some View {
         Group {
-            if loyalty.cards.isEmpty {
+            if cards.isEmpty {
                 ContentUnavailableView(
                     "Пока нет карт лояльности",
                     systemImage: "creditcard",
@@ -19,7 +27,7 @@ struct LoyaltyView: View {
             } else {
                 ScrollView {
                     VStack(spacing: 16) {
-                        ForEach(loyalty.cards) { LoyaltyCardView(card: $0, userID: loyalty.userID) }
+                        ForEach(cards) { LoyaltyCardView(card: $0, userID: loyalty.userID) }
                     }
                     .padding(16)
                 }
@@ -55,7 +63,8 @@ struct LoyaltyCardView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(card.venueName).font(.golos(20, .heavy)).foregroundStyle(.white)
                         .lineLimit(1).minimumScaleFactor(0.7)
-                    Text("Награда: \(card.reward)")
+                    Text(card.title.isEmpty ? LF("Награда: %@", card.reward)
+                                            : LF("%@ · награда: %@", card.title, card.reward))
                         .font(.golos(13, .medium)).foregroundStyle(.white.opacity(0.92))
                         .lineLimit(1).minimumScaleFactor(0.8)
                 }
@@ -88,7 +97,9 @@ struct LoyaltyCardView: View {
                         .background(.white.opacity(0.92), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
                 .buttonStyle(.plain).disabled(!canScan)
-                if ReleaseFlags.appleWallet {
+                // Pass Wallet пока знает только первую карту (serial по
+                // заведению) — для остальных кнопку не показываем.
+                if ReleaseFlags.appleWallet && card.cardID == StampCard.defaultID {
                     Button {
                         WalletService.addLoyaltyPass(card, userID: userID) { walletError = $0 }
                     } label: {
@@ -160,13 +171,23 @@ struct VenueLoyaltyScreen: View {
                     Spacer()
                     Color.clear.frame(width: 44, height: 44)
                 }
-                let card = loyalty.cardOrNew(venueID: venue.id, venueName: venue.name,
-                                             goal: venue.loyaltyGoal, reward: venue.loyaltyReward)
-                LoyaltyCardView(card: card, userID: loyalty.userID)
+                // По карте на каждую карту штампов заведения; прогресс — гостя,
+                // цель и награда — текущие из настроек заведения.
+                let stampCards = venue.stampCards.isEmpty
+                    ? [StampCard(id: StampCard.defaultID, title: venue.loyaltyTitle,
+                                 goal: venue.loyaltyGoal, reward: venue.loyaltyReward)]
+                    : venue.stampCards
+                ForEach(stampCards) { stampCard in
+                    LoyaltyCardView(card: loyalty.cardOrNew(venueID: venue.id, venueName: venue.name,
+                                                            stampCard: stampCard),
+                                    userID: loyalty.userID)
+                }
                 VStack(alignment: .leading, spacing: 8) {
                     Label("Как это работает", systemImage: "info.circle")
                         .font(.golos(17, .bold)).foregroundStyle(Color.sanInk)
-                    Text("Показывайте QR карты сотруднику при каждом визите — он сканирует его, и вам засчитывается штамп. Соберите \(venue.loyaltyGoal) штампов и получите «\(venue.loyaltyReward)».")
+                    Text(stampCards.count > 1
+                         ? "Показывайте QR сотруднику при каждом визите — он сканирует его и выбирает, какой карте засчитать штамп. На каждой карте своя награда."
+                         : "Показывайте QR карты сотруднику при каждом визите — он сканирует его, и вам засчитывается штамп. Соберите \(venue.loyaltyGoal) штампов и получите «\(venue.loyaltyReward)».")
                         .font(.golos(15, .regular)).foregroundStyle(Color.sanInkSoft)
                         .fixedSize(horizontal: false, vertical: true)
                 }

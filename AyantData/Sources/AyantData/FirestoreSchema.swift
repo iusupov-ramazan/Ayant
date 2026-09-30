@@ -30,6 +30,10 @@ public enum FS {
         public static let couponOffers = "couponOffers"
         public static let giftCoupons = "giftCoupons"
         public static let loyaltyCards = "loyaltyCards"
+        /// Штампы дополнительных карт заведения (`{userID}_{venueID}_{cardID}`).
+        /// Отдельно от `loyaltyCards`: Android и старые iOS склеивают карты
+        /// оттуда по заведению и затёрли бы первую карту второй.
+        public static let extraLoyaltyCards = "extraLoyaltyCards"
         public static let venuePoints = "venuePoints"
         public static let bonusGrants = "bonusGrants"
         public static let redemptions = "redemptions"
@@ -110,6 +114,11 @@ public enum FS {
         public static let loyaltyEnabled = "loyaltyEnabled"
         public static let loyaltyGoal = "loyaltyGoal"
         public static let loyaltyReward = "loyaltyReward"
+        /// Имя первой карты штампов (её цель и награда — `loyaltyGoal`/`loyaltyReward`).
+        public static let loyaltyTitle = "loyaltyTitle"
+        /// Дополнительные карты штампов — массив `StampCardField`. Первая карта
+        /// сюда НЕ входит: она в скалярных полях выше (их читает Android).
+        public static let stampCards = "stampCards"
         public static let couponsEnabled = "couponsEnabled"
         // Баллы САН. Эти поля пишет ТОЛЬКО админ-панель — хост их не трогает,
         // иначе сохранение из приложения затёрло бы настройки (см. HostVenueDTO).
@@ -266,7 +275,12 @@ public enum FS {
         public static let emoji = "emoji"
         public static let kind = "kind"
         public static let imageURL = "imageURL"
+        /// Цена в сомах (целое). Нет поля — цена не указана.
+        public static let price = "price"
+        public static let description = "description"
+        public static let section = "section"
     }
+
 
     /// Элемент массива `branches` (филиал).
     public enum BranchField {
@@ -288,6 +302,15 @@ public enum FS {
     public enum PointsBandField {
         public static let maxAmount = "maxAmount"
         public static let points = "points"
+    }
+
+    /// Элемент массива `stampCards` (дополнительная карта штампов).
+    public enum StampCardField {
+        public static let id = "id"
+        public static let title = "title"
+        public static let goal = "goal"
+        public static let reward = "reward"
+        public static let active = "active"
     }
 
     /// Элемент массива `pointsRewards` (награда за баллы).
@@ -322,6 +345,9 @@ public enum FS {
         public static let completedRounds = "completedRounds"
         public static let goal = "goal"
         public static let reward = "reward"
+        /// Какая карта заведения; нет поля — первая (`default`).
+        public static let cardID = "cardID"
+        public static let title = "title"
     }
 
     public enum VenuePointsDoc {
@@ -443,6 +469,10 @@ public enum FS {
         public static let billAmount = "billAmount"
         public static let bandIndex = "bandIndex"
         public static let idempotencyKey = "idempotencyKey"
+        /// Выбранная сотрудником карта штампов (запрос) / карта, на которую лёг
+        /// штамп (ответ).
+        public static let cardID = "cardID"
+        public static let cardTitle = "cardTitle"
         /// true — сервер распознал повтор по ключу и НЕ начислил снова.
         public static let replayed = "replayed"
     }

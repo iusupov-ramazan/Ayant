@@ -10,7 +10,7 @@ import AyantFeatures
 /// ко всему экрану.
 ///
 /// Экран по умолчанию — сводка настроек; «Изменить настройки» открывает
-/// редактор, где карта штампов и баллы собираются в черновики (`StampDraft`,
+/// редактор, где карта штампов и баллы собираются в черновики (`StampCardsDraft`,
 /// `PointsDraft`) и уходят одной кнопкой «Сохранить»: штампы — через
 /// `saveVenue`, баллы — через `HostIntent.savePointsConfig`, где серверные
 /// ограничения (кэшбэк ≤ 20 %, пауза 0…1440 мин и т. д.) накладывает чистый
@@ -30,8 +30,8 @@ struct HostLoyaltyView: View {
     /// `draft != baseline`, без отдельных флагов.
     @State private var draft = PointsDraft()
     @State private var baseline = PointsDraft()
-    @State private var stamps = StampDraft()
-    @State private var stampsBaseline = StampDraft()
+    @State private var stamps = StampCardsDraft()
+    @State private var stampsBaseline = StampCardsDraft()
     /// Заведение, на которое хотят переключиться при несохранённых правках.
     @State private var pendingSwitchID: String?
     @State private var savedFlash = false
@@ -106,7 +106,7 @@ struct HostLoyaltyView: View {
         let d = venue.map { PointsDraft($0) } ?? PointsDraft()
         draft = d
         baseline = d
-        let st = venue.map { StampDraft($0) } ?? StampDraft()
+        let st = venue.map { StampCardsDraft($0) } ?? StampCardsDraft()
         stamps = st
         stampsBaseline = st
     }
@@ -141,10 +141,7 @@ struct HostLoyaltyView: View {
         SanHaptics.save()
         if stamps != stampsBaseline {
             var fields = HostForms.fields(from: v)
-            fields.loyaltyEnabled = stamps.enabled
-            fields.loyaltyGoal = stamps.goal
-            let reward = stamps.reward.trimmingCharacters(in: .whitespacesAndNewlines)
-            fields.loyaltyReward = reward.isEmpty ? v.loyaltyReward : reward
+            stamps.apply(to: &fields, keepingReward: v.loyaltyReward)
             host.send(.saveVenue(existing: v, fields: fields))
         }
         if draft != baseline {
@@ -174,19 +171,23 @@ struct HostLoyaltyView: View {
     private var stampSummary: some View {
         VStack(alignment: .leading, spacing: 12) {
             eyebrow("Карта штампов")
-            SanFieldCard {
-                summaryRow("Карта штампов", stamps.enabled ? "Включена" : "Выключена")
-                if stamps.enabled {
-                    SanHairline(leading: 16)
-                    summaryRow("Штампов до награды", "\(stamps.goal)")
-                    SanHairline(leading: 16)
-                    summaryRow("Награда", stamps.reward)
+            if stamps.enabled {
+                let cards = StampCards.active(enabled: true, title: stamps.first.title,
+                                              goal: stamps.first.goal, reward: stamps.first.reward,
+                                              extras: stamps.extras)
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(cards) { StampCardSummaryRow(card: $0) }
                 }
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .sanGroupCard(radius: SanRadius.card)
+            } else {
+                SanFieldCard { summaryRow("Карта штампов", LS("Выключена")) }
             }
             if stamps.enabled && draft.enabled {
                 oneMechanicNote
             } else if stamps.enabled {
-                Text("Гость получает штамп за визит: сотрудник сканирует QR его карты. На \(stamps.goal)-м штампе — «\(stamps.reward)».")
+                Text("Гость получает штамп за визит: сотрудник сканирует QR его карты и, если карт несколько, выбирает нужную.")
                     .font(.golos(12.5)).foregroundStyle(Color.sanInkSoft)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -198,27 +199,7 @@ struct HostLoyaltyView: View {
     private var stampEditor: some View {
         VStack(alignment: .leading, spacing: 12) {
             eyebrow("Карта штампов")
-            VStack(spacing: 0) {
-                SanGradientToggle(title: "Карта штампов",
-                                  subtitle: "Штамп за визит по QR карты гостя",
-                                  isOn: $stamps.enabled)
-                    .padding(.horizontal, 16).padding(.vertical, 13)
-                if stamps.enabled {
-                    SanHairline(leading: 16)
-                    SanFieldRow(label: "Штампов до награды") {
-                        Stepper(value: $stamps.goal, in: 2...12) {
-                            Text("\(stamps.goal)")
-                                .font(.golos(15.5, .semibold))
-                                .foregroundStyle(Color.sanInk)
-                        }
-                    }
-                    SanHairline(leading: 16)
-                    SanFieldRow(label: "Награда") {
-                        SanFieldInput(placeholder: "Награда (напр. Бесплатный кофе)", text: $stamps.reward)
-                    }
-                }
-            }
-            .sanGroupCard(radius: SanRadius.card)
+            StampCardsEditor(draft: $stamps)
             if stamps.enabled && draft.enabled { oneMechanicNote }
         }
     }
@@ -561,8 +542,13 @@ struct HostLoyaltyView: View {
                     SanFieldInput(placeholder: "6", text: $draft.expiryMonths, keyboard: .numberPad)
                 }
                 SanHairline(leading: 16)
+                // Подпись описывала механику, но умалчивала последствие: при
+                // включённом режиме сервер гасит баллы по `uid == userID`,
+                // то есть гость может списать их когда угодно и где угодно, а
+                // заведению остаётся выдать награду по факту. Это решение про
+                // деньги, и принимать его вслепую нельзя.
                 SanGradientToggle(title: "Гость списывает сам в приложении",
-                                  subtitle: "Выключено — награду сканирует сотрудник по QR гостя",
+                                  subtitle: "Включено — гость спишет баллы сам, в любой момент и без сотрудника; вам останется выдать награду. Выключено — списание только через скан QR гостя",
                                   isOn: Binding(
                                     get: { draft.redeemMode == "customerInitiated" },
                                     set: { draft.redeemMode = $0 ? "customerInitiated" : "staffScan" }))
@@ -612,15 +598,23 @@ struct HostLoyaltyView: View {
                         .buttonStyle(SanPillButton())
                     Button("Сохранить") { saveAll() }
                         .buttonStyle(SanPrimaryButton())
-                        .disabled(!isDirty)
-                        .opacity(isDirty ? 1 : 0.6)
+                        .disabled(!isDirty || stamps.problem != nil)
+                        .opacity(isDirty && stamps.problem == nil ? 1 : 0.6)
                 }
-                Text(isDirty ? "Новые правила применяются к следующим сканам сразу после сохранения."
-                             : "Изменений нет.")
-                    .foregroundStyle(Color(hex: 0x9A9188))
-                    .font(.golos(11.5, .semibold))
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
+                if let problem = stamps.problem {
+                    Text(problem)
+                        .foregroundStyle(Color(hex: 0xC24A12))
+                        .font(.golos(11.5, .semibold))
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    Text(isDirty ? "Новые правила применяются к следующим сканам сразу после сохранения."
+                                 : "Изменений нет.")
+                        .foregroundStyle(Color(hex: 0x9A9188))
+                        .font(.golos(11.5, .semibold))
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             } else {
                 Button { startEditing() } label: {
                     Label("Изменить настройки", systemImage: "pencil")
@@ -687,23 +681,8 @@ struct HostLoyaltyView: View {
     }
 }
 
-// MARK: - Черновик карты штампов
-
-/// Настройки штампов в том виде, в каком их держит редактор; в `VenueFields`
-/// уходят один раз, при сохранении.
-private struct StampDraft: Equatable {
-    var enabled = false
-    var goal = 6
-    var reward = ""
-
-    init() {}
-
-    init(_ dto: HostVenueDTO) {
-        enabled = dto.loyaltyEnabled
-        goal = min(max(dto.loyaltyGoal, 2), 12)
-        reward = dto.loyaltyReward
-    }
-}
+// Черновик карт штампов — `StampCardsDraft` (StampCardsEditor.swift): его
+// же использует лист «Карта лояльности» на карточке заведения.
 
 // MARK: - Черновик конфига баллов
 

@@ -502,7 +502,10 @@ struct VenueDetailView: View {
                 actionRow
                 infoSection
                 // Штампы показываем, только если баллы выключены: механика одна.
-                if venue.stampsActive { loyaltyBanner }
+                if venue.stampsActive {
+                    // По баннеру на карту штампов: у «Пармезана» кофе и пицца — отдельно.
+                    ForEach(venue.stampCards) { loyaltyBanner($0) }
+                }
                 if !galleryPhotos.isEmpty { photosGallery }
                 if !venue.items.isEmpty { itemsSection }
             }
@@ -762,10 +765,10 @@ struct VenueDetailView: View {
 
     // MARK: Карта лояльности
 
-    private var loyaltyBanner: some View {
-        let card = loyalty.card(for: venue.id)
+    private func loyaltyBanner(_ stampCard: StampCard) -> some View {
+        let card = loyalty.card(venueID: venue.id, cardID: stampCard.id)
         let stamps = card?.stamps ?? 0
-        let goal = venue.loyaltyGoal
+        let goal = stampCard.goal
         let rounds = card?.completedRounds ?? 0
         return NavigationLink {
             VenueLoyaltyScreen(venue: venue)
@@ -774,8 +777,9 @@ struct VenueDetailView: View {
                 HStack(spacing: 10) {
                     Image(systemName: "creditcard.fill").foregroundStyle(.white)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Карта лояльности").font(.subheadline.weight(.bold)).foregroundStyle(.white)
-                        Text("\(goal) визитов → \(venue.loyaltyReward)")
+                        Text(stampCard.title.isEmpty ? LS("Карта лояльности") : stampCard.title)
+                            .font(.subheadline.weight(.bold)).foregroundStyle(.white)
+                        Text("\(goal) визитов → \(stampCard.reward)")
                             .font(.caption).foregroundStyle(.white.opacity(0.9))
                     }
                     Spacer()
@@ -1067,6 +1071,10 @@ struct VenueDetailView: View {
                                 ItemThumb(item: item, size: 70)
                                 Text(item.name).font(.caption).lineLimit(1)
                                     .frame(maxWidth: 80)
+                                if let price = item.price {
+                                    Text("\(price) сом").font(.caption2.weight(.semibold))
+                                        .foregroundStyle(.secondary).monospacedDigit()
+                                }
                             }
                         }
                         .buttonStyle(.plain)

@@ -123,19 +123,31 @@ struct SanFormHeader: View {
 
     var body: some View {
         HStack {
-            Button("Отмена", action: onCancel)
-                .font(.golos(15, .semibold))
-                .foregroundStyle(Color.sanAccentText)
+            // Цель нажатия — не только буквы. Голый текст 15pt у самой
+            // верхней кромки листа давал попадание размером с палец наполовину:
+            // касание чуть выше уходило жесту перетаскивания листа, и
+            // «Отмена» «не работала». Теперь зона — полные 44pt по высоте.
+            Button(action: onCancel) {
+                Text("Отмена")
+                    .font(.golos(15, .semibold))
+                    .foregroundStyle(Color.sanAccentText)
+                    .frame(minHeight: 44)
+                    .padding(.trailing, 12)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
             Spacer(minLength: 8)
             Text(title)
                 .font(.golos(16, .bold)).foregroundStyle(Color.sanInk)
                 .lineLimit(1).fixedSize()
             Spacer(minLength: 8)
             // Балансирующая пустота той же ширины, что и «Отмена».
-            Text("Отмена").font(.golos(15, .semibold)).opacity(0)
+            Text("Отмена").font(.golos(15, .semibold)).padding(.leading, 12).opacity(0)
+                .accessibilityHidden(true)
         }
         .padding(.horizontal, SanMetrics.screenPadding)
-        .padding(.vertical, 12)
+        // Высота шапки прежняя: 44pt кнопки вместо 12 + текст + 12.
+        .padding(.top, 6).padding(.bottom, 2)
     }
 }
 

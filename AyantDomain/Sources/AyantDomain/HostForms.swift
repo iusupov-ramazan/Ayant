@@ -40,13 +40,21 @@ public enum HostForms {
         public var loyaltyGoal: Int
         public var loyaltyReward: String
         public var couponsEnabled: Bool
+        /// Имя первой карты штампов. `nil` — «не трогать»: общая форма
+        /// заведения карт не показывает и не должна их затирать.
+        public var loyaltyTitle: String?
+        /// Дополнительные карты штампов. `nil` — «не трогать», как и выше;
+        /// пустой массив — «удалить все дополнительные».
+        public var extraStampCards: [StampCard]?
 
         public init(name: String, category: VenueCategory, district: String, address: String,
                     phone: String, emoji: String, latitude: Double, longitude: Double,
                     openHour: Int, closeHour: Int, imageURL: String, weekHours: [DayHours],
                     pdfMenuURL: String, whatsapp: String, instagram: String, telegram: String,
                     branches: [Branch], loyaltyEnabled: Bool, loyaltyGoal: Int,
-                    loyaltyReward: String, couponsEnabled: Bool) {
+                    loyaltyReward: String, couponsEnabled: Bool,
+                    loyaltyTitle: String? = nil, extraStampCards: [StampCard]? = nil) {
+            self.loyaltyTitle = loyaltyTitle; self.extraStampCards = extraStampCards
             self.name = name; self.category = category; self.district = district
             self.address = address; self.phone = phone; self.emoji = emoji
             self.latitude = latitude; self.longitude = longitude
@@ -76,7 +84,8 @@ public enum HostForms {
             instagram: dto.instagram, telegram: dto.telegram,
             branches: dto.branches,
             loyaltyEnabled: dto.loyaltyEnabled, loyaltyGoal: dto.loyaltyGoal,
-            loyaltyReward: dto.loyaltyReward, couponsEnabled: dto.couponsEnabled)
+            loyaltyReward: dto.loyaltyReward, couponsEnabled: dto.couponsEnabled,
+            loyaltyTitle: dto.loyaltyTitle, extraStampCards: dto.extraStampCards)
     }
 
     /// Поля формы акции.
@@ -145,7 +154,15 @@ public enum HostForms {
         dto.loyaltyGoal = fields.loyaltyGoal
         dto.loyaltyReward = trim(fields.loyaltyReward)
         dto.couponsEnabled = fields.couponsEnabled
-        // id / status / todaySpecial у существующего DTO намеренно не трогаем.
+        if let title = fields.loyaltyTitle {
+            dto.loyaltyTitle = StampCards.clip(trim(title), StampCards.titleLimit)
+        }
+        if let extras = fields.extraStampCards {
+            dto.extraStampCards = StampCards.sanitizedExtras(extras)
+            dto.stampCardsLoaded = true
+        }
+        // id / status / todaySpecial у существующего DTO намеренно не трогаем;
+        // карты штампов — тоже, если форма их не передала (`nil`).
         return dto
     }
 

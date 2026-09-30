@@ -24,7 +24,7 @@ struct TetrisGameView: View {
                 board
                     .overlay { if state.isOver { gameOverOverlay } }
                 controls
-                Text("1 линия = \(Tetris.bonusPerLine) бонусов · до \(bonus.dailyGameplayCap)/день")
+                Text("\(Tetris.linesPerBonus) линий = 1 бонус")
                     .font(.caption).foregroundStyle(.secondary)
             }
             .padding()
@@ -52,14 +52,17 @@ struct TetrisGameView: View {
         }
     }
 
-    /// Применяет ход и начисляет бонусы за НОВЫЕ линии — по одной штуке за
-    /// линию, дневной лимит держит `BonusEngine`, своей экономики у игры нет.
+    /// Применяет ход и начисляет бонусы за НОВЫЕ линии.
+    ///
+    /// Считаем разницу по `bonuses`, а не по линиям: цена бонуса общая для всех
+    /// игр (`GameEconomy`), и линии копятся — остаток от предыдущего бонуса не
+    /// сгорает.
     private func step(_ transform: (Tetris.State) -> Tetris.State) {
-        let before = state.lines
+        let before = state.bonuses
         state = transform(state)
-        let gained = state.lines - before
+        let gained = state.bonuses - before
         if gained > 0 {
-            awarded += bonus.awardGameplay(gained * Tetris.bonusPerLine)
+            awarded += bonus.awardGameplay(gained)
             SanHaptics.selection()
         }
     }

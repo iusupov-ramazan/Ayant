@@ -98,6 +98,84 @@ const DEFAULT_EXPIRY_MONTHS = 6;        // баллы сгорают после 
 const MAX_CASHBACK_PERCENT = 20;        // потолок кэшбэка (защита от опечатки «50%»)
 const MAX_POINTS_PER_EARN = 10000;      // потолок за одно начисление
 
+/* ── Несколько карт штампов у заведения ────────────────────────────────────
+ * Первая карта — скалярные поля заведения (`loyaltyGoal`/`loyaltyReward`,
+ * id "default"), её штампы — в прежнем `loyaltyCards/{user}_{venue}`.
+ * Остальные — массив `stampCards`, их штампы — в ОТДЕЛЬНОЙ коллекции
+ * `extraLoyaltyCards/{user}_{venue}_{card}`. Отдельной — потому что Android и
+ * уже выпущенные сборки iOS читают `loyaltyCards where userID == uid` и
+ * склеивают карты по заведению: документ второй карты в той же коллекции
+ * затёр бы у них первую.
+ * Скан без `cardID` ставит штамп на первую карту: так работают клиенты, не
+ * знающие о картах. Правила — зеркало `StampCards.swift`, общие случаи —
+ * `specs/fixtures/stamp-cards-fixtures.json` (гоняют обе стороны).
+ * ─────────────────────────────────────────────────────────────────────────── */
+export const DEFAULT_STAMP_CARD_ID = "default";
+export const EXTRA_LOYALTY_CARDS = "extraLoyaltyCards";
+const STAMP_CARD_ID_RE = /^[A-Za-z0-9-]{1,32}$/;
+const STAMP_CARDS_MAX = 5;             // всего карт, считая первую
+const STAMP_CARD_TITLE_MAX = 30;
+const STAMP_CARD_REWARD_MAX = 60;
+const DEFAULT_STAMP_REWARD = "Награда за лояльность";
+/** Обрезка по кодовым точкам (как `StampCards.clip` — по скалярам Unicode):
+ *  `.slice` режет по UTF-16 и может разрезать эмодзи пополам. */
+const clipCP = (s: string, n: number) => Array.from(s).slice(0, n).join("");
+
+export interface ResolvedStampCard { id: string; title: string; goal: number; reward: string; }
+
+/**
+ * Карты, которые сейчас принимают штампы; первая — впереди.
+ *
+ * Цель: ноль, мусор и отрицательное — «не задано» → 6 (`|| 6` намеренно, в
+ * отличие от earnCooldownMinutes: карта на 0 штампов смысла не имеет).
+ * У первой карты верхнего предела нет — его не было и до нескольких карт,
+ * а Android пишет цель свободным числом; у дополнительных — 2…12.
+ */
+export function activeStampCards(venue: VenueDoc): ResolvedStampCard[] {
+  if (venue.loyaltyEnabled !== true) return [];
+  const goalOf = (g: Numeric, cap: number) => {
+    const n = parseInt(String(g), 10);
+    return n > 0 ? Math.min(Math.max(n, 2), cap) : 6;
+  };
+  const first: ResolvedStampCard = {
+    id: DEFAULT_STAMP_CARD_ID,
+    title: clipCP(String(venue.loyaltyTitle || "").trim(), STAMP_CARD_TITLE_MAX),
+    goal: goalOf(venue.loyaltyGoal, Number.MAX_SAFE_INTEGER),
+    reward: String(venue.loyaltyReward || "").trim() || DEFAULT_STAMP_REWARD,
+  };
+  // Отбор — как `StampCards.sanitizedExtras`: недопустимый id, пустая награда,
+  // чужой "default" и дубль id отбрасываются; выключенная карта занимает свой
+  // id и место в пределе, но штампы не принимает.
+  const seen = new Set<string>([DEFAULT_STAMP_CARD_ID]);
+  const extras: ResolvedStampCard[] = [];
+  let kept = 0;
+  for (const c of Array.isArray(venue.stampCards) ? venue.stampCards : []) {
+    if (kept >= STAMP_CARDS_MAX - 1) break;
+    const id = String((c && c.id) || "");
+    const reward = clipCP(String((c && c.reward) || "").trim(), STAMP_CARD_REWARD_MAX);
+    if (!STAMP_CARD_ID_RE.test(id) || seen.has(id) || !reward) continue;
+    seen.add(id);
+    kept += 1;
+    if (c.active === false) continue;
+    extras.push({
+      id, reward, goal: goalOf(c.goal, 12),
+      title: clipCP(String(c.title || "").trim(), STAMP_CARD_TITLE_MAX),
+    });
+  }
+  return [first, ...extras];
+}
+
+/** id документа штампов. Первая карта — прежний документ без суффикса. */
+export function stampCardDocID(userID: string, venueID: string, cardID: string): string {
+  return !cardID || cardID === DEFAULT_STAMP_CARD_ID
+    ? `${userID}_${venueID}` : `${userID}_${venueID}_${cardID}`;
+}
+
+/** Коллекция документа штампов: первая карта — `loyaltyCards`, остальные — отдельно. */
+export function stampCardCollection(cardID: string): string {
+  return !cardID || cardID === DEFAULT_STAMP_CARD_ID ? "loyaltyCards" : EXTRA_LOYALTY_CARDS;
+}
+
 /**
  * Разбор числового поля конфига заведения **с сохранением явного нуля**.
  *
@@ -883,16 +961,15 @@ export const scanCoupon = onRequest(MONEY_PATH_OPTS, async (req, res) => {
     const venue = (venueSnap.data() || {}) as VenueDoc;
     if (String(venue.ownerID || "") !== uid) { res.status(403).json({ error: "not_owner" }); return; }
 
-    // `|| 6` здесь намеренно (в отличие от earnCooldownMinutes): цель карты < 2 штампов
-    // смысла не имеет, поэтому ноль трактуем как «не задано» → дефолт.
     // Идемпотентность скана. Ключ генерирует хост-приложение ОДИН раз на
     // распознанный QR и повторяет при ретрае. Проверяем его ПЕРЕД кулдауном:
     // иначе повтор внутри окна получил бы 429 вместо исходного результата —
     // ровно тот случай, ради которого ключ и нужен.
     const idempotencyKey = String((req.body && req.body.idempotencyKey) || "").trim().slice(0, 128);
 
+    // Цель первой карты — только для поля `goal` в ответе ветки B (купон).
+    // Ветка A берёт цель и награду у выбранной карты (`activeStampCards`).
     const goal = Math.max(parseInt(String(venue.loyaltyGoal), 10) || 6, 2);
-    const reward = String(venue.loyaltyReward || "Награда за лояльность");
     const venueName = String(venue.name || "Заведение");
 
     // ── Ветка A: КАРТА ЛОЯЛЬНОСТИ (QR = AYANT-CARD:userID:venueID) → +1 штамп.
@@ -908,29 +985,53 @@ export const scanCoupon = onRequest(MONEY_PATH_OPTS, async (req, res) => {
       const cardUser = String(parts[1] || ""), cardVenue = String(parts[2] || "");
       if (!cardUser || cardVenue !== venueID) { res.status(409).json({ error: "wrong_venue" }); return; }
 
+      // Какую карту выбрал сотрудник. Нет `cardID` — первая карта (старые клиенты).
+      const cardID = String((req.body && req.body.cardID) || "").trim() || DEFAULT_STAMP_CARD_ID;
+
       const nowMs = Date.now();
       // Штампы: окно из настроек панели (дефолт 15 мин; отдельно от 60-мин паузы баллов).
       const cooldownMin = stampCooldownMinutes(await loadAppSettings());
-      const cardRef = db.collection("loyaltyCards").doc(`${cardUser}_${venueID}`);
-      const keyRef = idempotencyKey ? cardRef.collection("scanKeys").doc(idempotencyKey) : null;
+      // Ключи скана ВСЕХ карт гостя в этом заведении — в одном месте, под
+      // документом первой карты, и помнят свою карту: тот же ключ с другой
+      // картой — коллизия (409), а не тихий штамп на вторую.
+      const baseRef = db.collection("loyaltyCards").doc(stampCardDocID(cardUser, venueID, DEFAULT_STAMP_CARD_ID));
+      const cardRef = cardID === DEFAULT_STAMP_CARD_ID
+        ? baseRef
+        : db.collection(stampCardCollection(cardID)).doc(stampCardDocID(cardUser, venueID, cardID));
+      const keyRef = idempotencyKey ? baseRef.collection("scanKeys").doc(idempotencyKey) : null;
 
       // Повтор того же скана — отдаём сохранённый результат, ничего не начисляя.
+      // Проверяется ДО поиска карты: ретрай должен вернуть исходный результат,
+      // даже если карту за это время выключили.
       if (keyRef) {
         const prior = await keyRef.get();
         if (prior.exists) {
           const p = prior.data() || {};
-          if (String(p.code || "") !== code) { res.status(409).json({ error: "key_reused" }); return; }
+          const priorCard = String(p.cardID || DEFAULT_STAMP_CARD_ID);
+          if (String(p.code || "") !== code || priorCard !== cardID) {
+            res.status(409).json({ error: "key_reused" }); return;
+          }
+          const fallback = activeStampCards(venue).find((c) => c.id === cardID);
+          const rGoal = parseInt(String(p.goal), 10) || (fallback ? fallback.goal : goal);
+          const rReward = String(p.reward || (fallback ? fallback.reward : ""));
           res.status(200).json({
             ok: true, loyalty: true,
             title: p.rewardIssued ? "Карта заполнена!" : "Штамп начислен",
-            stamps: parseInt(String(p.stamps), 10) || 0, goal,
+            stamps: parseInt(String(p.stamps), 10) || 0, goal: rGoal,
             rewardIssued: p.rewardIssued === true,
-            rewardTitle: p.rewardIssued === true ? reward : "",
+            rewardTitle: p.rewardIssued === true ? rReward : "",
+            cardID, cardTitle: String(p.cardTitle ?? (fallback ? fallback.title : "")),
             replayed: true,
           });
           return;
         }
       }
+
+      // Неизвестная или выключенная карта — отказ, а не молчаливый штамп не
+      // на ту карту.
+      const stampCard = activeStampCards(venue).find((c) => c.id === cardID);
+      if (!stampCard) { res.status(409).json({ error: "card_not_found" }); return; }
+      const cardGoal = stampCard.goal, reward = stampCard.reward, cardTitle = stampCard.title;
 
       // Анти-мультискан: не чаще 1 штампа на гостя/заведение в пределах кулдауна
       // (иначе сотрудник мог бы просканировать карту несколько раз подряд).
@@ -949,6 +1050,10 @@ export const scanCoupon = onRequest(MONEY_PATH_OPTS, async (req, res) => {
         const cur = (await tx.get(cardRef)).data() || {};
         if (priorTx && priorTx.exists) {   // гонка двух одинаковых сканов
           const p = priorTx.data() || {};
+          // Тот же ключ, но другой QR или другая карта — коллизия, а не повтор.
+          if (String(p.code || "") !== code || String(p.cardID || DEFAULT_STAMP_CARD_ID) !== cardID) {
+            throw new Error("key_reused");
+          }
           stamps = parseInt(String(p.stamps), 10) || 0;
           rewardIssued = p.rewardIssued === true;
           return;
@@ -957,9 +1062,9 @@ export const scanCoupon = onRequest(MONEY_PATH_OPTS, async (req, res) => {
         if (cooldownMin > 0 && nowMs - curLast < cooldownMin * 60000) throw new Error("cooldown");
         let s = (parseInt(String(cur.stamps), 10) || 0) + 1;
         let rounds = parseInt(String(cur.completedRounds), 10) || 0;
-        if (s >= goal) { s = 0; rounds += 1; rewardIssued = true; }   // карта заполнена → награда сегодня
+        if (s >= cardGoal) { s = 0; rounds += 1; rewardIssued = true; }   // карта заполнена → награда сегодня
         tx.set(cardRef, {
-          userID: cardUser, venueID, venueName, goal, reward,
+          userID: cardUser, venueID, venueName, goal: cardGoal, reward, cardID, title: cardTitle,
           stamps: s, completedRounds: rounds, lastStampAt: new Date(nowMs), updatedAt: new Date(),
         }, { merge: true });
         if (rewardIssued) {
@@ -969,10 +1074,13 @@ export const scanCoupon = onRequest(MONEY_PATH_OPTS, async (req, res) => {
           tx.set(db.collection("coupons").doc(), {
             userID: cardUser, venueID, venueName, title: reward,
             code: newCouponCode(), kind: "loyalty", dealID: "",
-            used: false, createdAt: new Date(nowMs), source: "loyaltyCard",
+            used: false, createdAt: new Date(nowMs), source: "loyaltyCard", cardID,
           });
         }
-        if (keyRef) tx.set(keyRef, { code, stamps: s, rewardIssued, at: new Date(nowMs) });
+        if (keyRef) {
+          tx.set(keyRef, { code, cardID, stamps: s, rewardIssued, goal: cardGoal, reward,
+            cardTitle, at: new Date(nowMs) });
+        }
         stamps = s;
         applied = true;
       });
@@ -980,7 +1088,8 @@ export const scanCoupon = onRequest(MONEY_PATH_OPTS, async (req, res) => {
       res.status(200).json({
         ok: true, loyalty: true,
         title: rewardIssued ? "Карта заполнена!" : "Штамп начислен",
-        stamps, goal, rewardIssued, rewardTitle: rewardIssued ? reward : "",
+        stamps, goal: cardGoal, rewardIssued, rewardTitle: rewardIssued ? reward : "",
+        cardID, cardTitle,
         replayed: false,
       });
       return;
@@ -1118,6 +1227,7 @@ export const scanCoupon = onRequest(MONEY_PATH_OPTS, async (req, res) => {
   } catch (e: any) {
     if (String(e.message) === "already_used") { res.status(409).json({ error: "already_used" }); return; }
     if (String(e.message) === "cooldown") { res.status(429).json({ error: "cooldown" }); return; }
+    if (String(e.message) === "key_reused") { res.status(409).json({ error: "key_reused" }); return; }
     console.error("scanCoupon error:", e);
     res.status(500).json({ error: "scan_failed" });
   }
@@ -1553,12 +1663,19 @@ export const deleteAccount = onRequest({ cors: true }, async (req, res) => {
     }
 
     // 2) Документы, чей id начинается с uid: `{uid}_{venueID}`.
-    for (const name of ["venuePoints", "loyaltyCards"]) {
+    for (const name of ["venuePoints", "loyaltyCards", EXTRA_LOYALTY_CARDS]) {
       const snap = await db.collection(name)
         .where("userID", "==", uid).get();
       for (const doc of snap.docs) {
         // Подколлекции (ledger, scanKeys, redeemKeys) — рекурсивно.
         await db.recursiveDelete(doc.ref);
+        // Ключи скана дополнительных карт лежат под документом ПЕРВОЙ карты,
+        // а его может и не быть (гость копил только на «пиццу»).
+        if (name === EXTRA_LOYALTY_CARDS) {
+          const d = doc.data() || {};
+          await db.recursiveDelete(db.collection("loyaltyCards")
+            .doc(stampCardDocID(uid, String(d.venueID || ""), DEFAULT_STAMP_CARD_ID)));
+        }
       }
     }
 

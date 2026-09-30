@@ -50,7 +50,7 @@ struct VenueAvatar: View {
                 AsyncImage(url: url) { phase in
                     switch phase {
                     case .success(let image):
-                        Color.clear.overlay { image.resizable().scaledToFill() }
+                        Color.clear.overlay { image.resizable().scaledToFill().allowsHitTesting(false) }
                     default:
                         Image(systemName: "storefront.fill").font(.system(size: size * 0.42)).foregroundStyle(.white)
                     }
@@ -71,6 +71,11 @@ struct VenuePhoto: View {
     let urlString: String?
     var gradient: [Color] = [.sanAccent, .orange]
 
+    /// Касания — тоже контейнер: `scaledToFill` вылезает за рамку, а
+    /// `clipped()` обрезает только картинку, не зону нажатия. Невидимый
+    /// край обложки в форме заведения перехватывал «Отмену» в шапке листа —
+    /// поэтому у фото `allowsHitTesting(false)`, нажатия ловит градиент под ним.
+    ///
     /// Размер задаёт контейнер, а не фотография. `scaledToFill` без этого
     /// растягивал сам `ZStack` до размеров снимка: в форме заведения обложка
     /// вылезала за свои 150pt и закрашивала весь лист под формой.
@@ -81,7 +86,7 @@ struct VenuePhoto: View {
                 AsyncImage(url: url) { phase in
                     switch phase {
                     case .success(let image):
-                        Color.clear.overlay { image.resizable().scaledToFill() }
+                        Color.clear.overlay { image.resizable().scaledToFill().allowsHitTesting(false) }
                     // Пока грузится — просто градиент заведения, без спиннера.
                     // `ProgressView` крутится бесконечно и инвалидирует свой
                     // слой каждый кадр; в списке из десятка карточек это десяток
@@ -153,7 +158,7 @@ struct CoverImage: View {
                     switch phase {
                     case .success(let image):
                         // См. `VenuePhoto`: размер — от контейнера, снимок обрезаем.
-                        Color.clear.overlay { image.resizable().scaledToFill() }
+                        Color.clear.overlay { image.resizable().scaledToFill().allowsHitTesting(false) }
                     case .empty:
                         ProgressView().tint(.white)
                     default:

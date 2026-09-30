@@ -733,24 +733,53 @@ public final class FirebaseCouponService: CouponService {
         return snap.documents.map { Coupon(firestore: $0.data(), id: $0.documentID) }
     }
 
+    /// Карты штампов живут в двух коллекциях: первая карта заведения — в
+    /// `loyaltyCards`, остальные — в `extraLoyaltyCards` (см. `FS.Collection`).
+    private static let loyaltyCollections = [FS.Collection.loyaltyCards, FS.Collection.extraLoyaltyCards]
+
     public func fetchLoyaltyCards(userID: String) async throws -> [LoyaltyCard] {
-        let snap = try await db.collection(FS.Collection.loyaltyCards)
+        // Первая коллекция обязательна (её ошибка — ошибка запроса), вторая —
+        // нет: без правила для `extraLoyaltyCards` (правила не задеплоены)
+        // гость всё равно должен видеть свою первую карту.
+        let firstSnap = try await db.collection(FS.Collection.loyaltyCards)
             .whereField(FS.LoyaltyCardDoc.userID, isEqualTo: userID).getDocuments()
-        return snap.documents.map { LoyaltyCard(firestore: $0.data()) }
+        let extraSnap = try? await db.collection(FS.Collection.extraLoyaltyCards)
+            .whereField(FS.LoyaltyCardDoc.userID, isEqualTo: userID).getDocuments()
+        return (firstSnap.documents + (extraSnap?.documents ?? [])).map { LoyaltyCard(firestore: $0.data()) }
     }
 
     /// Живой поток: штамп начисляет Cloud Function, а Firestore сам присылает
     /// изменение. Заменяет опрос раз в 4 с, который был на экранах лояльности.
+    /// Два листенера (по коллекции на вид карт) склеиваются в один снимок;
+    /// первый снимок уходит, когда ответили оба — иначе «Начислено» сработало
+    /// бы на карты второй коллекции как на новые.
     public func loyaltyCards(userID: String) -> AsyncStream<[LoyaltyCard]> {
         AsyncStream { continuation in
             guard !userID.isEmpty else { continuation.finish(); return }
-            let registration = db.collection(FS.Collection.loyaltyCards)
-                .whereField(FS.LoyaltyCardDoc.userID, isEqualTo: userID)
-                .addSnapshotListener { snapshot, error in
-                    guard error == nil else { return }   // сеть моргнула — оставляем последнее состояние
-                    continuation.yield(snapshot?.documents.map { LoyaltyCard(firestore: $0.data()) } ?? [])
-                }
-            continuation.onTermination = { _ in registration.remove() }
+            let lock = NSLock()
+            var parts: [String: [LoyaltyCard]] = [:]
+            let registrations = Self.loyaltyCollections.map { name in
+                db.collection(name)
+                    .whereField(FS.LoyaltyCardDoc.userID, isEqualTo: userID)
+                    .addSnapshotListener { snapshot, error in
+                        lock.lock()
+                        if error != nil {
+                            // Листенер после ошибки не оживает. Для второй коллекции
+                            // это не повод замораживать первую: считаем её ответившей
+                            // пустым списком. Для первой — оставляем последнее
+                            // состояние, как раньше.
+                            guard parts[name] == nil else { lock.unlock(); return }
+                            parts[name] = []
+                        } else {
+                            parts[name] = snapshot?.documents.map { LoyaltyCard(firestore: $0.data()) } ?? []
+                        }
+                        let ready = parts.count == Self.loyaltyCollections.count
+                        let merged = Self.loyaltyCollections.flatMap { parts[$0] ?? [] }
+                        lock.unlock()
+                        if ready { continuation.yield(merged) }
+                    }
+            }
+            continuation.onTermination = { _ in registrations.forEach { $0.remove() } }
         }
     }
 
@@ -761,7 +790,8 @@ public final class FirebaseCouponService: CouponService {
     }
 
     public func scanCoupon(code: String, venueID: String, idToken: String,
-                    billAmount: Int?, bandIndex: Int?, idempotencyKey: String) async throws -> ScanOutcome {
+                    billAmount: Int?, bandIndex: Int?, idempotencyKey: String,
+                    cardID: String?) async throws -> ScanOutcome {
         guard let url = URL(string: scanURL) else { throw URLError(.badURL) }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -771,6 +801,7 @@ public final class FirebaseCouponService: CouponService {
         if let billAmount { body[FS.ScanResponse.billAmount] = billAmount }
         if let bandIndex { body[FS.ScanResponse.bandIndex] = bandIndex }
         if !idempotencyKey.isEmpty { body[FS.ScanResponse.idempotencyKey] = idempotencyKey }
+        if let cardID, !cardID.isEmpty { body[FS.ScanResponse.cardID] = cardID }
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, _) = try await URLSession.shared.data(for: req)
         let j = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
@@ -787,7 +818,8 @@ public final class FirebaseCouponService: CouponService {
             points: j.bool(FS.ScanResponse.points) ?? false,
             awarded: j.int(FS.ScanResponse.awarded) ?? 0,
             balance: j.int(FS.ScanResponse.balance) ?? 0,
-            replayed: j.bool(FS.ScanResponse.replayed) ?? false
+            replayed: j.bool(FS.ScanResponse.replayed) ?? false,
+            cardTitle: j.string(FS.ScanResponse.cardTitle) ?? ""
         )
     }
 
