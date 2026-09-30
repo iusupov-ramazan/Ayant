@@ -36,7 +36,9 @@ enum AyantStores {
     }
 
     static func session() -> SessionStore { SessionStore(service: AppConfig.makeAuthService()) }
-    static func coupons() -> CouponStore { CouponStore(backend: AppConfig.makeCouponService()) }
+    static func coupons() -> CouponStore {
+        CouponStore(backend: AppConfig.makeCouponService(), wallet: AppConfig.makeBonusWallet())
+    }
     static func loyalty() -> LoyaltyStore { LoyaltyStore(backend: AppConfig.makeCouponService()) }
     static func points() -> PointsStore { PointsStore(repository: AppConfig.makePointsRepository()) }
     static func host() -> HostStore {
@@ -44,7 +46,11 @@ enum AyantStores {
                   instagram: AppConfig.makeInstagramService())
     }
 
-    /// Без внешних зависимостей: состояние берут из хранилища устройства.
-    static func bonus() -> BonusEngine { BonusEngine() }
+    static func menuImport() -> MenuImportStore {
+        MenuImportStore(service: AppConfig.makeMenuParsingService())
+    }
+
+    /// Кошелёк — серверный (`bonusWallets`), в мок-режиме — на устройстве.
+    static func bonus() -> BonusEngine { BonusEngine(wallet: AppConfig.makeBonusWallet()) }
     static func theme() -> ThemeStore { ThemeStore() }
 }

@@ -447,7 +447,10 @@ public final class AppStore: ObservableObject {
               let ref = d.string(forKey: DeepLinks.pendingReferrerKey), !ref.isEmpty,
               ref != currentUserID else { return }
         d.set(true, forKey: "san.referrer.credited")
-        bonus.addFromGame(100)   // приветственный бонус приглашённому
+        // Приветственный бонус приглашённому. С серверным кошельком его
+        // начисляет `rewardReferral` (грант «welcome»), а `addFromGame` там
+        // ничего не делает — второго начисления не будет.
+        bonus.addFromGame(100)
         AnalyticsLog.log(.referralJoin, ["referrer_id": ref, "user_id": currentUserID])
         // Записываем реферал — Cloud Function начислит бонус пригласившему.
         Task { try? await repository.recordReferral(inviteeID: currentUserID, referrerID: ref) }
@@ -468,6 +471,15 @@ public final class AppStore: ObservableObject {
     public func claimGift(code: String, into coupons: CouponStore) {
         guard !isGuest, !code.isEmpty else { return }
         Task {
+            // Серверный кошелёк: купон создаёт сервер — с заведением, гасимый.
+            if let result = await coupons.claimGift(code: code) {
+                switch result {
+                case .coupon: toastMessage = "🎁 Подарок получен — купон в «Мои купоны»!"
+                case .failed("network"): toastMessage = "Нет связи — откройте ссылку на подарок ещё раз"
+                default: toastMessage = "Этот подарок уже забрали или ссылка недействительна"
+                }
+                return
+            }
             if let g = try? await repository.claimGiftCoupon(code: code) {
                 coupons.addGifted(title: g.title, code: g.code)
                 toastMessage = "🎁 Подарок получен — купон в «Мои купоны»!"
@@ -488,7 +500,10 @@ public final class AppStore: ObservableObject {
 
     /// Забирает серверные бонусы (награды за приглашённых) при запуске.
     public func claimReferralBonuses(bonus: BonusEngine) {
-        guard !isGuest else { return }
+        // С серверным кошельком гранты забирает `bonusWalletSync` — атомарно
+        // с зачислением. Клиентский claim пометил бы грант забранным, так и
+        // не зачислив его на сервере.
+        guard !isGuest, !bonus.usesServerWallet else { return }
         Task {
             let total = (try? await repository.claimBonusGrants(userID: currentUserID)) ?? 0
             if total > 0 { bonus.addFromGame(total) }

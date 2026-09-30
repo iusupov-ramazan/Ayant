@@ -18,7 +18,7 @@ const { FakeFirestore, FieldValue, toStored } = require("./fakeFirestore");
  * @param {Record<string,string>} opts.tokens  Map<idToken, uid> для verifyIdToken.
  * @returns харнесс с загруженным модулем и доступом к хранилищу.
  */
-function makeHarness({ tokens = {} } = {}) {
+function makeHarness({ tokens = {}, anonymousTokens = [], createdAt = {} } = {}) {
   const db = new FakeFirestore();
   const messagingCalls = [];
   const messaging = {
@@ -37,10 +37,18 @@ function makeHarness({ tokens = {} } = {}) {
   const auth = {
     verifyIdToken: async (token) => {
       if (Object.prototype.hasOwnProperty.call(tokens, token)) {
-        return { uid: tokens[token] };
+        // Как в настоящем декодированном токене: провайдер входа в `firebase`.
+        const provider = anonymousTokens.includes(token) ? "anonymous" : "password";
+        return { uid: tokens[token], firebase: { sign_in_provider: provider } };
       }
       throw new Error("invalid token");
     },
+    // Дата создания аккаунта (для переноса баланса кошелька). По умолчанию —
+    // давний аккаунт, созданный задолго до серверного кошелька.
+    getUser: async (uid) => ({
+      uid,
+      metadata: { creationTime: createdAt[uid] || "Mon, 01 Jan 2024 00:00:00 GMT" },
+    }),
   };
 
   // Тесты гоняются по СКОМПИЛИРОВАННОМУ выводу (lib/index.js) — источник на TS

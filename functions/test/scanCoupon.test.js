@@ -235,6 +235,120 @@ test("CARD: ретрай с тем же ключом внутри окна во�
   assert.equal(h.read(`loyaltyCards/u1_${VENUE}`).stamps, 1);
 });
 
+/* ── Несколько карт штампов (stampCards) ─────────────────────────────────
+ * Первая карта — скалярные поля заведения, её документ — прежний
+ * loyaltyCards/{user}_{venue}; остальные — loyaltyCards/{user}_{venue}_{card}.
+ * Скан без cardID (Android, старый iOS) — всегда первая карта. */
+
+const PIZZA = { id: "pizza", title: "Пицца", goal: 3, reward: "Пицца в подарок", active: true };
+
+test("CARDS: без cardID штамп ложится на первую карту, как раньше", async () => {
+  const h = makeHarness({ tokens: { [TOKEN]: HOST } });
+  seedVenue(h, { loyaltyTitle: "Кофе", stampCards: [PIZZA] });
+  const res = await call(h, post({ code: `AYANT-CARD:u1:${VENUE}`, venueID: VENUE, idempotencyKey: "m-1" }));
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.cardID, "default");
+  assert.equal(res.body.cardTitle, "Кофе");
+  assert.equal(h.read(`loyaltyCards/u1_${VENUE}`).stamps, 1);
+  assert.equal(h.read(`extraLoyaltyCards/u1_${VENUE}_pizza`), undefined);
+});
+
+test("CARDS: штамп на выбранную карту — свой документ, своя цель и награда", async () => {
+  const h = makeHarness({ tokens: { [TOKEN]: HOST } });
+  seedVenue(h, { stampCards: [PIZZA] });
+  h.seed(`extraLoyaltyCards/u1_${VENUE}_pizza`, {
+    userID: "u1", venueID: VENUE, cardID: "pizza", stamps: 2, completedRounds: 0,
+    lastStampAt: { toMillis: () => 0 },
+  });
+  const res = await call(h, post({ code: `AYANT-CARD:u1:${VENUE}`, venueID: VENUE, idempotencyKey: "m-2", cardID: "pizza" }));
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.goal, 3, "цель — у карты пиццы, а не у первой (6)");
+  assert.equal(res.body.rewardIssued, true);
+  assert.equal(res.body.rewardTitle, "Пицца в подарок");
+  assert.equal(res.body.cardTitle, "Пицца");
+  const card = h.read(`extraLoyaltyCards/u1_${VENUE}_pizza`);
+  assert.equal(card.cardID, "pizza");
+  assert.equal(card.title, "Пицца");
+  assert.equal(card.completedRounds, 1);
+  assert.equal(h.read(`loyaltyCards/u1_${VENUE}`), undefined, "первая карта не тронута");
+  const coupons = couponsOf(h);
+  assert.equal(coupons.length, 1);
+  assert.equal(coupons[0].title, "Пицца в подарок");
+  assert.equal(coupons[0].cardID, "pizza");
+});
+
+test("CARDS: пауза между штампами — у каждой карты своя", async () => {
+  const h = makeHarness({ tokens: { [TOKEN]: HOST } });
+  seedVenue(h, { stampCards: [PIZZA] });
+  // Кофе и пицца в одном визите — оба штампа законны.
+  const coffee = await call(h, post({ code: `AYANT-CARD:u1:${VENUE}`, venueID: VENUE, idempotencyKey: "p-1" }));
+  const pizza = await call(h, post({ code: `AYANT-CARD:u1:${VENUE}`, venueID: VENUE, idempotencyKey: "p-2", cardID: "pizza" }));
+  assert.equal(coffee.statusCode, 200);
+  assert.equal(pizza.statusCode, 200);
+  // А второй штамп на ту же пиццу внутри окна — нет.
+  const again = await call(h, post({ code: `AYANT-CARD:u1:${VENUE}`, venueID: VENUE, idempotencyKey: "p-3", cardID: "pizza" }));
+  assert.equal(again.statusCode, 429);
+  assert.equal(h.read(`extraLoyaltyCards/u1_${VENUE}_pizza`).stamps, 1);
+});
+
+test("CARDS: неизвестная или выключенная карта → 409 card_not_found, штампа нет", async () => {
+  const h = makeHarness({ tokens: { [TOKEN]: HOST } });
+  seedVenue(h, { stampCards: [PIZZA, { id: "tea", title: "Чай", goal: 5, reward: "Чай", active: false }] });
+  for (const cardID of ["nope", "tea"]) {
+    const res = await call(h, post({ code: `AYANT-CARD:u1:${VENUE}`, venueID: VENUE, idempotencyKey: `x-${cardID}`, cardID }));
+    assert.equal(res.statusCode, 409);
+    assert.equal(res.body.error, "card_not_found");
+  }
+  assert.equal(h.read(`extraLoyaltyCards/u1_${VENUE}_tea`), undefined);
+});
+
+test("CARDS: ретрай с тем же ключом на той же карте — повтор, не второй штамп", async () => {
+  const h = makeHarness({ tokens: { [TOKEN]: HOST } });
+  seedVenue(h, { stampCards: [PIZZA] });
+  const first = await call(h, post({ code: `AYANT-CARD:u1:${VENUE}`, venueID: VENUE, idempotencyKey: "rr", cardID: "pizza" }));
+  const retry = await call(h, post({ code: `AYANT-CARD:u1:${VENUE}`, venueID: VENUE, idempotencyKey: "rr", cardID: "pizza" }));
+  assert.equal(first.statusCode, 200);
+  assert.equal(retry.body.replayed, true);
+  assert.equal(retry.body.cardTitle, "Пицца");
+  assert.equal(h.read(`extraLoyaltyCards/u1_${VENUE}_pizza`).stamps, 1);
+});
+
+test("CARDS: тот же ключ с другой картой → 409 key_reused, вторая карта не тронута", async () => {
+  const h = makeHarness({ tokens: { [TOKEN]: HOST } });
+  seedVenue(h, { stampCards: [PIZZA] });
+  const coffee = await call(h, post({ code: `AYANT-CARD:u1:${VENUE}`, venueID: VENUE, idempotencyKey: "kk" }));
+  assert.equal(coffee.statusCode, 200);
+  const pizza = await call(h, post({ code: `AYANT-CARD:u1:${VENUE}`, venueID: VENUE, idempotencyKey: "kk", cardID: "pizza" }));
+  assert.equal(pizza.statusCode, 409);
+  assert.equal(pizza.body.error, "key_reused");
+  assert.equal(h.read(`extraLoyaltyCards/u1_${VENUE}_pizza`), undefined);
+});
+
+test("CARDS: ретрай после выключения карты возвращает исходный результат, не card_not_found", async () => {
+  const h = makeHarness({ tokens: { [TOKEN]: HOST } });
+  seedVenue(h, { stampCards: [PIZZA] });
+  const first = await call(h, post({ code: `AYANT-CARD:u1:${VENUE}`, venueID: VENUE, idempotencyKey: "off", cardID: "pizza" }));
+  assert.equal(first.statusCode, 200);
+  seedVenue(h, { stampCards: [{ ...PIZZA, active: false }] });
+  const retry = await call(h, post({ code: `AYANT-CARD:u1:${VENUE}`, venueID: VENUE, idempotencyKey: "off", cardID: "pizza" }));
+  assert.equal(retry.statusCode, 200);
+  assert.equal(retry.body.replayed, true);
+  assert.equal(retry.body.goal, 3);
+  assert.equal(retry.body.cardTitle, "Пицца");
+});
+
+test("CARDS: документы дополнительных карт — не в loyaltyCards (их читают Android и старые iOS)", async () => {
+  const h = makeHarness({ tokens: { [TOKEN]: HOST } });
+  seedVenue(h, { stampCards: [PIZZA] });
+  await call(h, post({ code: `AYANT-CARD:u1:${VENUE}`, venueID: VENUE, idempotencyKey: "sep", cardID: "pizza" }));
+  const legacy = [...h.db.store.keys()].filter((k) => /^loyaltyCards\/[^/]+$/.test(k));
+  assert.deepEqual(legacy, [], "в loyaltyCards нет ни одного документа карты");
+  assert.equal(h.read(`extraLoyaltyCards/u1_${VENUE}_pizza`).stamps, 1);
+});
+
+// Правила отбора карт и id документа — в общем фикстуре
+// specs/fixtures/stamp-cards-fixtures.json (stampCardsFixture.test.js).
+
 /* ── Ветка B: купон акции (погашение) ───────────────────────────────────── */
 
 test("купон не найден → 404 coupon_not_found", async () => {

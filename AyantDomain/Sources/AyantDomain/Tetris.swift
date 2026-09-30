@@ -13,15 +13,13 @@ public enum Tetris {
     public static let columns = 10
     public static let rows = 20
 
-    /// Сколько бонусов даёт одна линия. Начисление всё равно проходит через
-    /// общий дневной лимит мини-игр — своей экономики у игры нет.
-    /// Бонусов за линию.
+    /// Сколько линий стоит один бонус — из общего курса мини-игр.
     ///
-    /// Один, а не пять: дневной потолок игр — `BonusEngine.dailyGameplayCap`
-    /// (3 бонуса). При пяти за линию ОДНА линия выбирала весь день и игра
-    /// теряла смысл через двадцать секунд. Теперь дневной максимум стоит трёх
-    /// линий — столько же, сколько трёх яблок в «Змейке».
-    public static let bonusPerLine = 1
+    /// Раньше здесь было обратное — «бонусов за линию», и их была штука. При
+    /// снятом дневном потолке это превращало партию в печатный станок: линия
+    /// уходит за десяток секунд. Теперь цена общая для всех игр и живёт в
+    /// `GameEconomy`.
+    public static var linesPerBonus: Int { GameEconomy.linesPerBonus }
 
     public enum Shape: Int, CaseIterable, Sendable {
         case i, o, t, s, z, j, l
@@ -92,8 +90,9 @@ public enum Tetris {
             self.lines = lines; self.isOver = isOver; self.seed = seed
         }
 
-        /// Заработанные бонусы (до дневного лимита — его считает `BonusEngine`).
-        public var bonuses: Int { lines * Tetris.bonusPerLine }
+        /// Заработанные за партию бонусы. Остаток линий не пропадает: он
+        /// копится дальше, потому что считается от общего числа линий.
+        public var bonuses: Int { lines / Tetris.linesPerBonus }
     }
 
     // MARK: - Старт и случайность

@@ -68,12 +68,17 @@ test("rewardReferral начисляет бонус пригласившему и
   await h.mod.rewardReferral.run(event);
 
   const grants = [...h.db.store.entries()].filter(([p]) => p.startsWith("bonusGrants/"));
-  assert.equal(grants.length, 1);
-  const [, grant] = grants[0];
+  assert.equal(grants.length, 2);
+  const grant = grants.map(([, g]) => g).find((g) => g.reason === "referral");
   assert.equal(grant.userID, "referrer-1");
   assert.equal(grant.amount, 100);
-  assert.equal(grant.reason, "referral");
   assert.equal(grant.claimed, false);
+  // Приветственный бонус приглашённому — грантом (его забирает bonusWalletSync).
+  const welcome = h.read("bonusGrants/welcome_invitee-1");
+  assert.equal(welcome.userID, "invitee-1");
+  assert.equal(welcome.amount, 100);
+  assert.equal(welcome.reason, "welcome");
+  assert.equal(welcome.claimed, false);
   assert.equal(h.read("referrals/invitee-1").rewarded, true);
 });
 

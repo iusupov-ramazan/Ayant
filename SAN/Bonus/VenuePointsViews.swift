@@ -233,10 +233,45 @@ struct VenuePointsScreen: View {
             Text("Показывайте QR при оплате — сотрудник сканирует его и начисляет баллы. Накопленные баллы тратьте на награды из списка выше.")
                 .font(.golos(15, .regular)).foregroundStyle(Color.sanInkSoft)
                 .fixedSize(horizontal: false, vertical: true)
+            ForEach(houseRules, id: \.self) { rule in
+                Text(rule)
+                    .font(.golos(14, .regular)).foregroundStyle(Color.sanInkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .sanCard(padding: 0)
+    }
+
+    /// Два правила заведения, которые гость иначе не узнаёт НИОТКУДА: почему
+    /// второе сканирование подряд ничего не дало и что баллы не вечные.
+    ///
+    /// Про кулдаун сейчас знает только сотрудник — сканер показывает ему
+    /// «этому гостю уже начисляли недавно», а гость видит просто ничего и
+    /// решает, что приложение сломалось.
+    ///
+    /// Цифры берутся у заведения, а не зашиты: у каждого свой кулдаун и свой
+    /// срок сгорания, и расхождение подписи с реальным правилом хуже её
+    /// отсутствия.
+    private var houseRules: [String] {
+        var rules: [String] = []
+
+        let cooldown = PointsMath.effectiveCooldownMinutes(venue.earnCooldownMinutes)
+        if cooldown > 0 {
+            let minutes = Plural.ru(cooldown, "минуту", "минуты", "минут")
+            rules.append("Начисляют не чаще раза в \(cooldown) \(minutes): показать код второй раз подряд не получится.")
+        }
+
+        // Ноль здесь значит «не настроено», а не «не сгорают»: у поля есть
+        // серверный дефолт, и гостю нужно видеть именно его.
+        let months = venue.pointsExpiryMonths > 0 ? venue.pointsExpiryMonths : PointsMath.defaultExpiryMonths
+        // «месяца / месяцев / месяцев», а не «месяц / месяца / месяцев»: после
+        // предлога «после» слово идёт в родительном падеже — «после 1 месяца»,
+        // «после 2 месяцев», «после 5 месяцев». Выглядит как опечатка, но
+        // обычный счётный ряд здесь дал бы «после 1 месяц».
+        rules.append("Баллы сгорают после \(months) \(Plural.ru(months, "месяца", "месяцев", "месяцев")) без начислений и трат.")
+        return rules
     }
 }
 

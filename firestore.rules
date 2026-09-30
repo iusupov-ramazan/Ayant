@@ -160,6 +160,39 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // ── Купоны заведения (продаются за бонусы) ───────────────────────────
+    // Заведение само выпускает купон и назначает цену — оно и несёт расход.
+    // Но три поля ему не принадлежат:
+    //   `soldCount` считает сервер при покупке (`buyCoupon`); запись с клиента
+    //   затёрла бы чужие покупки своим устаревшим числом;
+    //   `status` — модерация: иначе заведение одобряло бы себя само, как и с
+    //   `venues` (и с `hosts.verification`);
+    //   `ownerID` менять нельзя — это передача купона чужому аккаунту.
+    // Читают все: каталог купонов открыт, как и каталог акций. Невыставленные
+    // (pending/paused) отсеивает клиент — они не секрет, а просто не в продаже.
+    match /couponOffers/{id} {
+      allow read: if true;
+      // Заведение купона — своё: купон гасится у стойки из `venueID`, и
+      // купон на чужое заведение — это продажа чужого товара. Сменить
+      // заведение у выпущенного купона нельзя (иначе одобренный купон
+      // перенацеливается на конкурента мимо модерации). buyCoupon проверяет
+      // то же самое на сервере.
+      allow create: if isAdmin()
+                    || (ownsIncoming()
+                        && request.resource.data.ownerID is string
+                        && request.resource.data.get('soldCount', 0) == 0
+                        && request.resource.data.get('status', 'pending') == 'pending'
+                        && exists(/databases/$(database)/documents/venues/$(request.resource.data.venueID))
+                        && get(/databases/$(database)/documents/venues/$(request.resource.data.venueID)).data.ownerID == uid());
+      allow update: if isAdmin()
+                    || (ownsExisting()
+                        && request.resource.data.ownerID == resource.data.ownerID
+                        && request.resource.data.venueID == resource.data.venueID
+                        && request.resource.data.get('soldCount', 0) == resource.data.get('soldCount', 0)
+                        && request.resource.data.get('status', 'pending') == resource.data.get('status', 'pending'));
+      allow delete: if isAdmin() || ownsExisting();
+    }
+
     // ── Instagram заведения ──────────────────────────────────────────────
     // igAccounts держит ТОКЕН ДОСТУПА к инстаграму заведения — клиенту он не
     // нужен ни для чего: за постами хост ходит через Cloud Functions по своему
@@ -241,25 +274,39 @@ service cloud.firestore {
     // Купон адресуется по коду-ссылке (без uid получателя). Забрать можно РОВНО
     // один раз: update разрешён только как переход claimed false→true и без
     // подмены остального содержимого — иначе купон можно было бы «перезабрать».
+    // Подарки создаёт buyCoupon (списав бонусы дарителя), забирает claimGift
+    // (создавая купон заведения). Клиенту — только прочитать подарок по коду
+    // из ссылки: `list` закрыт, иначе любой выгрузил бы все незабранные коды.
+    // Раньше клиент и создавал подарок (любые поля), и забирал его сам.
     match /giftCoupons/{code} {
-      allow create: if isSignedIn() && request.resource.data.get('claimed', false) == false;
-      allow read:   if isSignedIn();
-      allow update: if isSignedIn()
-                    && resource.data.get('claimed', false) == false
-                    && request.resource.data.claimed == true
-                    && request.resource.data.title == resource.data.title
-                    && request.resource.data.code == resource.data.code
-                    && request.resource.data.get('fromName', '') == resource.data.get('fromName', '');
-      allow delete: if false;
+      allow get: if isSignedIn();
+      allow list, create, update, delete: if false;
     }
 
     // ── Купоны пользователя (анти-чит) ───────────────────────────────────
     // Пометку used ставит только Cloud Function scanCoupon (admin SDK).
+    // Купон, привязанный к заведению, гасится у стойки (scanCoupon) — то есть
+    // это настоящий товар. Такие купоны создаёт ТОЛЬКО сервер: buyCoupon
+    // (за бонусы) и scanCoupon (награда карты штампов). Раньше клиент мог
+    // записать купон с любым venueID напрямую — без единого бонуса. Клиенту
+    // оставлены только непривязанные купоны старых сборок: их не погасить.
     match /coupons/{id} {
       allow read:   if isSignedIn() && resource.data.userID == uid();
       allow create: if isSignedIn() && request.resource.data.userID == uid()
-                    && request.resource.data.used == false;
+                    && request.resource.data.used == false
+                    && request.resource.data.get('venueID', '') == '';
       allow update, delete: if false;
+    }
+
+    // ── Кошелёк бонусов (глобальный) ─────────────────────────────────────
+    // Баланс и ledger пишут только функции (bonusWalletSync / earnBonus /
+    // buyCoupon). Владелец читает свой баланс снапшот-листенером.
+    match /bonusWallets/{userID} {
+      allow read: if isSignedIn() && userID == uid();
+      allow write: if false;
+      match /{sub=**} {
+        allow read, write: if false;
+      }
     }
 
     // ── Карты лояльности ─────────────────────────────────────────────────
@@ -270,6 +317,18 @@ service cloud.firestore {
       // клиенту незачем ни читать, ни писать — подделка ключа позволила бы
       // «воспроизвести» чужой штамп.
       match /scanKeys/{key} {
+        allow read, write: if false;
+      }
+    }
+
+    // Дополнительные карты штампов заведения ({userID}_{venueID}_{cardID}).
+    // Отдельная коллекция, чтобы клиенты, читающие `loyaltyCards` по userID и
+    // склеивающие карты по заведению (Android, старые iOS), их не видели.
+    // Права — те же: гость читает свои, пишет только Cloud Function.
+    match /extraLoyaltyCards/{id} {
+      allow read:  if isSignedIn() && resource.data.userID == uid();
+      allow write: if false;
+      match /{sub=**} {
         allow read, write: if false;
       }
     }

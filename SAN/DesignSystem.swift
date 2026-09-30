@@ -37,15 +37,13 @@ extension Color {
     static let sanHairline     = sanDynamic(light: 0xE7E3DC, dark: 0x322E2A)
     /// Пустая плитка сетки — та же тёплая гамма, что и канвас, но на тон плотнее.
     static let sanTileEmpty    = sanDynamic(light: 0xEFEAE2, dark: 0x272320)
-    /// Фон плоской шапки хоста.
+    /// Фон верхней строки кабинета хоста («Режим заведения» / «Я гость»).
     ///
     /// Именно ДИНАМИЧЕСКИЙ. `sanCream` — статический светлый (он рисовал панель
     /// таб-бара, где это верно всегда), и на тёмной теме шапка оставалась
     /// кремовой, а заголовок поверх неё — `sanInk` — становился почти белым:
     /// «Заведения» пропадали с экрана.
     static let sanHostHeader   = sanDynamic(light: 0xFFF7F1, dark: 0x1E1C1A)
-    /// Подписи счётчиков в шапке хоста. Тёплые в обеих темах.
-    static let sanHostCaption  = sanDynamic(light: 0x7E4520, dark: 0xC8A48A)
     /// Капслок «Режим заведения» в шапке хоста.
     static let sanHostEyebrow  = sanDynamic(light: 0x9C3306, dark: 0xFF9F6B)
     /// «Открыто».
@@ -81,10 +79,6 @@ extension Color {
     static let sanAccentTextStrong = Color(hex: 0xB03505)
     /// Капслоковые надзаголовки на песке. 4.5:1.
     static let sanEyebrow        = Color(hex: 0x9C3306)
-    /// Неактивная вкладка сегмент-контрола. 5.34:1 на светлом канвасе.
-    /// Тёмная пара нужна с тех пор, как токен переехал с удалённой ручной
-    /// панели на витрину хоста: #726251 на тёмном канвасе давал ~2.9:1.
-    static let sanTabIdle        = sanDynamic(light: 0x726251, dark: 0xA79C90)
     /// Фон таб-бара хоста.
     static let sanCream          = Color(hex: 0xFFF7F1)
     /// Верхняя граница таб-бара хоста.
@@ -570,13 +564,20 @@ struct SanCircleButton: View {
 /// доскроллить обратно.
 struct SanNavBar<Trailing: View>: View {
     var title: LocalizedStringKey?
+    /// Корень вкладки: стрелка «назад» вела бы в никуда. Место под неё всё
+    /// равно резервируем — иначе заголовок съезжает от центра.
+    var showsBack: Bool = true
     var onBack: () -> Void
     @ViewBuilder var trailing: Trailing
 
     var body: some View {
         HStack(spacing: 10) {
-            SanCircleButton(systemName: "chevron.left", action: onBack)
-                .accessibilityLabel("Назад")
+            if showsBack {
+                SanCircleButton(systemName: "chevron.left", action: onBack)
+                    .accessibilityLabel("Назад")
+            } else {
+                Color.clear.frame(width: 44, height: 44)
+            }
             Spacer(minLength: 8)
             if let title {
                 Text(title)
@@ -598,9 +599,12 @@ struct SanNavBar<Trailing: View>: View {
 extension View {
     /// Прибивает панель навигации к верху экрана.
     func sanNavBar(_ title: LocalizedStringKey? = nil,
+                   showsBack: Bool = true,
                    onBack: @escaping () -> Void) -> some View {
         safeAreaInset(edge: .top, spacing: 0) {
-            SanNavBar(title: title, onBack: onBack) { Color.clear.frame(width: 44, height: 44) }
+            SanNavBar(title: title, showsBack: showsBack, onBack: onBack) {
+                Color.clear.frame(width: 44, height: 44)
+            }
         }
     }
 
@@ -610,6 +614,57 @@ extension View {
                                    @ViewBuilder trailing: () -> Trailing) -> some View {
         safeAreaInset(edge: .top, spacing: 0) {
             SanNavBar(title: title, onBack: onBack, trailing: trailing)
+        }
+    }
+}
+
+// MARK: - Справка у термина
+
+/// Точка «?» рядом со словом: тап — короткое объяснение во всплывашке.
+///
+/// Это справка НАВСЕГДА, а не подсказка первого запуска. Слова вроде «баллы
+/// САН» и «бонусы» не перестают быть непонятными со второго раза, и человек
+/// возвращается к вопросу через месяц — а подсказка, которую показали однажды
+/// и спрятали, к этому моменту уже недоступна.
+///
+/// Ставить только туда, где объяснение НЕ помещается в подпись под контролом:
+/// строка текста дешевле и честнее всплывашки, которую ещё надо догадаться
+/// открыть.
+struct SanInfoDot: View {
+    let title: LocalizedStringKey
+    let text: LocalizedStringKey
+
+    @State private var shown = false
+
+    var body: some View {
+        Button { shown = true } label: {
+            Image(systemName: "questionmark.circle")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Color(hex: 0x9A9188))
+                // Попасть пальцем в саму иконку невозможно — расширяем область
+                // нажатия, не раздвигая вёрстку.
+                .frame(width: 30, height: 30)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text("Что это"))
+        .popover(isPresented: $shown) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title)
+                    .font(.golos(15, .bold)).foregroundStyle(Color.sanInk)
+                Text(text)
+                    .font(.golos(14)).foregroundStyle(Color.sanInkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(14)
+            .frame(width: 270)
+            // Стекло по умолчанию просвечивает: поверх цветной карточки баллов
+            // текст читался на оранжевом. Подложка непрозрачная, и вместе со
+            // стрелкой — иначе она остаётся стеклянной.
+            .presentationBackground(Color.sanSurface)
+            // Без этого на телефоне всплывашка превращается в лист во весь
+            // экран — для двух фраз это слишком громко.
+            .presentationCompactAdaptation(.popover)
         }
     }
 }

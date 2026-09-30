@@ -23,6 +23,7 @@ public final class HostStore: ObservableObject {
         static let venues = "san.host.venues"
         static let deals = "san.host.deals"
         static let campaigns = "san.host.campaigns"
+        static let couponOffers = "san.host.couponOffers"
         /// id заведений/акций, которые сервер хотя бы раз отдал этому владельцу.
         /// По ним `sync()` отличает «удалено на сервере» от «так и не доехало».
         static let knownVenues = "san.host.knownVenues"
@@ -46,6 +47,9 @@ public final class HostStore: ObservableObject {
     private var campaigns: [AdCampaign] {
         get { state.campaigns } set { state.campaigns = newValue }
     }
+    private var couponOffers: [CouponOffer] {
+        get { state.couponOffers } set { state.couponOffers = newValue }
+    }
     public private(set) var ownerID: String {
         get { state.ownerID } set { state.ownerID = newValue }
     }
@@ -58,6 +62,7 @@ public final class HostStore: ObservableObject {
         venueDTOs = decodeList(Key.venues)
         dealDTOs = decodeList(Key.deals)
         campaigns = decodeList(Key.campaigns)
+        couponOffers = decodeList(Key.couponOffers)
     }
 
     /// Единственный вход. Читать — через `state`.
@@ -83,6 +88,10 @@ public final class HostStore: ObservableObject {
             addItem(venueID: venueID, name: name, emoji: emoji, kind: kind, imageURL: imageURL)
         case .deleteItem(let venueID, let itemID):
             deleteItem(venueID: venueID, itemID: itemID)
+        case .updateItem(let venueID, let item):
+            updateItem(venueID: venueID, item: item)
+        case .importMenu(let venueID, let drafts):
+            importMenu(venueID: venueID, drafts: drafts)
         case .boostVenue(let id, let until):  boostVenue(id: id, until: until)
         case .savePointsConfig(let venueID, let fields):
             savePointsConfig(venueID: venueID, fields: fields)
@@ -92,6 +101,11 @@ public final class HostStore: ObservableObject {
         case .setDealStatus(let id, let status): setDealStatus(id: id, status: status)
         case .duplicateDeal(let id):         duplicateDeal(id: id)
         case .deleteDeal(let id):            deleteDeal(id: id)
+
+        case .saveCouponOffer(let existing, let fields):
+            saveCouponOfferForm(existing: existing, fields: fields)
+        case .toggleCouponPause(let id):     toggleCouponPause(id: id)
+        case .deleteCouponOffer(let id):     deleteCouponOffer(id: id)
 
         case .addCampaign(let c):            addCampaign(c)
         case .launchPush(let headline, let body, let venueID, let dealID):
@@ -238,6 +252,7 @@ public final class HostStore: ObservableObject {
         venueDTOs = decodeList(key(Key.venues))
         dealDTOs = decodeList(key(Key.deals))
         campaigns = decodeList(key(Key.campaigns))
+        couponOffers = decodeList(key(Key.couponOffers))
         knownVenueIDs = Set(decodeList(key(Key.knownVenues)) as [String])
         knownDealIDs = Set(decodeList(key(Key.knownDeals)) as [String])
 
@@ -294,6 +309,24 @@ public final class HostStore: ObservableObject {
             pushToAppStore()
             for dto in unsentV { remoteSaveVenue(dto) }
             for dto in unsentD { remoteSaveDeal(dto) }
+            // Купоны: сервер знает `soldCount` и `status`, которых у клиента
+            // нет и быть не может, поэтому серверная копия просто побеждает.
+            //
+            // Кроме купонов, которых сервер ещё не видел: запись не дошла (сеть,
+            // правила не задеплоены). Раньше такой купон молча пропадал из
+            // кабинета при следующем синке — и в админ-панель так и не попадал.
+            // Теперь он остаётся и дозаливается. Только ни разу не одобренный:
+            // одобренный, которого нет на сервере, удалён там, и воскрешать его
+            // с телефона нельзя.
+            if let remoteOffers = try? await repo.fetchOwnedCouponOffers(ownerID: ownerID) {
+                let remoteIDs = Set(remoteOffers.map(\.id))
+                let unsent = couponOffers.filter {
+                    !remoteIDs.contains($0.id) && $0.status == .pending && $0.soldCount == 0
+                }
+                couponOffers = remoteOffers + unsent
+                persistCouponOffers()
+                for offer in unsent { remoteSaveCouponOffer(offer) }
+            }
             // Профиль (включая статус верификации, выставленный админом).
             if let remoteProfile = try await repo.fetchProfile(ownerID: ownerID) {
                 profile = remoteProfile
@@ -509,6 +542,29 @@ public final class HostStore: ObservableObject {
         remoteSaveVenue(venueDTOs[i])
     }
 
+    private func updateItem(venueID: String, item: VenueItem) {
+        guard let i = venueDTOs.firstIndex(where: { $0.id == venueID }),
+              let j = venueDTOs[i].items.firstIndex(where: { $0.id == item.id }) else { return }
+        var clean = item
+        clean.name = MenuImport.clip(item.name, MenuImport.nameLimit)
+        guard !clean.name.isEmpty else { return }
+        clean.section = MenuImport.clip(item.section, MenuImport.sectionLimit)
+        clean.details = MenuImport.clip(item.details, MenuImport.detailsLimit)
+        clean.price = MenuImport.validPrice(item.price)
+        clean.imageURL = item.imageURL.trimmingCharacters(in: .whitespaces)
+        venueDTOs[i].items[j] = clean
+        persistVenues()
+        remoteSaveVenue(venueDTOs[i])
+    }
+
+    private func importMenu(venueID: String, drafts: [MenuDraftItem]) {
+        guard let i = venueDTOs.firstIndex(where: { $0.id == venueID }) else { return }
+        venueDTOs[i].items = MenuImport.merge(existing: venueDTOs[i].items, drafts: drafts,
+                                              newID: { "it_\(UUID().uuidString.prefix(8))" })
+        persistVenues()
+        remoteSaveVenue(venueDTOs[i])
+    }
+
     private func deleteItem(venueID: String, itemID: String) {
         guard let i = venueDTOs.firstIndex(where: { $0.id == venueID }) else { return }
         venueDTOs[i].items.removeAll { $0.id == itemID }
@@ -534,6 +590,43 @@ public final class HostStore: ObservableObject {
     }
 
     public func newDealID() -> String { "hd_\(UUID().uuidString.prefix(8))" }
+
+    // MARK: Купоны заведения
+
+    private func saveCouponOfferForm(existing: CouponOffer?, fields: HostForms.CouponFields) {
+        let offer = HostForms.couponOffer(existing: existing, fields: fields,
+                                          newID: "co_\(UUID().uuidString.prefix(8))")
+        if let i = couponOffers.firstIndex(where: { $0.id == offer.id }) { couponOffers[i] = offer }
+        else { couponOffers.append(offer) }
+        persistCouponOffers()
+        remoteSaveCouponOffer(offer)
+    }
+
+    private func toggleCouponPause(id: String) {
+        guard let i = couponOffers.firstIndex(where: { $0.id == id }) else { return }
+        couponOffers[i].isPaused.toggle()
+        persistCouponOffers()
+        remoteSaveCouponOffer(couponOffers[i])
+    }
+
+    private func deleteCouponOffer(id: String) {
+        couponOffers.removeAll { $0.id == id }
+        persistCouponOffers()
+        Task { [repo] in try? await repo.deleteCouponOffer(id: id) }
+    }
+
+    private func remoteSaveCouponOffer(_ offer: CouponOffer) {
+        // Без владельца запись уйдёт с `ownerID: ""`, и правила её отклонят —
+        // как у заведений и акций, ждём входа (sync дозальёт).
+        guard !ownerID.isEmpty else { return }
+        let owner = ownerID
+        Task { [weak self, repo] in
+            do { try await repo.saveCouponOffer(offer, ownerID: owner) }
+            catch { self?.reportRemoteFailure(error) }
+        }
+    }
+
+    private func persistCouponOffers() { persist(key(Key.couponOffers), couponOffers) }
 
     private func setDealStatus(id: String, status: DealStatus) {
         if let i = dealDTOs.firstIndex(where: { $0.id == id }) {

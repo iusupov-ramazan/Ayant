@@ -31,14 +31,10 @@ enum SanTiming {
     static let dealRowRise = (duration: 0.55, stagger: 0.08)
     static let gridTileRise = (duration: 0.50, stagger: 0.06)
     static let resultRowRise = (duration: 0.50, stagger: 0.07)
-    /// Витрина хоста: плитки мельче и их втрое больше в ряду, поэтому шаг короче.
-    static let hostGridRise = (duration: 0.50, stagger: 0.05)
 
     /// Задержку получают только элементы первого экрана: иначе 12-я карточка
     /// ждёт секунду, а прокрученные позже появляются «с опозданием».
     static let staggerCap = 4
-    /// То же правило для сетки 3×N: первый экран — это девять плиток.
-    static let gridStaggerCap = 9
     /// Лента постов: на экран влезает один пост, но задержку получают первые
     /// четыре — их видно при быстрой прокрутке сразу после входа.
     static let feedStaggerCap = 4

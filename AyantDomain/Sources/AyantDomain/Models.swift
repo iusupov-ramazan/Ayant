@@ -173,9 +173,33 @@ public struct VenueItem: Identifiable, Hashable, Codable, Sendable {
     public var emoji: String
     public var kind: String   // "food" | "service" | "other"
     public var imageURL: String = ""   // фото объекта (фолбэк — эмодзи)
+    /// Цена в сомах; `nil` — не указана. Приходит из разбора PDF-меню
+    /// (`MenuImport`) или из правки блюда хозяином.
+    public var price: Int? = nil
+    /// Состав / описание из меню.
+    public var details: String = ""
+    /// Раздел меню («Супы», «Напитки»); пусто — без раздела.
+    public var section: String = ""
 
-    public init(id: String, name: String, emoji: String, kind: String, imageURL: String = "") {
+    public init(id: String, name: String, emoji: String, kind: String, imageURL: String = "",
+                price: Int? = nil, details: String = "", section: String = "") {
         self.id = id; self.name = name; self.emoji = emoji; self.kind = kind; self.imageURL = imageURL
+        self.price = price; self.details = details; self.section = section
+    }
+
+    /// Кэш прежних версий не знает цены, описания и раздела — синтезированный
+    /// декодер счёл бы такой объект битым, и вместе с ним не прочиталось бы
+    /// всё заведение.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        emoji = try c.decodeIfPresent(String.self, forKey: .emoji) ?? "🍽"
+        kind = try c.decodeIfPresent(String.self, forKey: .kind) ?? "food"
+        imageURL = try c.decodeIfPresent(String.self, forKey: .imageURL) ?? ""
+        price = try c.decodeIfPresent(Int.self, forKey: .price)
+        details = try c.decodeIfPresent(String.self, forKey: .details) ?? ""
+        section = try c.decodeIfPresent(String.self, forKey: .section) ?? ""
     }
 
     public var kindTitle: String {
@@ -341,6 +365,8 @@ public struct Venue: Identifiable, Hashable {
     public var loyaltyEnabled: Bool = false          // включена ли карта лояльности
     public var loyaltyGoal: Int = 6                   // штампов до награды
     public var loyaltyReward: String = "Награда за лояльность"  // что получает гость
+    public var loyaltyTitle: String = ""              // имя первой карты («Кофе»); пусто — без имени
+    public var extraStampCards: [StampCard] = []      // остальные карты штампов (см. `StampCards`)
     public var couponsEnabled: Bool = true            // принимает ли заведение купоны (по умолчанию да)
     // --- Бонусы САН (баллы заведения, System 1) ---
     public var pointsEnabled: Bool = false            // включены ли баллы САН
@@ -372,7 +398,9 @@ public struct Venue: Identifiable, Hashable {
                 pointsEnabled: Bool = false, pointsMode: String = "flat", pointsFlat: Int = 0,
                 pointsBands: [PointsBand] = [], cashbackPercent: Double = 0,
                 pointsRewards: [PointsReward] = [], pointsExpiryMonths: Int = 6,
-                redeemMode: String = "staffScan", earnCooldownMinutes: Int = 60) {
+                redeemMode: String = "staffScan", earnCooldownMinutes: Int = 60,
+                loyaltyTitle: String = "", extraStampCards: [StampCard] = []) {
+        self.loyaltyTitle = loyaltyTitle; self.extraStampCards = extraStampCards
         self.id = id; self.name = name; self.category = category; self.district = district
         self.address = address; self.phone = phone; self.emoji = emoji
         self.gradient = gradient; self.imageURL = imageURL
@@ -392,6 +420,19 @@ public struct Venue: Identifiable, Hashable {
         self.cashbackPercent = cashbackPercent; self.pointsRewards = pointsRewards
         self.pointsExpiryMonths = pointsExpiryMonths; self.redeemMode = redeemMode
         self.earnCooldownMinutes = earnCooldownMinutes
+    }
+
+    /// Есть ли у заведения такая карта. Первая есть всегда — её прогресс
+    /// показываем, даже когда программа выключена (как и до нескольких карт);
+    /// дополнительная — только пока она активна.
+    public func offersStampCard(_ cardID: String) -> Bool {
+        StampCards.isFirstCard(cardID) || stampCards.contains { $0.id == cardID }
+    }
+
+    /// Карты штампов, которые сейчас принимают штампы; первая — впереди.
+    public var stampCards: [StampCard] {
+        StampCards.active(enabled: loyaltyEnabled, title: loyaltyTitle, goal: loyaltyGoal,
+                          reward: loyaltyReward, extras: extraStampCards)
     }
 
     /// Активен ли платный буст в момент `now`.
@@ -478,6 +519,10 @@ public struct Deal: Identifiable, Hashable {
     /// в один текст, ограничения либо теряются в абзаце, либо превращают его в
     /// юридическую сноску. Пусто — блока условий в ленте просто нет.
     public var terms: [String] = []
+    /// Адреса заведения, где действует акция (`Branch.id`, первый адрес —
+    /// `VenueLocations.firstID`). Пусто — во всех адресах. Читать через
+    /// `Venue.locations(for:)`: он же прощает удалённые адреса.
+    public var locationIDs: [String] = []
 
     public init(id: String, venueID: String, type: DealType, title: String, details: String,
                 emoji: String, oldPrice: Int? = nil, newPrice: Int? = nil,
@@ -485,14 +530,14 @@ public struct Deal: Identifiable, Hashable {
                 citySlug: String = City.bishkek.id,
                 status: DealStatus = .active, startDate: Date? = nil,
                 imageEmojis: [String] = [], imageURL: String? = nil, imageURLs: [String] = [],
-                terms: [String] = []) {
+                terms: [String] = [], locationIDs: [String] = []) {
         self.id = id; self.venueID = venueID; self.type = type; self.title = title
         self.details = details; self.emoji = emoji; self.oldPrice = oldPrice
         self.newPrice = newPrice; self.discountPercent = discountPercent
         self.validUntil = validUntil; self.citySlug = citySlug
         self.status = status; self.startDate = startDate
         self.imageEmojis = imageEmojis; self.imageURL = imageURL; self.imageURLs = imageURLs
-        self.terms = terms
+        self.terms = terms; self.locationIDs = locationIDs
     }
 
     /// Все фото предложения (для карусели): imageURLs, иначе одно imageURL.
@@ -508,9 +553,14 @@ public struct Deal: Identifiable, Hashable {
     /// Системное «сейчас». Ниже слоя UI используйте `isActive(at:)`.
     public var isActive: Bool { isActive(at: Date()) }
 
-    /// Можно ли предъявить купон сотруднику. Новинки и объявления — это просто
-    /// новости/информация, купона у них нет.
-    public var isRedeemable: Bool { type == .discount || type == .promo }
+    /// Несёт ли акция выгоду, о которой стоит сказать на кассе (скидка/акция),
+    /// в отличие от новинки и объявления — те просто новости.
+    ///
+    /// Раньше называлось `isRedeemable` и означало «у акции есть купон с QR».
+    /// Купонов у акций больше нет: акция — объявление, а купон стал отдельной
+    /// сущностью, которую выпускает заведение и покупает гость за бонусы.
+    /// Имя сменилось намеренно — старое обещало погашение, которого нет.
+    public var isInformational: Bool { type == .discount || type == .promo }
 
     /// Часов до конца действия.
     public var hoursLeft: Int { max(0, Int(validUntil.timeIntervalSinceNow / 3600)) }

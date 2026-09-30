@@ -43,6 +43,8 @@ public struct VenueFirestoreCommonFields {
     let loyaltyEnabled: Bool
     let loyaltyGoal: Int
     let loyaltyReward: String
+    let loyaltyTitle: String
+    let stampCards: [StampCard]
     let couponsEnabled: Bool
     let pointsEnabled: Bool
     let pointsMode: String
@@ -75,6 +77,8 @@ public struct VenueFirestoreCommonFields {
         loyaltyEnabled = d.bool(FS.VenueDoc.loyaltyEnabled) ?? false
         loyaltyGoal = d.int(FS.VenueDoc.loyaltyGoal) ?? 6
         loyaltyReward = d.string(FS.VenueDoc.loyaltyReward) ?? "Награда за лояльность"
+        loyaltyTitle = d.string(FS.VenueDoc.loyaltyTitle) ?? ""
+        stampCards = StampCard.parse(d[FS.VenueDoc.stampCards])
         couponsEnabled = d.bool(FS.VenueDoc.couponsEnabled) ?? true
         pointsEnabled = d.bool(FS.VenueDoc.pointsEnabled) ?? false
         pointsMode = d.string(FS.VenueDoc.pointsMode) ?? "flat"
@@ -145,7 +149,9 @@ extension Venue {
             pointsRewards: f.pointsRewards,
             pointsExpiryMonths: f.pointsExpiryMonths,
             redeemMode: f.redeemMode,
-            earnCooldownMinutes: f.earnCooldownMinutes
+            earnCooldownMinutes: f.earnCooldownMinutes,
+            loyaltyTitle: f.loyaltyTitle,
+            extraStampCards: f.stampCards
         )
     }
 }
@@ -162,6 +168,29 @@ extension PointsBand {
             guard let points = m.int(FS.PointsBandField.points) else { return nil }
             return PointsBand(maxAmount: m.int(FS.PointsBandField.maxAmount) ?? 0, points: points)
         }
+    }
+}
+
+extension StampCard {
+    var firestoreMap: [String: Any] {
+        [
+            FS.StampCardField.id: id, FS.StampCardField.title: title,
+            FS.StampCardField.goal: goal, FS.StampCardField.reward: reward,
+            FS.StampCardField.active: active,
+        ]
+    }
+    /// Разбор с теми же правилами, что при сохранении: карта без id или
+    /// награды, чужой `default` и дубли id отбрасываются.
+    static func parse(_ raw: Any?) -> [StampCard] {
+        guard let arr = raw as? [[String: Any]] else { return [] }
+        return StampCards.sanitizedExtras(arr.compactMap { m in
+            guard let id = m.string(FS.StampCardField.id) else { return nil }
+            return StampCard(id: id,
+                             title: m.string(FS.StampCardField.title) ?? "",
+                             goal: m.int(FS.StampCardField.goal) ?? StampCards.defaultGoal,
+                             reward: m.string(FS.StampCardField.reward) ?? "",
+                             active: m.bool(FS.StampCardField.active) ?? true)
+        })
     }
 }
 
@@ -233,14 +262,21 @@ extension VenueItem {
             return VenueItem(id: id, name: name,
                              emoji: m.string(FS.ItemField.emoji) ?? "🍽",
                              kind: m.string(FS.ItemField.kind) ?? "food",
-                             imageURL: m.string(FS.ItemField.imageURL) ?? "")
+                             imageURL: m.string(FS.ItemField.imageURL) ?? "",
+                             price: MenuImport.validPrice(m.int(FS.ItemField.price)),
+                             details: m.string(FS.ItemField.description) ?? "",
+                             section: m.string(FS.ItemField.section) ?? "")
         }
     }
     var firestoreMap: [String: Any] {
-        [
+        var m: [String: Any] = [
             FS.ItemField.id: id, FS.ItemField.name: name, FS.ItemField.emoji: emoji,
             FS.ItemField.kind: kind, FS.ItemField.imageURL: imageURL,
+            FS.ItemField.description: details, FS.ItemField.section: section,
         ]
+        // Без цены — без поля: «0 сом» гость прочитал бы как «бесплатно».
+        if let price { m[FS.ItemField.price] = price }
+        return m
     }
 }
 
@@ -271,7 +307,8 @@ extension Deal {
             imageEmojis: d[FS.DealDoc.imageEmojis] as? [String] ?? [],
             imageURL: d.string(FS.DealDoc.imageURL),
             imageURLs: d[FS.DealDoc.imageURLs] as? [String] ?? [],
-            terms: d[FS.DealDoc.terms] as? [String] ?? []
+            terms: d[FS.DealDoc.terms] as? [String] ?? [],
+            locationIDs: d[FS.DealDoc.locationIDs] as? [String] ?? []
         )
     }
 }
@@ -411,7 +448,9 @@ extension LoyaltyCard {
             stamps: d.int(FS.LoyaltyCardDoc.stamps) ?? 0,
             completedRounds: d.int(FS.LoyaltyCardDoc.completedRounds) ?? 0,
             goal: d.int(FS.LoyaltyCardDoc.goal) ?? 6,
-            reward: d.string(FS.LoyaltyCardDoc.reward) ?? "Награда за лояльность"
+            reward: d.string(FS.LoyaltyCardDoc.reward) ?? "Награда за лояльность",
+            cardID: d.string(FS.LoyaltyCardDoc.cardID) ?? StampCard.defaultID,
+            title: d.string(FS.LoyaltyCardDoc.title) ?? ""
         )
     }
 }
@@ -487,7 +526,7 @@ extension HostVenueDTO {
     /// админки. Запись по-прежнему идёт с `merge: true`: поля, которых DTO не
     /// знает (рейтинг, счётчики сохранений, служебные), остаются нетронутыми.
     func firestoreData(ownerID: String) -> [String: Any] {
-        [
+        var d: [String: Any] = [
             FS.VenueDoc.name: name,
             FS.VenueDoc.category: FSKeys.key(for: category),
             FS.VenueDoc.district: district,
@@ -532,6 +571,13 @@ extension HostVenueDTO {
             FS.VenueDoc.redeemMode: redeemMode,
             FS.VenueDoc.earnCooldownMinutes: earnCooldownMinutes,
         ]
+        // Карты штампов — только из копии, которая их знает (`stampCardsLoaded`):
+        // старый кэш без карт иначе стёр бы их при любом сохранении.
+        if stampCardsLoaded {
+            d[FS.VenueDoc.loyaltyTitle] = loyaltyTitle
+            d[FS.VenueDoc.stampCards] = extraStampCards.map(\.firestoreMap)
+        }
+        return d
     }
 
     public init?(firestore d: [String: Any], id: String) {
@@ -580,7 +626,9 @@ extension HostVenueDTO {
             pointsRewards: f.pointsRewards,
             pointsExpiryMonths: f.pointsExpiryMonths,
             redeemMode: f.redeemMode,
-            earnCooldownMinutes: f.earnCooldownMinutes)
+            earnCooldownMinutes: f.earnCooldownMinutes,
+            loyaltyTitle: f.loyaltyTitle,
+            extraStampCards: f.stampCards)
     }
 }
 
@@ -609,6 +657,9 @@ extension HostDealDTO {
         d[FS.DealDoc.terms] = terms
         // Источник импорта: по нему кабинет помечает пост как уже добавленный.
         if let sourcePostID, !sourcePostID.isEmpty { d[FS.DealDoc.igPostID] = sourcePostID }
+        // Пишется всегда, в том числе пустым: вернуть акцию «во все адреса»
+        // — это стереть прежний список, а не оставить его как был.
+        d[FS.DealDoc.locationIDs] = locationIDs
         return d
     }
 
@@ -630,7 +681,54 @@ extension HostDealDTO {
             imageURL: d.string(FS.DealDoc.imageURL) ?? "",
             imageURLs: d[FS.DealDoc.imageURLs] as? [String] ?? [],
             terms: d[FS.DealDoc.terms] as? [String] ?? [],
-            sourcePostID: d.string(FS.DealDoc.igPostID))
+            sourcePostID: d.string(FS.DealDoc.igPostID),
+            locationIDs: d[FS.DealDoc.locationIDs] as? [String] ?? [])
+    }
+}
+
+// MARK: - Купон заведения
+
+extension CouponOffer {
+    /// `soldCount` НЕ пишется: его считает сервер при покупке. Отправить его
+    /// отсюда — значит затереть чужие покупки своим устаревшим значением.
+    func firestoreData(ownerID: String) -> [String: Any] {
+        var d: [String: Any] = [
+            FS.CouponOfferDoc.venueID: venueID,
+            FS.CouponOfferDoc.venueName: venueName,
+            FS.CouponOfferDoc.title: title,
+            FS.CouponOfferDoc.details: details,
+            FS.CouponOfferDoc.emoji: emoji,
+            FS.CouponOfferDoc.imageURL: imageURL,
+            FS.CouponOfferDoc.cost: cost,
+            FS.CouponOfferDoc.status: statusRaw,
+            FS.CouponOfferDoc.isPaused: isPaused,
+            FS.CouponOfferDoc.ownerID: ownerID,
+            FS.CouponOfferDoc.city: citySlug,
+        ]
+        // Остаток отсутствует — выпуск без ограничения. Пишем NSNull, иначе
+        // «снять ограничение» не удалило бы старое значение при merge.
+        d[FS.CouponOfferDoc.stock] = stock ?? NSNull()
+        d[FS.CouponOfferDoc.expiresAt] = expiresAt.map { Timestamp(date: $0) } ?? NSNull()
+        return d
+    }
+
+    public init?(firestore d: [String: Any], id: String) {
+        guard let venueID = d.string(FS.CouponOfferDoc.venueID),
+              let title = d.string(FS.CouponOfferDoc.title) else { return nil }
+        self.init(
+            id: id, venueID: venueID,
+            venueName: d.string(FS.CouponOfferDoc.venueName) ?? "",
+            title: title,
+            details: d.string(FS.CouponOfferDoc.details) ?? "",
+            emoji: d.string(FS.CouponOfferDoc.emoji) ?? "🎁",
+            imageURL: d.string(FS.CouponOfferDoc.imageURL) ?? "",
+            cost: d.int(FS.CouponOfferDoc.cost) ?? 0,
+            stock: d.int(FS.CouponOfferDoc.stock),
+            soldCount: d.int(FS.CouponOfferDoc.soldCount) ?? 0,
+            expiresAt: d.date(FS.CouponOfferDoc.expiresAt),
+            statusRaw: d.string(FS.CouponOfferDoc.status) ?? ModerationStatus.pending.rawValue,
+            isPaused: d[FS.CouponOfferDoc.isPaused] as? Bool ?? false,
+            citySlug: d.string(FS.CouponOfferDoc.city) ?? City.bishkek.id)
     }
 }
 

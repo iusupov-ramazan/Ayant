@@ -14,7 +14,7 @@ import AyantFeatures
 // в шапке ленты и строкой в профиле.
 
 enum GuestTab: Hashable {
-    case home, search, qr, wallet, profile
+    case home, venues, search, qr, wallet, profile
 }
 
 /// Мгновенно меняет состояние, снимая с него текущую (в т. ч. бесконечную) анимацию.
@@ -68,6 +68,17 @@ struct RootView: View {
             HomeFeedView()
                 .tabItem { Label("Главная", systemImage: "house.fill") }
                 .tag(GuestTab.home)
+            // Заведения — отдельная вкладка, а не ряд на главной. Ряд показывал
+            // дюжину плиток и вёл в тот же список: каталог города оказывался
+            // прицепом к ленте, хотя ищут заведение так же часто, как листают
+            // предложения.
+            NavigationStack {
+                AllVenuesView(isTabRoot: true)
+                    .navigationDestination(for: Venue.self) { VenueDetailView(venue: $0) }
+                    .navigationDestination(for: Deal.self) { DealDetailView(deal: $0, isPushed: true) }
+            }
+            .tabItem { Label("Заведения", systemImage: "storefront.fill") }
+            .tag(GuestTab.venues)
             if ReleaseFlags.searchTab {
                 SearchView()
                     .tabItem { Label("Поиск", systemImage: "magnifyingglass") }

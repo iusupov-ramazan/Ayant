@@ -236,6 +236,12 @@ struct SANApp: App {
     /// и гостю: он «зарабатывал» в запись, которая исчезает вместе с выходом.
     private func startBonusIfAllowed() {
         guard session.isSignedIn, !session.isGuest else { bonus.pause(); return }
+        // Серверный кошелёк: подключаем (один раз на пользователя) и досылаем
+        // начисления, которые не ушли из-за сети. В мок-режиме — ничего.
+        if let id = session.user?.id {
+            bonus.attach(userID: id)
+            bonus.retryPending()
+        }
         bonus.start()
     }
 
@@ -323,7 +329,9 @@ struct SignedInRootView: View {
                           content: .points(delta: e.delta, newBalance: e.newBalance))
         }
         if let e = loyalty.pendingStamp {
-            return Earned(id: "stamp-" + e.id, venueID: e.venueID, venueName: e.venueName,
+            // У заведения может быть несколько карт — называем, на какую лёг штамп.
+            let name = e.cardTitle.isEmpty ? e.venueName : "\(e.venueName) · \(e.cardTitle)"
+            return Earned(id: "stamp-" + e.id, venueID: e.venueID, venueName: name,
                           content: .stamp(stamps: e.stamps, goal: e.goal,
                                           rewardIssued: e.rewardIssued, reward: e.reward))
         }

@@ -97,6 +97,15 @@ public struct HostVenueDTO: Codable, Identifiable, Equatable {
     public var loyaltyEnabled: Bool = false                         // карта лояльности вкл/выкл
     public var loyaltyGoal: Int = 6                                 // штампов до награды
     public var loyaltyReward: String = "Награда за лояльность"      // текст награды
+    public var loyaltyTitle: String = ""                            // имя первой карты штампов
+    public var extraStampCards: [StampCard] = []                    // остальные карты (см. `StampCards`)
+    /// Знает ли эта копия карты штампов заведения. `false` — кэш сборки, в
+    /// которой карт ещё не было: в нём `extraStampCards` пуст не потому, что
+    /// карт нет, а потому, что их не читали. Такую копию нельзя писать поверх
+    /// Firestore — любое сохранение (даже пауза) стёрло бы карты, и штампы
+    /// гостей на них повисли бы без карты. Становится `true` после `sync()`
+    /// (копия из Firestore) или правки карт в редакторе.
+    public var stampCardsLoaded: Bool = true
     public var couponsEnabled: Bool = true                          // принимать купоны (по умолчанию да)
     // --- Бонусы САН (баллы); правит хост в приложении (HostForms.applyPoints) и админ-панель ---
     public var pointsEnabled: Bool = false
@@ -124,7 +133,9 @@ public struct HostVenueDTO: Codable, Identifiable, Equatable {
                 pointsEnabled: Bool = false, pointsMode: String = "flat", pointsFlat: Int = 0,
                 pointsBands: [PointsBand] = [], cashbackPercent: Double = 0,
                 pointsRewards: [PointsReward] = [], pointsExpiryMonths: Int = 6,
-                redeemMode: String = "staffScan", earnCooldownMinutes: Int = 60) {
+                redeemMode: String = "staffScan", earnCooldownMinutes: Int = 60,
+                loyaltyTitle: String = "", extraStampCards: [StampCard] = []) {
+        self.loyaltyTitle = loyaltyTitle; self.extraStampCards = extraStampCards
         self.id = id; self.name = name; self.categoryRaw = categoryRaw
         self.district = district; self.address = address; self.phone = phone; self.emoji = emoji
         self.latitude = latitude; self.longitude = longitude
@@ -182,6 +193,9 @@ public struct HostVenueDTO: Codable, Identifiable, Equatable {
         loyaltyEnabled = try c.decodeIfPresent(Bool.self, forKey: .loyaltyEnabled) ?? false
         loyaltyGoal = try c.decodeIfPresent(Int.self, forKey: .loyaltyGoal) ?? 6
         loyaltyReward = try c.decodeIfPresent(String.self, forKey: .loyaltyReward) ?? "Награда за лояльность"
+        loyaltyTitle = try c.decodeIfPresent(String.self, forKey: .loyaltyTitle) ?? ""
+        extraStampCards = try c.decodeIfPresent([StampCard].self, forKey: .extraStampCards) ?? []
+        stampCardsLoaded = try c.decodeIfPresent(Bool.self, forKey: .stampCardsLoaded) ?? false
         couponsEnabled = try c.decodeIfPresent(Bool.self, forKey: .couponsEnabled) ?? true
         pointsEnabled = try c.decodeIfPresent(Bool.self, forKey: .pointsEnabled) ?? false
         pointsMode = try c.decodeIfPresent(String.self, forKey: .pointsMode) ?? "flat"
@@ -215,8 +229,15 @@ public struct HostVenueDTO: Codable, Identifiable, Equatable {
             pointsEnabled: pointsEnabled, pointsMode: pointsMode, pointsFlat: pointsFlat,
             pointsBands: pointsBands, cashbackPercent: cashbackPercent, pointsRewards: pointsRewards,
             pointsExpiryMonths: pointsExpiryMonths, redeemMode: redeemMode,
-            earnCooldownMinutes: earnCooldownMinutes
+            earnCooldownMinutes: earnCooldownMinutes,
+            loyaltyTitle: loyaltyTitle, extraStampCards: extraStampCards
         )
+    }
+
+    /// Карты штампов, которые сейчас принимают штампы; первая — впереди.
+    public var stampCards: [StampCard] {
+        StampCards.active(enabled: loyaltyEnabled, title: loyaltyTitle, goal: loyaltyGoal,
+                          reward: loyaltyReward, extras: extraStampCards)
     }
 }
 
@@ -242,19 +263,20 @@ public struct HostDealDTO: Codable, Identifiable, Equatable {
     /// Нужен, чтобы в списке постов помечать уже добавленные: иначе хост при
     /// каждой синхронизации заново создаёт ту же акцию и каталог дублируется.
     public var sourcePostID: String? = nil
-
+    /// Где действует акция — см. `Deal.locationIDs`. Пусто — во всех адресах.
+    public var locationIDs: [String] = []
 
     public init(id: String, venueID: String, typeRaw: String, title: String, details: String,
                 emoji: String, newPrice: Int? = nil, discountPercent: Int? = nil,
                 startDate: Date, endDate: Date? = nil, statusRaw: String,
                 imageURL: String = "", imageURLs: [String] = [], terms: [String] = [],
-                sourcePostID: String? = nil) {
+                sourcePostID: String? = nil, locationIDs: [String] = []) {
         self.id = id; self.venueID = venueID; self.typeRaw = typeRaw
         self.title = title; self.details = details; self.emoji = emoji
         self.newPrice = newPrice; self.discountPercent = discountPercent
         self.startDate = startDate; self.endDate = endDate; self.statusRaw = statusRaw
         self.imageURL = imageURL; self.imageURLs = imageURLs; self.terms = terms
-        self.sourcePostID = sourcePostID
+        self.sourcePostID = sourcePostID; self.locationIDs = locationIDs
     }
 
     /// Терпимый к схеме декодер кэша — см. `HostVenueDTO.init(from:)`.
@@ -276,6 +298,7 @@ public struct HostDealDTO: Codable, Identifiable, Equatable {
         imageURLs = try c.decodeIfPresent([String].self, forKey: .imageURLs) ?? []
         terms = try c.decodeIfPresent([String].self, forKey: .terms) ?? []
         sourcePostID = try c.decodeIfPresent(String.self, forKey: .sourcePostID)
+        locationIDs = try c.decodeIfPresent([String].self, forKey: .locationIDs) ?? []
     }
 
     public var type: DealType { DealType(rawValue: typeRaw) ?? .discount }
@@ -290,7 +313,8 @@ public struct HostDealDTO: Codable, Identifiable, Equatable {
             status: status, startDate: startDate, imageEmojis: [emoji],
             imageURL: imageURL.isEmpty ? nil : imageURL,
             imageURLs: imageURLs,
-            terms: terms
+            terms: terms,
+            locationIDs: locationIDs
         )
     }
 }

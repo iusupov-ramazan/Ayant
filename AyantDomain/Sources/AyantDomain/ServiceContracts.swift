@@ -18,6 +18,10 @@ public protocol HostRepository {
     func deleteDeal(id: String) async throws
     func fetchOwnedVenues(ownerID: String) async throws -> [HostVenueDTO]
     func fetchOwnedDeals(ownerID: String) async throws -> [HostDealDTO]
+    /// Купоны заведения на продажу за бонусы.
+    func saveCouponOffer(_ offer: CouponOffer, ownerID: String) async throws
+    func deleteCouponOffer(id: String) async throws
+    func fetchOwnedCouponOffers(ownerID: String) async throws -> [CouponOffer]
     /// Профиль хоста в коллекции hosts/{uid} (включая статус верификации).
     func saveProfile(_ profile: HostProfile, ownerID: String) async throws
     func fetchProfile(ownerID: String) async throws -> HostProfile?
@@ -80,8 +84,11 @@ public struct ScanOutcome: Equatable {
     public var balance: Int = 0       // новый баланс баллов
     /// true — запрос с этим idempotencyKey уже выполнялся; ничего не начислено повторно.
     public var replayed: Bool = false
+    /// Имя карты штампов, на которую лёг штамп (пусто — у безымянной первой).
+    public var cardTitle: String = ""
 
-    public init(ok: Bool, title: String, loyalty: Bool, stamps: Int, goal: Int, rewardIssued: Bool, rewardTitle: String, errorCode: String?, points: Bool = false, awarded: Int = 0, balance: Int = 0, replayed: Bool = false) {
+    public init(ok: Bool, title: String, loyalty: Bool, stamps: Int, goal: Int, rewardIssued: Bool, rewardTitle: String, errorCode: String?, points: Bool = false, awarded: Int = 0, balance: Int = 0, replayed: Bool = false, cardTitle: String = "") {
+        self.cardTitle = cardTitle
         self.ok = ok
         self.title = title
         self.loyalty = loyalty
@@ -126,6 +133,10 @@ public protocol CouponService {
     /// Каталог наград глобального кошелька (config/globalRewards).
     /// Пусто → показывать нечего: награда без партнёра не гасится.
     func fetchGlobalRewards() async throws -> [Reward]
+    /// Купоны, которые заведение продаёт за бонусы (`couponOffers` этого
+    /// заведения) — для «магазина купонов» на его странице. Все статусы:
+    /// что из этого можно купить сейчас, решает `CouponOffer.isAvailable(at:)`.
+    func fetchCouponOffers(venueID: String) async throws -> [CouponOffer]
     /// Купоны пользователя из Firestore (для синка used-статуса и наград).
     func fetchCoupons(userID: String) async throws -> [Coupon]
     /// Карты лояльности пользователя из Firestore (разовый запрос).
@@ -140,8 +151,11 @@ public protocol CouponService {
     /// billAmount — сумма чека (mode=cashback), bandIndex — выбранный диапазон (mode=bands).
     /// `idempotencyKey` — один на распознанный QR, повторяется при ретрае:
     /// сервер вернёт исходный результат вместо второго штампа/начисления.
+    /// `cardID` — какую карту штампов выбрал сотрудник (для `AYANT-CARD:`);
+    /// `nil` — первая карта, как у клиентов, не знающих о нескольких картах.
     func scanCoupon(code: String, venueID: String, idToken: String,
-                    billAmount: Int?, bandIndex: Int?, idempotencyKey: String) async throws -> ScanOutcome
+                    billAmount: Int?, bandIndex: Int?, idempotencyKey: String,
+                    cardID: String?) async throws -> ScanOutcome
     /// Списание баллов САН на награду (через Cloud Function redeemVenuePoints).
     /// `idempotencyKey` генерируется вызывающим ОДИН раз на попытку и повторяется
     /// при ретрае — сервер вернёт тот же результат вместо второго списания.
@@ -162,4 +176,81 @@ public protocol PushService {
     /// `userTokens` и сам FCM-токен. Без этого следующий владелец устройства
     /// (или сам вышедший) продолжает получать адресные кампании старого uid.
     func unregisterDevice(topics: [String]) async
+}
+
+/// Разбор файла меню (PDF, CSV, Excel) в блюда — на устройстве, без сети
+/// и без оплаты. Ничего не сохраняет: возвращает черновик для проверки
+/// хозяином. `progress` — доля 0…1 (распознавание сканов идёт постранично).
+public protocol MenuParsingService: Sendable {
+    func parseMenu(file: Data, kind: MenuFileKind,
+                   progress: @escaping @Sendable (Double) -> Void) async throws -> [MenuDraftItem]
+}
+
+// MARK: - Кошелёк бонусов на сервере
+
+/// Что покупается за бонусы.
+public enum BonusPurchase: Equatable, Sendable {
+    /// Купон заведения (`couponOffers/{id}`).
+    case offer(id: String)
+    /// Награда из каталога (`config/globalRewards`) — себе или подарком.
+    case reward(id: String, asGift: Bool, fromName: String)
+
+    /// Что именно покупаем — для ключа идемпотентности на клиенте: повтор той
+    /// же покупки должен нести тот же ключ, другая покупка — другой.
+    public var ref: String {
+        switch self {
+        case .offer(let id): return "offer:\(id)"
+        case .reward(let id, let asGift, _): return "reward:\(id)\(asGift ? ":gift" : "")"
+        }
+    }
+}
+
+/// Ответ `buyCoupon`. `errorCode` — код сервера как есть (`insufficient`,
+/// `sold_out`, `unavailable`, `not_found`, `no_wallet`, `key_reused`, …).
+public struct BonusPurchaseOutcome: Equatable, Sendable {
+    public var ok: Bool
+    public var coupon: Coupon?
+    public var giftCode: String?
+    public var balance: Int
+    public var errorCode: String?
+    public var replayed: Bool
+
+    public init(ok: Bool, coupon: Coupon? = nil, giftCode: String? = nil, balance: Int = 0,
+                errorCode: String? = nil, replayed: Bool = false) {
+        self.ok = ok; self.coupon = coupon; self.giftCode = giftCode
+        self.balance = balance; self.errorCode = errorCode; self.replayed = replayed
+    }
+}
+
+/// Ответ `earnBonus`. `granted` может быть меньше запрошенного — сервер
+/// держит потолки (за вызов и за сутки).
+public struct BonusEarnOutcome: Equatable, Sendable {
+    public var ok: Bool
+    public var granted: Int
+    public var balance: Int
+    public var errorCode: String?
+
+    public init(ok: Bool, granted: Int = 0, balance: Int = 0, errorCode: String? = nil) {
+        self.ok = ok; self.granted = granted; self.balance = balance; self.errorCode = errorCode
+    }
+}
+
+/// Глобальный кошелёк бонусов, который ведёт сервер (`bonusWallets/{uid}`).
+///
+/// Баланс на устройстве с ним — только отражение: начисления уходят в
+/// `earn`, покупки — в `buy`, а число на экране приходит из `balance(userID:)`.
+/// Без него (мок-режим, тесты) `BonusEngine` работает по-старому, локально.
+public protocol BonusWalletService {
+    /// Живой баланс кошелька (снапшот-листенер; снимается с задачей-потребителем).
+    func balance(userID: String) -> AsyncStream<Int>
+    /// Заводит кошелёк (один раз переносит `localBalance` устройства) и
+    /// зачисляет незабранные награды. Возвращает баланс.
+    func sync(localBalance: Int) async throws -> Int
+    /// Начисление за игры/время. `idempotencyKey` — один на начисление.
+    func earn(amount: Int, source: String, idempotencyKey: String) async throws -> BonusEarnOutcome
+    /// Покупка за бонусы. `idempotencyKey` — один на попытку, повторяется при ретрае.
+    func buy(_ purchase: BonusPurchase, idempotencyKey: String) async throws -> BonusPurchaseOutcome
+    /// Забрать подарок по коду из ссылки: сервер создаёт купон заведения.
+    /// Повтор тем же получателем возвращает тот же купон.
+    func claimGift(code: String) async throws -> BonusPurchaseOutcome
 }

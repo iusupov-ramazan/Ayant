@@ -45,6 +45,9 @@ struct HostScannerView: View {
     /// сервер вернёт первый результат, а не начислит второй раз. `resetScan()`
     /// здесь не вызывается намеренно — он минтит новый ключ.
     @State private var retryAction: (() -> Void)?
+    /// Распознанная карта лояльности ждёт выбора: у заведения несколько карт
+    /// штампов («Кофе», «Пицца»), и какую засчитать, знает только сотрудник.
+    @State private var pendingCardPick: String?
 
     private let couponService = AppConfig.makeCouponService()
     private let authService = AppConfig.makeAuthService()
@@ -60,6 +63,10 @@ struct HostScannerView: View {
                 if processing || result != nil {
                     Color.black.opacity(0.35).ignoresSafeArea()
                     resultCard
+                } else if let code = pendingCardPick, let venue = currentVenue {
+                    Color.black.opacity(0.35).ignoresSafeArea()
+                        .onTapGesture { resetScan() }
+                    cardPicker(code: code, cards: venue.stampCards)
                 }
             }
             .toolbar(.hidden, for: .navigationBar)
@@ -104,7 +111,7 @@ struct HostScannerView: View {
                 if DataScannerViewController.isSupported && DataScannerViewController.isAvailable {
                     switch cameraAuth {
                     case .authorized:
-                        CodeScannerView(isPaused: processing || result != nil || pendingEarn != nil) {
+                        CodeScannerView(isPaused: processing || result != nil || pendingEarn != nil || pendingCardPick != nil) {
                             handle($0)
                         }
                     case .denied, .restricted:
@@ -408,13 +415,15 @@ struct HostScannerView: View {
         lastCode = ""
         manualCode = ""
         scanKey = ""
+        pendingCardPick = nil
     }
 
     // MARK: Логика
 
     private func handle(_ code: String) {
         let code = code.trimmingCharacters(in: .whitespaces)
-        guard !processing, result == nil, pendingEarn == nil, !code.isEmpty, code != lastCode else { return }
+        guard !processing, result == nil, pendingEarn == nil, pendingCardPick == nil,
+              !code.isEmpty, code != lastCode else { return }
         guard !venueID.isEmpty else { result = .error(LS("Выберите заведение")); return }
 
         // Ключ на распознанный QR — один, и он переживёт переход на экран суммы
@@ -436,11 +445,73 @@ struct HostScannerView: View {
             submitRedeem(code: code)
             return
         }
+        // Несколько карт штампов — сначала выбор. С одной картой выбирать
+        // нечего: штамп уходит сразу, как раньше.
+        if code.hasPrefix("AYANT-CARD:"), let cards = currentVenue?.stampCards, cards.count > 1 {
+            SanHaptics.selection()
+            pendingCardPick = code
+            return
+        }
         submitScan(code: code, billAmount: nil, bandIndex: nil, billForReceipt: nil)
     }
 
+    /// Выбор карты штампов после скана.
+    private func cardPicker(code: String, cards: [StampCard]) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Какой карте штамп?")
+                .font(.golos(18, .bold)).foregroundStyle(Color.sanInk)
+            Text("У заведения несколько карт — выберите, за что гость платит сейчас.")
+                .font(.golos(13)).foregroundStyle(Color.sanInkSoft)
+                .fixedSize(horizontal: false, vertical: true)
+            ForEach(cards) { card in
+                Button {
+                    // Ключ — на пару «QR + карта»: повтор того же выбора после
+                    // сбоя сети пойдёт с тем же ключом (`retryAction`), а штамп
+                    // на другую карту — законный отдельный скан, со своим.
+                    scanKey = UUID().uuidString
+                    pendingCardPick = nil
+                    submitScan(code: code, billAmount: nil, bandIndex: nil,
+                               billForReceipt: nil, cardID: card.id)
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "seal.fill")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(Color.sanAccentText)
+                            .frame(width: 38, height: 38)
+                            .background(Color.sanAccent.opacity(0.12),
+                                        in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(card.title.isEmpty ? LS("Карта лояльности") : card.title)
+                                .font(.golos(15.5, .bold)).foregroundStyle(Color.sanInk)
+                            Text("\(card.goal) визитов → «\(card.reward)»")
+                                .font(.golos(12.5)).foregroundStyle(Color.sanInkSoft)
+                                .lineLimit(1)
+                        }
+                        Spacer(minLength: 4)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Color(hex: 0x9A9188))
+                    }
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.sanSurfaceMuted, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.sanPress(0.97))
+            }
+            Button { resetScan() } label: { Text("Отмена") }
+                .buttonStyle(SanPillButton())
+                .padding(.top, 2)
+        }
+        .padding(20)
+        .frame(maxWidth: 360)
+        .background(Color.sanSurface, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .padding(.horizontal, 24)
+    }
+
     /// Начисление баллов / штамп / погашение купона через scanCoupon.
-    private func submitScan(code: String, billAmount: Int?, bandIndex: Int?, billForReceipt: Int?) {
+    private func submitScan(code: String, billAmount: Int?, bandIndex: Int?, billForReceipt: Int?,
+                            cardID: String? = nil) {
         processing = true
         result = nil
         retryAction = nil
@@ -452,7 +523,7 @@ struct HostScannerView: View {
             do {
                 let out = try await couponService.scanCoupon(code: code, venueID: vID, idToken: token,
                                                              billAmount: billAmount, bandIndex: bandIndex,
-                                                             idempotencyKey: key)
+                                                             idempotencyKey: key, cardID: cardID)
                 await MainActor.run {
                     processing = false
                     if out.ok && out.points {
@@ -474,7 +545,7 @@ struct HostScannerView: View {
                     result = .error(LS("Ошибка сети. Попробуйте ещё раз."))
                     retryAction = {
                         submitScan(code: code, billAmount: billAmount, bandIndex: bandIndex,
-                                   billForReceipt: billForReceipt)
+                                   billForReceipt: billForReceipt, cardID: cardID)
                     }
                 }
             }
@@ -538,6 +609,7 @@ struct HostScannerView: View {
         case "coupon_not_found": return LS("Купон не найден.")
         case "wrong_venue":      return LS("Этот код — для другого заведения.")
         case "loyalty_off":      return LS("Карта лояльности у заведения выключена.")
+        case "card_not_found":   return LS("Эта карта штампов выключена или удалена. Обновите настройки и попробуйте снова.")
         case "loyalty_is_points": return LS("Это заведение начисляет баллы, а не штампы — попросите гостя показать QR «Мой QR».")
         case "already_used":     return LS("Купон уже был использован.")
         case "not_owner":        return LS("У вас нет прав на это заведение.")
@@ -600,7 +672,9 @@ enum ScanResultUI {
             if o.points { return o.awarded > 0 ? LF("+%lld баллов ✓", o.awarded) : LS("Готово ✓") }
             // Штамп: крупно — что начислено ЗА ЭТОТ скан. Прежний заголовок
             // с итогом («2 из 6») после первого скана читался как двойной штамп.
-            if o.loyalty && !o.rewardIssued { return LS("+1 штамп ✓") }
+            if o.loyalty && !o.rewardIssued {
+                return o.cardTitle.isEmpty ? LS("+1 штамп ✓") : LF("+1 штамп · %@ ✓", o.cardTitle)
+            }
             return o.title.isEmpty ? LS("Купон погашен ✓") : "«\(o.title)» ✓"
         case .redeemed(let r):
             return r.rewardTitle.isEmpty ? LS("Награда выдана ✓") : "«\(r.rewardTitle)» ✓"

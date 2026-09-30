@@ -1,0 +1,409 @@
+{
+  "_comment": "Несколько карт штампов у заведения: какие карты принимают штампы и где лежит документ штампов. Гоняют StampCardsFixtureTests (Swift, StampCards) и functions/test/stampCardsFixture.test.js (activeStampCards / stampCardDocID / stampCardCollection). Новый случай — сюда, а не в тест одной платформы. venue — поля документа venues/{id} как в Firestore; expect — [id, title, goal, reward] по порядку.",
+  "docID": [
+    {
+      "userID": "u1",
+      "venueID": "v1",
+      "cardID": "default",
+      "expect": "u1_v1",
+      "collection": "loyaltyCards"
+    },
+    {
+      "userID": "u1",
+      "venueID": "v1",
+      "cardID": "",
+      "expect": "u1_v1",
+      "collection": "loyaltyCards"
+    },
+    {
+      "userID": "u1",
+      "venueID": "v1",
+      "cardID": "pizza",
+      "expect": "u1_v1_pizza",
+      "collection": "extraLoyaltyCards"
+    }
+  ],
+  "active": [
+    {
+      "name": "программа штампов выключена — карт нет, даже дополнительных",
+      "venue": {
+        "loyaltyEnabled": false,
+        "stampCards": [
+          {
+            "id": "pizza",
+            "goal": 5,
+            "reward": "Пицца"
+          }
+        ]
+      },
+      "expect": []
+    },
+    {
+      "name": "одна карта без настроек — дефолты",
+      "venue": {
+        "loyaltyEnabled": true
+      },
+      "expect": [
+        [
+          "default",
+          "",
+          6,
+          "Награда за лояльность"
+        ]
+      ]
+    },
+    {
+      "name": "первая карта: ноль — «не задано» (6), единица — минимум 2",
+      "venue": {
+        "loyaltyEnabled": true,
+        "loyaltyGoal": 0,
+        "loyaltyReward": "Кофе"
+      },
+      "expect": [
+        [
+          "default",
+          "",
+          6,
+          "Кофе"
+        ]
+      ]
+    },
+    {
+      "name": "первая карта: цель 1 → 2",
+      "venue": {
+        "loyaltyEnabled": true,
+        "loyaltyGoal": 1,
+        "loyaltyReward": "Кофе"
+      },
+      "expect": [
+        [
+          "default",
+          "",
+          2,
+          "Кофе"
+        ]
+      ]
+    },
+    {
+      "name": "первая карта: сверху не зажимается (так было до нескольких карт; Android пишет свободное число)",
+      "venue": {
+        "loyaltyEnabled": true,
+        "loyaltyGoal": 20,
+        "loyaltyReward": "Кофе"
+      },
+      "expect": [
+        [
+          "default",
+          "",
+          20,
+          "Кофе"
+        ]
+      ]
+    },
+    {
+      "name": "первая карта: отрицательная цель — «не задано»",
+      "venue": {
+        "loyaltyEnabled": true,
+        "loyaltyGoal": -3,
+        "loyaltyReward": "Кофе"
+      },
+      "expect": [
+        [
+          "default",
+          "",
+          6,
+          "Кофе"
+        ]
+      ]
+    },
+    {
+      "name": "первая карта: пустая награда — дефолтная, имя обрезается",
+      "venue": {
+        "loyaltyEnabled": true,
+        "loyaltyTitle": "  Кофе  ",
+        "loyaltyReward": "   "
+      },
+      "expect": [
+        [
+          "default",
+          "Кофе",
+          6,
+          "Награда за лояльность"
+        ]
+      ]
+    },
+    {
+      "name": "дополнительные: мусорные карты отбрасываются",
+      "venue": {
+        "loyaltyEnabled": true,
+        "loyaltyReward": "Кофе",
+        "stampCards": [
+          {
+            "id": "pizza",
+            "title": "Пицца",
+            "goal": 5,
+            "reward": "Пицца в подарок"
+          },
+          {
+            "id": "default",
+            "title": "",
+            "goal": 5,
+            "reward": "подмена первой"
+          },
+          {
+            "id": "bad/id",
+            "title": "",
+            "goal": 5,
+            "reward": "x"
+          },
+          {
+            "id": " pad",
+            "title": "",
+            "goal": 5,
+            "reward": "id с пробелом"
+          },
+          {
+            "id": "empty",
+            "title": "",
+            "goal": 5,
+            "reward": "   "
+          },
+          {
+            "id": "pizza",
+            "title": "дубль",
+            "goal": 5,
+            "reward": "дубль"
+          }
+        ]
+      },
+      "expect": [
+        [
+          "default",
+          "",
+          6,
+          "Кофе"
+        ],
+        [
+          "pizza",
+          "Пицца",
+          5,
+          "Пицца в подарок"
+        ]
+      ]
+    },
+    {
+      "name": "дополнительные: выключенная карта занимает свой id — дубль после неё не проходит",
+      "venue": {
+        "loyaltyEnabled": true,
+        "loyaltyReward": "Кофе",
+        "stampCards": [
+          {
+            "id": "tea",
+            "title": "Чай",
+            "goal": 5,
+            "reward": "Чай",
+            "active": false
+          },
+          {
+            "id": "tea",
+            "title": "Чай 2",
+            "goal": 5,
+            "reward": "Чай 2"
+          }
+        ]
+      },
+      "expect": [
+        [
+          "default",
+          "",
+          6,
+          "Кофе"
+        ]
+      ]
+    },
+    {
+      "name": "дополнительные: цель — ноль/нет → 6, 1 → 2, 40 → 12",
+      "venue": {
+        "loyaltyEnabled": true,
+        "loyaltyReward": "Кофе",
+        "stampCards": [
+          {
+            "id": "a",
+            "goal": 0,
+            "reward": "A"
+          },
+          {
+            "id": "b",
+            "reward": "B"
+          },
+          {
+            "id": "c",
+            "goal": 1,
+            "reward": "C"
+          },
+          {
+            "id": "d",
+            "goal": 40,
+            "reward": "D"
+          }
+        ]
+      },
+      "expect": [
+        [
+          "default",
+          "",
+          6,
+          "Кофе"
+        ],
+        [
+          "a",
+          "",
+          6,
+          "A"
+        ],
+        [
+          "b",
+          "",
+          6,
+          "B"
+        ],
+        [
+          "c",
+          "",
+          2,
+          "C"
+        ],
+        [
+          "d",
+          "",
+          12,
+          "D"
+        ]
+      ]
+    },
+    {
+      "name": "предел: не больше 5 карт с первой; выключенная тоже занимает место",
+      "venue": {
+        "loyaltyEnabled": true,
+        "loyaltyReward": "Кофе",
+        "stampCards": [
+          {
+            "id": "a",
+            "goal": 5,
+            "reward": "A"
+          },
+          {
+            "id": "b",
+            "goal": 5,
+            "reward": "B",
+            "active": false
+          },
+          {
+            "id": "c",
+            "goal": 5,
+            "reward": "C"
+          },
+          {
+            "id": "d",
+            "goal": 5,
+            "reward": "D"
+          },
+          {
+            "id": "e",
+            "goal": 5,
+            "reward": "E"
+          },
+          {
+            "id": "f",
+            "goal": 5,
+            "reward": "F"
+          }
+        ]
+      },
+      "expect": [
+        [
+          "default",
+          "",
+          6,
+          "Кофе"
+        ],
+        [
+          "a",
+          "",
+          5,
+          "A"
+        ],
+        [
+          "c",
+          "",
+          5,
+          "C"
+        ],
+        [
+          "d",
+          "",
+          5,
+          "D"
+        ]
+      ]
+    },
+    {
+      "name": "название и награда обрезаются до 30 и 60 символов",
+      "venue": {
+        "loyaltyEnabled": true,
+        "loyaltyReward": "Кофе",
+        "stampCards": [
+          {
+            "id": "long",
+            "title": "  абвгдеёжзийклмнопрстуфхцчшщъыьэюя  ",
+            "goal": 5,
+            "reward": "абвгдеёжзийклмнопрстуфхцчшщъыьэюяабвгдеёжзийклмнопрстуфхцчшщъыьэюя"
+          }
+        ]
+      },
+      "expect": [
+        [
+          "default",
+          "",
+          6,
+          "Кофе"
+        ],
+        [
+          "long",
+          "абвгдеёжзийклмнопрстуфхцчшщъыь",
+          5,
+          "абвгдеёжзийклмнопрстуфхцчшщъыьэюяабвгдеёжзийклмнопрстуфхцчшщ"
+        ]
+      ]
+    },
+    {
+      "name": "эмодзи считаются по скалярам Unicode, пара суррогатов не разрезается",
+      "venue": {
+        "loyaltyEnabled": true,
+        "loyaltyReward": "Кофе",
+        "stampCards": [
+          {
+            "id": "emoji",
+            "title": "🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕",
+            "goal": 5,
+            "reward": "Пицца 🍕"
+          }
+        ]
+      },
+      "expect": [
+        [
+          "default",
+          "",
+          6,
+          "Кофе"
+        ],
+        [
+          "emoji",
+          "🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕🍕",
+          5,
+          "Пицца 🍕"
+        ]
+      ]
+    }
+  ]
+}

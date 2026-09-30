@@ -15,6 +15,8 @@ public struct HostState: Equatable {
     public var venues: [HostVenueDTO] = []
     public var deals: [HostDealDTO] = []
     public var campaigns: [AdCampaign] = []
+    /// Купоны, которые заведения этого владельца продают за бонусы.
+    public var couponOffers: [CouponOffer] = []
     public var sync: SyncPhase = .idle
     /// Сколько успешных сканов сделано за сессию. Экраны со статистикой
     /// перезагружаются, когда счётчик меняется: «Погашено купонов» должно
@@ -27,12 +29,14 @@ public struct HostState: Equatable {
                 venues: [HostVenueDTO] = [], deals: [HostDealDTO] = [],
                 campaigns: [AdCampaign] = [], sync: SyncPhase = .idle,
                 scansCompleted: Int = 0,
-                instagram: [String: InstagramVenueState] = [:]) {
+                instagram: [String: InstagramVenueState] = [:],
+                couponOffers: [CouponOffer] = []) {
         self.ownerID = ownerID; self.profile = profile
         self.venues = venues; self.deals = deals
         self.campaigns = campaigns; self.sync = sync
         self.scansCompleted = scansCompleted
         self.instagram = instagram
+        self.couponOffers = couponOffers
     }
 
     /// Кабинет заведён — профиль создан.
@@ -42,6 +46,26 @@ public struct HostState: Equatable {
 
     public func venue(id: String) -> HostVenueDTO? { venues.first { $0.id == id } }
 
+    /// Заведение, которое открыто на первой вкладке кабинета.
+    ///
+    /// Выбор хранится на устройстве по id, а заведение за это время могли
+    /// удалить (здесь или с другого телефона) — тогда показываем первое, а не
+    /// пустой экран: пустой экран означал бы «у вас нет заведений», что неправда.
+    /// `nil` — только когда заведений нет вовсе.
+    public func currentVenue(preferredID: String?) -> HostVenueDTO? {
+        if let preferredID, let v = venue(id: preferredID) { return v }
+        return venues.first
+    }
+
+    /// Какое заведение появилось с момента `before` — чтобы сразу открыть
+    /// только что созданное. Ровно одно новое или ничего: несколько новых
+    /// приходят не из формы, а с синхронизацией, и угадывать среди них
+    /// «то самое» значило бы перескакивать на случайное.
+    public func addedVenueID(since before: Set<String>) -> String? {
+        let added = venues.map(\.id).filter { !before.contains($0) }
+        return added.count == 1 ? added[0] : nil
+    }
+
     public func instagram(venueID: String) -> InstagramVenueState {
         instagram[venueID] ?? InstagramVenueState()
     }
@@ -49,6 +73,11 @@ public struct HostState: Equatable {
     /// Посты, уже превращённые в акции. Считается из самих акций, а не хранится
     /// отдельно: два источника правды тут разъедутся на первом же удалении.
     public var importedPostIDs: Set<String> { Set(deals.compactMap(\.sourcePostID)) }
+
+    /// Купоны заведения, дорогие сверху — так их и сравнивают.
+    public func couponOffers(forVenue id: String) -> [CouponOffer] {
+        couponOffers.filter { $0.venueID == id }.sorted { $0.cost > $1.cost }
+    }
 
     /// Акции заведения, новые сверху.
     public func deals(forVenue id: String) -> [HostDealDTO] {
@@ -115,6 +144,10 @@ public enum HostIntent: Equatable {
     case deleteVenue(id: String)
     case addItem(venueID: String, name: String, emoji: String, kind: String, imageURL: String)
     case deleteItem(venueID: String, itemID: String)
+    /// Правка одного блюда (название, цена, описание, раздел, фото).
+    case updateItem(venueID: String, item: VenueItem)
+    /// Проверенные хозяином блюда из разбора PDF — слияние по `MenuImport.merge`.
+    case importMenu(venueID: String, drafts: [MenuDraftItem])
     case boostVenue(id: String, until: Date)
     /// Конфиг баллов САН заведения из редактора «Лояльность». Значения режутся
     /// до серверных ограничений в `HostForms.applyPoints`.
@@ -125,6 +158,13 @@ public enum HostIntent: Equatable {
     case setDealStatus(id: String, status: DealStatus)
     case duplicateDeal(id: String)
     case deleteDeal(id: String)
+
+    // Купоны заведения (продаются за бонусы)
+    case saveCouponOffer(existing: CouponOffer?, fields: HostForms.CouponFields)
+    /// Снять с продажи / вернуть. Отдельно от модерации: пауза — решение
+    /// заведения, статус — администратора.
+    case toggleCouponPause(id: String)
+    case deleteCouponOffer(id: String)
 
     // Продвижение
     case addCampaign(AdCampaign)

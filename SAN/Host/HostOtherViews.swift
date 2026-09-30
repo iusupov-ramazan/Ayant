@@ -3,9 +3,12 @@ import UIKit
 import AyantDomain
 import AyantFeatures
 
-// MARK: - Tab 4 — Отзывы (инбокс по всем заведениям)
+// MARK: - Отзывы (инбокс по всем заведениям, открывается из «Профиля»)
 
 /// Отзывы (SCREENS.md H10) — инбокс по всем заведениям владельца.
+///
+/// Экран без собственного `NavigationStack`: он кладётся в стек «Профиля»,
+/// а стек внутри стека ломает кнопку «назад».
 struct HostReviewsView: View {
     @EnvironmentObject private var host: HostStore
     @EnvironmentObject private var store: AppStore
@@ -33,43 +36,42 @@ struct HostReviewsView: View {
     private var pending: Int { allReviews.filter { $0.hostReply == nil }.count }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    HStack(alignment: .center, spacing: 10) {
-                        Text("Отзывы")
-                            .sanEditorialTitle(42)
-                            .foregroundStyle(Color.sanInk)
-                        if pending > 0 {
-                            Text("\(pending) без ответа")
-                                .font(.golos(12, .heavy)).foregroundStyle(.white)
-                                .lineLimit(1).fixedSize()
-                                .padding(.horizontal, 11).padding(.vertical, 6)
-                                .background(Color.sanAccentDeep, in: Capsule())
-                        }
-                        Spacer(minLength: 0)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(alignment: .center, spacing: 10) {
+                    Text("Отзывы")
+                        .sanEditorialTitle(42)
+                        .foregroundStyle(Color.sanInk)
+                    if pending > 0 {
+                        Text("\(pending) без ответа")
+                            .font(.golos(12, .heavy)).foregroundStyle(.white)
+                            .lineLimit(1).fixedSize()
+                            .padding(.horizontal, 11).padding(.vertical, 6)
+                            .background(Color.sanAccentDeep, in: Capsule())
                     }
-                    filterChips
-                    if reviews.isEmpty {
-                        emptyState
-                    } else {
-                        LazyVStack(spacing: 11) {
-                            ForEach(Array(reviews.enumerated()), id: \.element.id) { index, r in
-                                reviewCard(r)
-                                    .sanRise(index, stagger: 0.08, duration: 0.5)
-                            }
+                    Spacer(minLength: 0)
+                }
+                filterChips
+                if reviews.isEmpty {
+                    emptyState
+                } else {
+                    LazyVStack(spacing: 11) {
+                        ForEach(Array(reviews.enumerated()), id: \.element.id) { index, r in
+                            reviewCard(r)
+                                .sanRise(index, stagger: 0.08, duration: 0.5)
                         }
                     }
                 }
-                .padding(.horizontal, SanMetrics.screenPadding)
-                .padding(.top, 12).padding(.bottom, 28)
-                .sanScreenEnter()
             }
-            .sanScreenBackground()
-            .sanStatusBarCap()
-            .toolbar(.hidden, for: .navigationBar)
-            .sheet(item: $replyingTo) { r in HostReplyView(review: r) }
+            .padding(.horizontal, SanMetrics.screenPadding)
+            .padding(.top, 4).padding(.bottom, 28)
+            .sanScreenEnter()
         }
+        .sanScreenBackground()
+        // Системная «назад» без заголовка: крупный заголовок уже в контенте.
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(Color.sanCanvas, for: .navigationBar)
+        .sheet(item: $replyingTo) { r in HostReplyView(review: r) }
     }
 
     private var filterChips: some View {
@@ -1023,92 +1025,96 @@ struct VenueSearchPicker: View {
 
 // MARK: - Tab 5 — Профиль хоста
 
+/// Профиль бизнеса — одна страница, собранная как профиль гостя: карточка,
+/// сгруппированные строки, аккаунт внизу.
+///
+/// Раньше здесь было шесть отдельных карточек с заголовками («Информация о
+/// бизнесе», «Верификация», «Уведомления», «Оплата»…) и огромная кнопка
+/// режима гостя над всем этим, а отзывы жили на своей вкладке. Теперь у
+/// каждой вещи — одна строка, отзывы — одна из них, с бейджем неотвеченных.
 struct HostProfileView: View {
+    /// Показать первую вкладку — страницу выбранного заведения.
+    var openVenueTab: () -> Void = {}
     @EnvironmentObject private var host: HostStore
+    @EnvironmentObject private var store: AppStore
     @EnvironmentObject private var session: SessionStore
     @AppStorage("san.hostMode") private var hostMode = false
     @AppStorage("san.host.notify") private var notify = true
+    @AppStorage(HostSelection.venueKey) private var selectedVenueID = ""
     @State private var showSignOutConfirm = false
+    @State private var showVerifyConfirm = false
+    @State private var showAddVenue = false
 
     private var isVerified: Bool { host.state.profile?.verification == .verified }
     private var isPending: Bool { host.state.profile?.verification == .pending }
     private var businessName: String { host.state.profile?.businessName ?? "" }
 
+    private var ownedReviews: [Review] { store.reviews(forVenueIDs: host.state.ownedVenueIDs) }
+    private var pendingReviews: Int { ownedReviews.filter { $0.hostReply == nil }.count }
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
-                    HStack(spacing: 10) {
-                        Text("Профиль")
-                            .sanEditorialTitle(42)
-                            .foregroundStyle(Color.sanInk)
-                        if isVerified {
-                            HStack(spacing: 5) {
-                                Image(systemName: "checkmark.seal.fill").font(.system(size: 12))
-                                Text("Проверено").font(.golos(12, .bold))
-                            }
-                            .foregroundStyle(Color.sanOpen)
-                            .lineLimit(1).fixedSize()
-                            .padding(.horizontal, 11).padding(.vertical, 6)
-                            .background(Color.sanOpen.opacity(0.12), in: Capsule())
-                        }
-                        Spacer(minLength: 0)
-                    }
-                    // Выход в режим гостя — первым и во всю ширину: раньше он
-                    // лежал в самом низу листа, и хосты его не находили.
-                    guestModeButton
+                    SanScreenTitle("Профиль")
                     headerCard
-                    businessInfoCard
-                    verificationCard
-                    notificationsCard
-                    paymentCard
+                    venuesGroup
+                    businessGroup
+                    settingsGroup
+                    guestModeCard
                     actionsCard
                 }
-                .padding(.horizontal, SanMetrics.screenPadding)
-                .padding(.top, 12).padding(.bottom, 32)
+                .padding(.horizontal, 16)
+                .padding(.top, 8).padding(.bottom, 32)
                 .sanScreenEnter()
             }
             // Экран — корень вкладки «Профиль», собственная кнопка «назад» не нужна.
             .sanScreenBackground()
             .sanStatusBarCap()
             .toolbar(.hidden, for: .navigationBar)
+            // Новое заведение сразу открывается на первой вкладке: следующее,
+            // что с ним делают, — наполняют меню, акциями и лояльностью.
+            .hostAddVenueSheet(isPresented: $showAddVenue) { id in
+                selectedVenueID = id
+                openVenueTab()
+            }
         }
-    }
-
-    // MARK: Режим гостя
-
-    private var guestModeButton: some View {
-        Button { hostMode = false } label: {
-            Label("Вернуться в режим пользователя", systemImage: "person.crop.circle")
-        }
-        .buttonStyle(SanPrimaryButton())
     }
 
     // MARK: Шапка
 
+    /// Тап по карточке ведёт в реквизиты — как «изменить профиль» у гостя.
     private var headerCard: some View {
-        HStack(spacing: 14) {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(LinearGradient.sanAccentGradient)
-                .frame(width: 64, height: 64)
-                .overlay(
-                    Group {
-                        if let f = businessName.first {
-                            Text(String(f).uppercased()).font(.golos(28, .heavy)).foregroundStyle(.white)
-                        } else {
-                            Image(systemName: "storefront.fill").font(.system(size: 26, weight: .semibold))
-                                .foregroundStyle(.white)
-                        }
-                    })
-            VStack(alignment: .leading, spacing: 4) {
-                Text(businessName.isEmpty ? LS("Ваш бизнес") : businessName)
-                    .font(.golos(20, .bold)).foregroundStyle(Color.sanInk).lineLimit(1)
-                verificationBadge
+        NavigationLink { HostBusinessInfoView() } label: {
+            HStack(spacing: 14) {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(LinearGradient.sanAccentGradient)
+                    .frame(width: 64, height: 64)
+                    .overlay(
+                        Group {
+                            if let f = businessName.first {
+                                Text(String(f).uppercased()).font(.golos(28, .heavy)).foregroundStyle(.white)
+                            } else {
+                                Image(systemName: "storefront.fill").font(.system(size: 26, weight: .semibold))
+                                    .foregroundStyle(.white)
+                            }
+                        })
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(businessName.isEmpty ? LS("Ваш бизнес") : businessName)
+                        .font(.golos(20, .bold)).foregroundStyle(Color.sanInk).lineLimit(1)
+                    if let email = session.user?.email, !email.isEmpty {
+                        Text(email).font(.golos(14, .medium)).foregroundStyle(Color.sanInkSoft).lineLimit(1)
+                    }
+                    verificationBadge
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right").font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Color.sanInkSoft)
             }
-            Spacer(minLength: 0)
+            .padding(16)
+            .sanCard(padding: 0)
         }
-        .padding(16)
-        .sanCard(padding: 0)
+        .buttonStyle(.plain)
     }
 
     private var verificationBadge: some View {
@@ -1123,120 +1129,190 @@ struct HostProfileView: View {
         .background(color.opacity(0.14), in: Capsule())
     }
 
-    // MARK: Информация о бизнесе (отдельный экран)
+    // MARK: Заведения
 
-    private var businessInfoCard: some View {
+    /// Все заведения владельца и «Добавить заведение».
+    ///
+    /// Первая вкладка показывает одно заведение, поэтому список живёт здесь:
+    /// у владельца одного заведения он не мешает на главном экране, а у
+    /// владельца нескольких — всегда под рукой. Тап выбирает заведение и
+    /// переводит на его страницу.
+    private var venuesGroup: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SanSectionHeader("Информация о бизнесе")
-            NavigationLink { HostBusinessInfoView() } label: {
-                HStack(spacing: 12) {
-                    SanIconTile(systemName: "building.2.fill", size: 40)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Реквизиты и контакты")
-                            .font(.golos(16, .semibold)).foregroundStyle(Color.sanInk)
-                        Text(infoSummary)
-                            .font(.golos(13, .medium)).foregroundStyle(Color.sanInkSoft)
-                            .lineLimit(1)
+            SanSectionHeader("Заведения")
+            VStack(spacing: 0) {
+                ForEach(host.state.venues) { v in
+                    Button {
+                        SanHaptics.selection()
+                        selectedVenueID = v.id
+                        openVenueTab()
+                    } label: {
+                        HostVenueRow(venue: v, chevron: true, thumb: 34)
                     }
-                    Spacer(minLength: 6)
-                    Image(systemName: "chevron.right").font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Color.sanInkSoft)
+                    .buttonStyle(.plain)
+                    SanHairline(leading: 60)
                 }
-                .padding(14)
-                .sanGroupCard()
+                Button { showAddVenue = true } label: {
+                    row(icon: "plus", title: "Добавить заведение")
+                }
+                .buttonStyle(.plain)
+            }
+            .sanGroupCard()
+        }
+    }
+
+    // MARK: Бизнес: отзывы, реквизиты, проверка
+
+    private var businessGroup: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SanSectionHeader("Бизнес")
+            VStack(spacing: 0) {
+                NavigationLink { HostReviewsView() } label: {
+                    row(icon: "star.bubble.fill", title: "Отзывы",
+                        detail: ownedReviews.isEmpty ? LS("Пока нет") : "\(ownedReviews.count)",
+                        badge: pendingReviews > 0 ? LF("%lld без ответа", pendingReviews) : nil)
+                }
+                .buttonStyle(.plain)
+                SanHairline(leading: 60)
+                NavigationLink { HostBusinessInfoView() } label: {
+                    row(icon: "building.2.fill", title: "Реквизиты", detail: infoSummary)
+                }
+                .buttonStyle(.plain)
+                SanHairline(leading: 60)
+                verificationRow
+            }
+            .sanGroupCard()
+        }
+    }
+
+    /// Проверка — строка со статусом. Запросить можно только из состояния
+    /// «не подтверждено», и с подтверждением: запрос уходит в модерацию.
+    @ViewBuilder
+    private var verificationRow: some View {
+        let status = isVerified ? LS("Проверено") : (isPending ? LS("На проверке") : LS("Запросить"))
+        if !isVerified && !isPending {
+            Button { showVerifyConfirm = true } label: {
+                row(icon: "checkmark.seal.fill", title: "Верификация", detail: status, accentDetail: true)
             }
             .buttonStyle(.plain)
+            .confirmationDialog("Запросить «Проверено»?", isPresented: $showVerifyConfirm,
+                                titleVisibility: .visible) {
+                Button("Отправить запрос") { host.send(.requestVerification) }
+                Button("Отмена", role: .cancel) {}
+            } message: {
+                Text("Модерация проверит реквизиты — заполните их заранее, так быстрее.")
+            }
+        } else {
+            row(icon: "checkmark.seal.fill", title: "Верификация", detail: status, chevron: false)
         }
     }
 
     private var infoSummary: String {
-        guard let p = host.state.profile else { return LS("Название, телефон, ИП, ИНН…") }
-        var parts: [String] = []
-        if !p.legalForm.isEmpty { parts.append(LS(p.legalForm)) }
-        if !p.phone.isEmpty { parts.append(p.phone) }
-        if !p.inn.isEmpty { parts.append(LF("ИНН %@", p.inn)) }
-        return parts.isEmpty ? LS("Заполнить реквизиты и контакты") : parts.joined(separator: " · ")
+        guard let p = host.state.profile else { return LS("Заполнить") }
+        if !p.inn.isEmpty { return LF("ИНН %@", p.inn) }
+        if !p.legalForm.isEmpty { return LS(p.legalForm) }
+        return p.phone.isEmpty ? LS("Заполнить") : p.phone
     }
 
-    // MARK: Верификация
+    // MARK: Настройки
 
-    private var verificationCard: some View {
+    private var settingsGroup: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SanSectionHeader("Верификация")
-            VStack(alignment: .leading, spacing: 12) {
+            SanSectionHeader("Настройки")
+            VStack(spacing: 0) {
                 HStack(spacing: 12) {
-                    SanIconTile(systemName: "checkmark.seal.fill",
-                                tint: isVerified ? .sanOpen : .sanAccent, size: 34)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(isVerified ? "Заведение проверено" : (isPending ? "На проверке" : "Не подтверждено"))
-                            .font(.golos(16, .semibold)).foregroundStyle(Color.sanInk)
-                        Text(isVerified ? "У вас есть синяя галочка."
-                             : "Галочка повышает доверие гостей.")
-                            .font(.golos(13, .regular)).foregroundStyle(Color.sanInkSoft)
+                    SanIconTile(systemName: "bell.fill", size: 34)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Уведомления").font(.golos(16, .medium)).foregroundStyle(Color.sanInk)
+                        Text("Новые отзывы и статусы кампаний")
+                            .font(.golos(12.5)).foregroundStyle(Color.sanInkSoft)
                     }
                     Spacer()
+                    Toggle("", isOn: $notify).labelsHidden().tint(.sanAccent)
                 }
-                if !isVerified && !isPending {
-                    Button { host.send(.requestVerification) } label: { Text("Запросить «Проверено»") }
-                        .buttonStyle(SanPillButton(accent: true))
-                }
+                .padding(.horizontal, 14).padding(.vertical, 11)
+                SanHairline(leading: 60)
+                // Оплаты ещё нет — строка честно говорит «скоро», а не делает
+                // вид, что Payme/Click уже подключены.
+                row(icon: "creditcard.fill", title: "Оплата", detail: LS("Скоро"), chevron: false)
             }
-            .padding(14)
             .sanGroupCard()
         }
     }
 
-    // MARK: Уведомления
+    // MARK: Режим пользователя
 
-    private var notificationsCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            SanSectionHeader("Уведомления")
-            HStack(spacing: 12) {
-                SanIconTile(systemName: "bell.fill", size: 34)
-                Text("Новые отзывы и статусы кампаний")
-                    .font(.golos(15, .medium)).foregroundStyle(Color.sanInk)
+    /// Зеркало карточки «Режим заведения» в профиле гостя — тот же вид, то же
+    /// место: хозяин ищет дверь обратно там же, где входил.
+    private var guestModeCard: some View {
+        Button { hostMode = false } label: {
+            HStack(spacing: 14) {
+                SanIconTile(systemName: "person.crop.circle.fill", filled: true, size: 44)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Режим пользователя").font(.golos(16, .bold)).foregroundStyle(Color.sanAccentText)
+                    Text("Вернуться в приложение гостя").font(.golos(13, .medium)).foregroundStyle(Color.sanInkSoft)
+                }
                 Spacer()
-                Toggle("", isOn: $notify).labelsHidden().tint(.sanAccent)
-            }
-            .padding(.horizontal, 14).padding(.vertical, 12)
-            .sanGroupCard()
-        }
-    }
-
-    // MARK: Оплата
-
-    private var paymentCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            SanSectionHeader("Оплата")
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 12) {
-                    SanIconTile(systemName: "creditcard.fill", size: 34)
-                    Text("Способ оплаты").font(.golos(16, .medium)).foregroundStyle(Color.sanInk)
-                    Spacer()
-                    Text("Payme / Click").font(.golos(15, .semibold)).foregroundStyle(Color.sanInkSoft)
-                }
-                Text("Подключение платёжных методов появится позже.")
-                    .font(.golos(13, .regular)).foregroundStyle(Color.sanInkSoft)
+                Image(systemName: "chevron.right").font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Color.sanAccentText)
             }
             .padding(14)
             .sanGroupCard()
         }
+        .buttonStyle(.plain)
     }
 
-    // MARK: Действия
+    // MARK: Строка
+
+    private func row(icon: String, title: LocalizedStringKey, detail: String? = nil,
+                     badge: String? = nil, accentDetail: Bool = false,
+                     chevron: Bool = true) -> some View {
+        HStack(spacing: 12) {
+            SanIconTile(systemName: icon, size: 34)
+            // Название важнее значения справа: при нехватке места режется
+            // значение, а не то, что это за строка.
+            Text(title).font(.golos(16, .medium)).foregroundStyle(Color.sanInk)
+                .lineLimit(1)
+                .layoutPriority(1)
+            Spacer(minLength: 8)
+            if let badge {
+                Text(badge)
+                    .font(.golos(12, .bold)).foregroundStyle(.white)
+                    .lineLimit(1).fixedSize()
+                    .padding(.horizontal, 9).padding(.vertical, 3)
+                    .background(Color.sanAccentDeep, in: Capsule())
+            } else if let detail {
+                Text(detail)
+                    .font(.golos(14.5, accentDetail ? .bold : .medium))
+                    .foregroundStyle(accentDetail ? Color.sanAccentText : Color.sanInkSoft)
+                    .lineLimit(1)
+            }
+            if chevron {
+                Image(systemName: "chevron.right").font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Color.sanInkSoft)
+            }
+        }
+        .padding(.horizontal, 14).padding(.vertical, 13)
+        .contentShape(Rectangle())
+    }
+
+    // MARK: Аккаунт
 
     private var actionsCard: some View {
-        VStack(spacing: 10) {
-            // Спрашиваем подтверждение, как и в профиле пользователя: случайный
-            // тап здесь выкидывает владельца из режима заведения посреди работы.
-            Button { showSignOutConfirm = true } label: {
-                Label("Выйти", systemImage: "rectangle.portrait.and.arrow.right")
-                    .font(.golos(15, .semibold)).foregroundStyle(.red)
-                    .frame(maxWidth: .infinity).padding(.vertical, 14)
-                    .background(Color.red.opacity(0.1), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        // Спрашиваем подтверждение, как и в профиле пользователя: случайный
+        // тап здесь выкидывает владельца из режима заведения посреди работы.
+        Button { showSignOutConfirm = true } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "rectangle.portrait.and.arrow.right")
+                    .font(.system(size: 16, weight: .semibold)).frame(width: 34)
+                Text("Выйти").font(.golos(16, .semibold))
+                Spacer()
             }
-            .buttonStyle(.plain)
+            .foregroundStyle(.red)
+            .padding(.horizontal, 14).padding(.vertical, 14)
+            .sanGroupCard()
         }
+        .buttonStyle(.plain)
         .confirmationDialog("Выйти из аккаунта?", isPresented: $showSignOutConfirm,
                             titleVisibility: .visible) {
             Button("Выйти", role: .destructive) { session.signOut() }

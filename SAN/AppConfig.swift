@@ -43,6 +43,12 @@ enum AppConfig {
         useFirebase ? FirebaseInstagramService(auth: makeAuthService()) : MockInstagramService()
     }
 
+    /// Разбор файла меню — на устройстве в любом режиме: ни сети, ни
+    /// бэкенда ему не нужно, так что мок не нужен тоже.
+    static func makeMenuParsingService() -> MenuParsingService {
+        OnDeviceMenuParsingService()
+    }
+
     /// Показывать в «Аналитике» сгенерированные ряды вместо реальных.
     ///
     /// Выключено к релизу: хост должен видеть свои настоящие цифры, даже если
@@ -62,6 +68,13 @@ enum AppConfig {
 
     static func makePushService() -> PushService {
         useFirebase ? FirebasePushService() : MockPushService()
+    }
+
+    /// Серверный кошелёк бонусов. В мок-режиме — `nil`: `BonusEngine` и
+    /// `CouponStore` тогда считают бонусы на устройстве, как раньше, и
+    /// приложение целиком работает без сети.
+    static func makeBonusWallet() -> BonusWalletService? {
+        useFirebase ? FirebaseBonusWalletService(auth: makeAuthService()) : nil
     }
 
     static func makeCouponService() -> CouponService {

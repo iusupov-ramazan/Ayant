@@ -26,8 +26,16 @@ public enum FS {
         public static let hosts = "hosts"
         public static let categories = "categories"
         public static let coupons = "coupons"
+        /// Купоны, которые заведение выпускает на продажу за бонусы.
+        public static let couponOffers = "couponOffers"
         public static let giftCoupons = "giftCoupons"
+        /// Глобальный кошелёк бонусов, `bonusWallets/{uid}`. Пишут только функции.
+        public static let bonusWallets = "bonusWallets"
         public static let loyaltyCards = "loyaltyCards"
+        /// Штампы дополнительных карт заведения (`{userID}_{venueID}_{cardID}`).
+        /// Отдельно от `loyaltyCards`: Android и старые iOS склеивают карты
+        /// оттуда по заведению и затёрли бы первую карту второй.
+        public static let extraLoyaltyCards = "extraLoyaltyCards"
         public static let venuePoints = "venuePoints"
         public static let bonusGrants = "bonusGrants"
         public static let redemptions = "redemptions"
@@ -108,6 +116,11 @@ public enum FS {
         public static let loyaltyEnabled = "loyaltyEnabled"
         public static let loyaltyGoal = "loyaltyGoal"
         public static let loyaltyReward = "loyaltyReward"
+        /// Имя первой карты штампов (её цель и награда — `loyaltyGoal`/`loyaltyReward`).
+        public static let loyaltyTitle = "loyaltyTitle"
+        /// Дополнительные карты штампов — массив `StampCardField`. Первая карта
+        /// сюда НЕ входит: она в скалярных полях выше (их читает Android).
+        public static let stampCards = "stampCards"
         public static let couponsEnabled = "couponsEnabled"
         // Баллы САН. Эти поля пишет ТОЛЬКО админ-панель — хост их не трогает,
         // иначе сохранение из приложения затёрло бы настройки (см. HostVenueDTO).
@@ -147,6 +160,31 @@ public enum FS {
         public static let city = "city"
         /// id поста в инстаграме, из которого импортирована акция.
         public static let igPostID = "igPostId"
+        /// Где действует акция: массив id адресов заведения (`Branch.id`,
+        /// первый адрес — `"main"`). Нет поля или пусто — во всех адресах.
+        public static let locationIDs = "locationIDs"
+    }
+
+    // MARK: - couponOffers/{id}
+
+    /// Купон заведения. `soldCount` и `stock` — денежные поля: их меняет
+    /// только сервер при покупке, правила запрещают запись с клиента.
+    public enum CouponOfferDoc {
+        public static let venueID = "venueID"
+        public static let venueName = "venueName"
+        public static let title = "title"
+        public static let details = "details"
+        public static let emoji = "emoji"
+        public static let imageURL = "imageURL"
+        public static let cost = "cost"
+        public static let stock = "stock"
+        public static let soldCount = "soldCount"
+        public static let expiresAt = "expiresAt"
+        public static let status = "status"
+        public static let isPaused = "isPaused"
+        public static let ownerID = "ownerID"
+        /// Ключ партиционирования по городам — то же поле `city`, что у заведения.
+        public static let city = "city"
     }
 
     // MARK: - igConnections/{ownerID}_{venueID}
@@ -242,7 +280,12 @@ public enum FS {
         public static let emoji = "emoji"
         public static let kind = "kind"
         public static let imageURL = "imageURL"
+        /// Цена в сомах (целое). Нет поля — цена не указана.
+        public static let price = "price"
+        public static let description = "description"
+        public static let section = "section"
     }
+
 
     /// Элемент массива `branches` (филиал).
     public enum BranchField {
@@ -264,6 +307,15 @@ public enum FS {
     public enum PointsBandField {
         public static let maxAmount = "maxAmount"
         public static let points = "points"
+    }
+
+    /// Элемент массива `stampCards` (дополнительная карта штампов).
+    public enum StampCardField {
+        public static let id = "id"
+        public static let title = "title"
+        public static let goal = "goal"
+        public static let reward = "reward"
+        public static let active = "active"
     }
 
     /// Элемент массива `pointsRewards` (награда за баллы).
@@ -298,6 +350,9 @@ public enum FS {
         public static let completedRounds = "completedRounds"
         public static let goal = "goal"
         public static let reward = "reward"
+        /// Какая карта заведения; нет поля — первая (`default`).
+        public static let cardID = "cardID"
+        public static let title = "title"
     }
 
     public enum VenuePointsDoc {
@@ -419,6 +474,10 @@ public enum FS {
         public static let billAmount = "billAmount"
         public static let bandIndex = "bandIndex"
         public static let idempotencyKey = "idempotencyKey"
+        /// Выбранная сотрудником карта штампов (запрос) / карта, на которую лёг
+        /// штамп (ответ).
+        public static let cardID = "cardID"
+        public static let cardTitle = "cardTitle"
         /// true — сервер распознал повтор по ключу и НЕ начислил снова.
         public static let replayed = "replayed"
     }
@@ -445,6 +504,40 @@ public enum FS {
         public static let userID = "userID"
         public static let rewardId = "rewardId"
         public static let pointsToSpend = "pointsToSpend"
+    }
+}
+
+extension FS {
+    /// Документ кошелька `bonusWallets/{uid}` (читается снапшот-листенером).
+    public enum BonusWalletDoc {
+        public static let balance = "balance"
+    }
+
+    /// Запросы и ответы функций кошелька: bonusWalletSync / earnBonus / buyCoupon.
+    /// Те же имена — в `functions/src/index.ts` (секция 9); компилятор их не
+    /// сверяет, поэтому они здесь одним списком.
+    public enum WalletAPI {
+        // Запрос.
+        public static let localBalance = "localBalance"
+        public static let amount = "amount"
+        public static let source = "source"
+        public static let offerID = "offerID"
+        public static let rewardID = "rewardID"
+        public static let asGift = "asGift"
+        public static let fromName = "fromName"
+        public static let idempotencyKey = "idempotencyKey"
+        // Ответ.
+        public static let ok = "ok"
+        public static let balance = "balance"
+        public static let granted = "granted"
+        public static let couponID = "couponID"
+        public static let code = "code"
+        public static let title = "title"
+        public static let venueID = "venueID"
+        public static let venueName = "venueName"
+        public static let giftCode = "giftCode"
+        public static let replayed = "replayed"
+        public static let error = "error"
     }
 }
 

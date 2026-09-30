@@ -21,8 +21,14 @@ struct AllVenuesView: View {
 
     enum Sort { case rating, distance }
 
-    init(initialCategory: VenueCategory? = nil) {
+    /// Вкладка (корень стека) или пуш из другого экрана. От этого зависит
+    /// только «назад»: в корне вкладки возвращаться некуда, и стрелка вела бы
+    /// в никуда.
+    private let isTabRoot: Bool
+
+    init(initialCategory: VenueCategory? = nil, isTabRoot: Bool = false) {
         _category = State(initialValue: initialCategory)
+        self.isTabRoot = isTabRoot
     }
 
     /// Каталог категории в порядке ранжирования (`FeedStore.venues(category:)`),
@@ -73,7 +79,7 @@ struct AllVenuesView: View {
         .sanStatusBarCap()
         // Экран открывается пушем: системную панель прячем ради крупного
         // заголовка, но «назад» оставляем — как в «Сохранённом».
-        .sanNavBar { dismiss() }
+        .sanNavBar(showsBack: !isTabRoot) { dismiss() }
         .toolbar(.hidden, for: .navigationBar)
         .scrollDismissesKeyboard(.interactively)
         .onAppear {
@@ -219,22 +225,19 @@ struct AllVenuesView: View {
         if list.isEmpty {
             emptyState
         } else {
-            LazyVStack(spacing: 0) {
-                ForEach(Array(list.enumerated()), id: \.element.id) { index, venue in
+            // Сетка два в ряд: фото решает выбор быстрее, чем строка с
+            // аватаркой, а статус «Открыто/Закрыто» виден на каждой карточке.
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)],
+                      spacing: 12) {
+                ForEach(list) { venue in
                     NavigationLink(value: venue) {
-                        VenueCompactRow(venue: venue, distanceKm: distance(to: venue))
-                            .padding(.horizontal, SanMetrics.screenPadding)
-                            .padding(.vertical, 8)
+                        VenueGridCard(venue: venue, distanceKm: distance(to: venue))
                     }
-                    .buttonStyle(.sanPress(0.98))
-                    if index < list.count - 1 {
-                        Rectangle()
-                            .fill(Color.sanHairline)
-                            .frame(height: 0.5)
-                            .padding(.leading, SanMetrics.screenPadding + 62 + 14)
-                    }
+                    .buttonStyle(.sanPress(0.97))
                 }
             }
+            .padding(.horizontal, SanMetrics.screenPadding)
+            .padding(.top, 4)
         }
     }
 

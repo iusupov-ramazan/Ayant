@@ -121,6 +121,73 @@ final class HostStoreTests: XCTestCase {
         XCTAssertEqual(repo.savedVenues.map(\.id), ["hv_local"])
     }
 
+    // MARK: Купоны заведения
+
+    private func couponFields(cost: Int = 500, stock: Int? = nil,
+                              isPaused: Bool = false) -> HostForms.CouponFields {
+        HostForms.CouponFields(venueID: "hv_1", venueName: "Кафе",
+                               title: "Бесплатный капучино", details: "До 12:00",
+                               emoji: "☕️", cost: cost, stock: stock, isPaused: isPaused)
+    }
+
+    func testSavedCouponOfferGoesToCacheAndServer() async {
+        let store = makeStore()
+        store.send(.saveCouponOffer(existing: nil, fields: couponFields()))
+
+        XCTAssertEqual(store.state.couponOffers.count, 1)
+        let offer = store.state.couponOffers[0]
+        XCTAssertEqual(offer.cost, 500)
+        XCTAssertEqual(offer.status, .pending, "новый купон уходит на модерацию")
+        await waitUntil(self.repo.savedCouponOffers.count == 1)
+        XCTAssertEqual(repo.savedCouponOffers.first?.title, "Бесплатный капучино")
+    }
+
+    /// Пауза — решение заведения и не трогает модерацию: иначе снятие с
+    /// продажи на час стоило бы повторного одобрения.
+    func testPauseKeepsModerationStatus() async {
+        let store = makeStore()
+        store.send(.saveCouponOffer(existing: nil, fields: couponFields()))
+        let id = store.state.couponOffers[0].id
+
+        store.send(.toggleCouponPause(id: id))
+
+        XCTAssertTrue(store.state.couponOffers[0].isPaused)
+        XCTAssertEqual(store.state.couponOffers[0].status, .pending)
+    }
+
+    /// Сервер знает `soldCount` и вердикт модерации — клиент их не выдумывает.
+    /// Но купон, которого сервер ещё не видел (запись не дошла), не пропадает
+    /// из кабинета, а остаётся и дозаливается — иначе он так и не попадёт в
+    /// админ-панель на модерацию.
+    func testSyncTakesServerCopyOfCouponsAndKeepsUnsent() async {
+        let store = makeStore()
+        store.send(.saveCouponOffer(existing: nil, fields: couponFields()))
+        let localID = store.state.couponOffers[0].id
+        await waitUntil(self.repo.savedCouponOffers.count == 1)
+        repo.remoteCouponOffers = [CouponOffer(id: "co_server", venueID: "hv_1",
+                                               venueName: "Кафе", title: "С сервера",
+                                               cost: 900, stock: 50, soldCount: 12,
+                                               statusRaw: ModerationStatus.approved.rawValue)]
+        await store.sync()
+
+        XCTAssertEqual(store.state.couponOffers.map(\.id), ["co_server", localID])
+        XCTAssertEqual(store.state.couponOffers[0].soldCount, 12)
+        XCTAssertEqual(store.state.couponOffers[0].remaining, 38)
+        await waitUntil(self.repo.savedCouponOffers.count == 2)
+        XCTAssertEqual(repo.savedCouponOffers.last?.id, localID, "неотправленный купон дозаливается")
+    }
+
+    func testCouponsAreListedPerVenue() {
+        let store = makeStore()
+        store.send(.saveCouponOffer(existing: nil, fields: couponFields(cost: 300)))
+        var other = couponFields(cost: 900)
+        other.venueID = "hv_2"
+        store.send(.saveCouponOffer(existing: nil, fields: other))
+
+        XCTAssertEqual(store.state.couponOffers(forVenue: "hv_1").map(\.cost), [300])
+        XCTAssertEqual(store.state.couponOffers(forVenue: "hv_2").map(\.cost), [900])
+    }
+
     // MARK: Instagram
 
     private func igPost(_ id: String, caption: String = "Новое меню\nПриходите") -> InstagramPost {

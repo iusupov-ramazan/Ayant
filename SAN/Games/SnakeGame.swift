@@ -1,5 +1,6 @@
 import SwiftUI
 import SpriteKit
+import AyantDomain
 import AyantFeatures
 
 // MARK: - Общие игровые типы (используются сценой SpriteKit)
@@ -59,7 +60,11 @@ struct SnakeGameView: View {
             // Слушаем номер партии, а не счёт: две партии подряд с одинаковым
             // счётом не меняют `finalScore`, и `onChange` по нему не сработал бы.
             .onChange(of: bridge.gamesFinished) { _, _ in
-                awarded = bridge.finalScore > 0 ? bonus.awardGameplay(bridge.finalScore) : 0
+                // Яблоки переводятся в бонусы по общему курсу мини-игр.
+                // Остаток партии пропадает: начисление здесь одно, в конце
+                // игры, и переносить хвост некуда.
+                let earned = bridge.finalScore / GameEconomy.applesPerBonus
+                awarded = earned > 0 ? bonus.awardGameplay(earned, source: "game:snake") : 0
             }
         }
     }
@@ -69,7 +74,7 @@ struct SnakeGameView: View {
             Label("\(bridge.score)", systemImage: "star.fill")
                 .font(.headline).foregroundStyle(Color.sanAccentText)
             Spacer()
-            Text("1 🍎 = 1 бонус · до \(bonus.dailyGameplayCap)/день")
+            Text("\(GameEconomy.applesPerBonus) 🍎 = 1 бонус")
                 .font(.caption).foregroundStyle(.secondary)
         }
     }

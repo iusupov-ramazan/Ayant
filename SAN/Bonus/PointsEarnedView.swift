@@ -14,6 +14,17 @@ enum EarnedContent: Equatable {
 }
 
 struct PointsEarnedView: View {
+    /// Просьба оценить приложение переехала сюда с экрана акции.
+    ///
+    /// Раньше её показывали после получения купона на акцию — теперь купонов у
+    /// акций нет, и вместе с ними пропал бы единственный запрос оценки во всём
+    /// приложении. Начисление подходит даже лучше: человеку только что
+    /// зачислили баллы, он доволен и экран всё равно поздравительный. Считаем
+    /// начисления, а не показы: первое и каждое пятое (Apple сама ограничит
+    /// частоту тремя за год).
+    @AppStorage("san.earnCount") private var earnCount = 0
+    @Environment(\.requestReview) private var requestReview
+
     let earned: EarnedContent
     let venueName: String
     let venueSubtitle: String
@@ -89,6 +100,17 @@ struct PointsEarnedView: View {
         .onAppear(perform: start)
         // Бесконечные кольца не крутятся за закрытым экраном (ANIMATIONS.md §17).
         .onDisappear { withoutAnimation { ringsRunning = false } }
+    }
+
+    /// Просим оценку после 1-го и каждого 5-го начисления — и не поверх
+    /// анимации: сначала человек видит свои баллы, потом вопрос.
+    private func askForReviewIfDue() {
+        earnCount += 1
+        guard earnCount == 1 || earnCount % 5 == 0 else { return }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_800_000_000)
+            requestReview()
+        }
     }
 
     private var content: some View {
@@ -216,6 +238,7 @@ struct PointsEarnedView: View {
 
     private func start() {
         SanHaptics.success()
+        askForReviewIfDue()
         guard !reduceMotion else {
             discShown = true
             shownDelta = delta

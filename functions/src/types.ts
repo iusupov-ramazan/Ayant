@@ -30,6 +30,15 @@ export interface PointsReward {
   active?: boolean;
 }
 
+/** Элемент `venues/{id}.stampCards` — зеркало `StampCard` (Swift). */
+export interface StampCardDef {
+  id?: string;
+  title?: string;
+  goal?: Numeric;
+  reward?: string;
+  active?: boolean;
+}
+
 /** venues/{id} — заведение (каталог + конфиг лояльности/баллов). */
 export interface VenueDoc {
   ownerID?: string;
@@ -40,6 +49,10 @@ export interface VenueDoc {
   loyaltyEnabled?: boolean;
   loyaltyGoal?: Numeric;
   loyaltyReward?: string;
+  /** Имя первой карты штампов (её цель/награда — поля выше). */
+  loyaltyTitle?: string;
+  /** Дополнительные карты штампов; первая карта сюда НЕ входит. */
+  stampCards?: StampCardDef[];
 
   // Баллы САН (System 1).
   pointsEnabled?: boolean;

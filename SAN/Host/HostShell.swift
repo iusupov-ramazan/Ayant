@@ -8,26 +8,25 @@ import AyantFeatures
 // тёмного хрома: единственный тёмный элемент во всём хост-приложении — окно
 // камеры на сканере.
 //
-// Вкладки: Заведения · Лояльность · Сканер · Аналитика · Отзывы · Профиль.
+// Вкладки: Заведения · Лояльность · Сканер · Аналитика · Профиль. Первая —
+// страница одного заведения, а не список (см. `HostVenuesView`).
 // «Продвижение» отдало слот «Лояльности» и живёт в действиях заведения (за
 // `ReleaseFlags.promote`); «Профиль» — своя вкладка: на аватаре в шапке его
 // не находили, а вместе с ним не находили и выход в режим гостя.
+//
+// «Отзывы» живут внутри «Профиля», как у гостя «Мои отзывы». Шестая вкладка
+// на iPhone уезжала под «Ещё», и туда же проваливался сам профиль: хозяин
+// видел «Ещё → Профиль», а выход в режим гостя искал заново. Бейдж
+// неотвеченных теперь на вкладке «Профиль» и на строке «Отзывы».
 
 enum HostTab: Hashable {
-    case venues, loyalty, scanner, analytics, reviews, profile
+    case venues, loyalty, scanner, analytics, profile
 }
 
 // MARK: - Песочная шапка
 
 /// Riso-панель со скруглёнными нижними углами — общая шапка хост-экранов.
 struct HostSandHeader<Content: View>: View {
-    /// Плоский вариант: кремовая заливка, без riso-текстуры и без скруглений снизу.
-    ///
-    /// Нужен «Заведениям»: там под шапкой идёт сетка встык, во всю ширину и без
-    /// скруглений. Панель с текстурой и радиусом 34 обрывалась над ней ребром —
-    /// экран читался как карточка, положенная на сетку, а не как одна витрина.
-    /// Остальные хост-экраны — списки на канвасе, им панель по-прежнему нужна.
-    var flat = false
     @ViewBuilder var content: Content
 
     var body: some View {
@@ -35,17 +34,13 @@ struct HostSandHeader<Content: View>: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, SanMetrics.screenPadding)
             .padding(.top, 14)
-            .padding(.bottom, flat ? 18 : 26)
+            .padding(.bottom, 26)
             .background {
-                if flat {
-                    Color.sanHostHeader
-                } else {
-                    let shape = UnevenRoundedRectangle(bottomLeadingRadius: SanRadius.panel,
-                                                       bottomTrailingRadius: SanRadius.panel,
-                                                       style: .continuous)
-                    shape.fill(LinearGradient.sanSandGradient)
-                        .overlay(SanRisoHatch().clipShape(shape))
-                }
+                let shape = UnevenRoundedRectangle(bottomLeadingRadius: SanRadius.panel,
+                                                   bottomTrailingRadius: SanRadius.panel,
+                                                   style: .continuous)
+                shape.fill(LinearGradient.sanSandGradient)
+                    .overlay(SanRisoHatch().clipShape(shape))
             }
     }
 }
@@ -124,18 +119,17 @@ struct HostRootView: View {
             HostAnalyticsView()
                 .tabItem { Label("Аналитика", systemImage: "chart.line.uptrend.xyaxis") }
                 .tag(HostTab.analytics)
-            HostReviewsView()
-                .tabItem { Label("Отзывы", systemImage: "star.bubble.fill") }
+            // Профиль выбирает заведение (тот же ключ `HostSelection.venueKey`)
+            // и уводит на первую вкладку — там его страница.
+            HostProfileView { tab = .venues }
+                .tabItem { Label("Профиль", systemImage: "person.crop.circle") }
                 .badge(pendingReviews)
-                .tag(HostTab.reviews)
-                // Отзывы по заведениям владельца грузятся здесь — и бейдж, и сам
-                // инбокс читают один кэш.
+                .tag(HostTab.profile)
+                // Отзывы по заведениям владельца грузятся здесь — и бейдж, и
+                // инбокс внутри профиля читают один кэш.
                 .task(id: host.state.ownedVenueIDs) {
                     await store.loadReviews(forVenueIDs: host.state.ownedVenueIDs)
                 }
-            HostProfileView()
-                .tabItem { Label("Профиль", systemImage: "person.crop.circle") }
-                .tag(HostTab.profile)
         }
         .tint(Color.sanAccentText)
     }

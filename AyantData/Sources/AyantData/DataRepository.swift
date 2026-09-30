@@ -73,6 +73,20 @@ public final class MockCouponService: CouponService {
 
     public func saveCoupon(_ coupon: Coupon, userID: String) async throws {}
     public func fetchCoupons(userID: String) async throws -> [Coupon] { userID.isEmpty ? [] : coupons }
+
+    /// Оффлайн-демо: у первого мок-заведения пара купонов — иначе магазин
+    /// купонов на его странице было бы нечем посмотреть.
+    public func fetchCouponOffers(venueID: String) async throws -> [CouponOffer] {
+        guard venueID == MockData.venues.first?.id else { return [] }
+        let name = MockData.venues.first?.name ?? ""
+        return [
+            CouponOffer(id: "co_demo1", venueID: venueID, venueName: name, title: "Капучино в подарок",
+                        details: "Любой объём", emoji: "☕️", cost: 120, stock: 20,
+                        statusRaw: ModerationStatus.approved.rawValue),
+            CouponOffer(id: "co_demo2", venueID: venueID, venueName: name, title: "Десерт дня",
+                        emoji: "🍰", cost: 200, statusRaw: ModerationStatus.approved.rawValue),
+        ]
+    }
     public func fetchLoyaltyCards(userID: String) async throws -> [LoyaltyCard] { userID.isEmpty ? [] : cards }
     public func loyaltyCards(userID: String) -> AsyncStream<[LoyaltyCard]> {
         let snapshot = userID.isEmpty ? [] : cards
@@ -83,7 +97,8 @@ public final class MockCouponService: CouponService {
     }
     public func fetchVenuePoints(userID: String) async throws -> [VenuePointsCard] { [] }
     public func scanCoupon(code: String, venueID: String, idToken: String,
-                    billAmount: Int?, bandIndex: Int?, idempotencyKey: String) async throws -> ScanOutcome {
+                    billAmount: Int?, bandIndex: Int?, idempotencyKey: String,
+                    cardID: String?) async throws -> ScanOutcome {
         ScanOutcome(ok: true, title: "Демо-купон", loyalty: true, stamps: 1, goal: 6,
                     rewardIssued: false, rewardTitle: "", errorCode: nil)
     }
@@ -197,6 +212,9 @@ public final class MockHostRepository: HostRepository {
     public func deleteDeal(id: String) async throws {}
     public func fetchOwnedVenues(ownerID: String) async throws -> [HostVenueDTO] { [] }
     public func fetchOwnedDeals(ownerID: String) async throws -> [HostDealDTO] { [] }
+    public func saveCouponOffer(_ offer: CouponOffer, ownerID: String) async throws {}
+    public func deleteCouponOffer(id: String) async throws {}
+    public func fetchOwnedCouponOffers(ownerID: String) async throws -> [CouponOffer] { [] }
     public func saveProfile(_ profile: HostProfile, ownerID: String) async throws {}
     public func fetchProfile(ownerID: String) async throws -> HostProfile? { nil }
     public func queuePushCampaign(headline: String, body: String, city: String,
