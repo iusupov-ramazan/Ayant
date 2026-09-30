@@ -103,16 +103,20 @@ public enum HostForms {
         public var terms: [String]
         /// id поста инстаграма, если акцию создают импортом.
         public var sourcePostID: String?
+        /// Адреса, где действует акция. Пусто — во всех.
+        public var locationIDs: [String]
 
         public init(venueID: String, type: DealType, title: String, details: String,
                     emoji: String, newPrice: Int?, discountPercent: Int?,
                     endDate: Date?, isDraft: Bool, imageURLs: [String],
-                    terms: [String] = [], sourcePostID: String? = nil) {
+                    terms: [String] = [], sourcePostID: String? = nil,
+                    locationIDs: [String] = []) {
             self.venueID = venueID; self.type = type; self.title = title
             self.details = details; self.emoji = emoji
             self.newPrice = newPrice; self.discountPercent = discountPercent
             self.endDate = endDate; self.isDraft = isDraft; self.imageURLs = imageURLs
             self.terms = terms; self.sourcePostID = sourcePostID
+            self.locationIDs = locationIDs
         }
     }
 
@@ -359,6 +363,10 @@ public enum HostForms {
             // Связь с постом, как и `startDate`, переживает правку: потеряв её,
             // кабинет перестанет помечать пост добавленным и предложит
             // импортировать его второй раз.
-            sourcePostID: existing?.sourcePostID ?? fields.sourcePostID)
+            sourcePostID: existing?.sourcePostID ?? fields.sourcePostID,
+            // Без повторов и в порядке выбора; пусто — «во всех адресах».
+            locationIDs: fields.locationIDs.reduce(into: [String]()) { ids, id in
+                if !id.isEmpty && !ids.contains(id) { ids.append(id) }
+            })
     }
 }

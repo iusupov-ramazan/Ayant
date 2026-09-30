@@ -64,7 +64,7 @@ struct SnakeGameView: View {
                 // Остаток партии пропадает: начисление здесь одно, в конце
                 // игры, и переносить хвост некуда.
                 let earned = bridge.finalScore / GameEconomy.applesPerBonus
-                awarded = earned > 0 ? bonus.awardGameplay(earned) : 0
+                awarded = earned > 0 ? bonus.awardGameplay(earned, source: "game:snake") : 0
             }
         }
     }

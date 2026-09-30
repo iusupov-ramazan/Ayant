@@ -263,19 +263,20 @@ public struct HostDealDTO: Codable, Identifiable, Equatable {
     /// Нужен, чтобы в списке постов помечать уже добавленные: иначе хост при
     /// каждой синхронизации заново создаёт ту же акцию и каталог дублируется.
     public var sourcePostID: String? = nil
-
+    /// Где действует акция — см. `Deal.locationIDs`. Пусто — во всех адресах.
+    public var locationIDs: [String] = []
 
     public init(id: String, venueID: String, typeRaw: String, title: String, details: String,
                 emoji: String, newPrice: Int? = nil, discountPercent: Int? = nil,
                 startDate: Date, endDate: Date? = nil, statusRaw: String,
                 imageURL: String = "", imageURLs: [String] = [], terms: [String] = [],
-                sourcePostID: String? = nil) {
+                sourcePostID: String? = nil, locationIDs: [String] = []) {
         self.id = id; self.venueID = venueID; self.typeRaw = typeRaw
         self.title = title; self.details = details; self.emoji = emoji
         self.newPrice = newPrice; self.discountPercent = discountPercent
         self.startDate = startDate; self.endDate = endDate; self.statusRaw = statusRaw
         self.imageURL = imageURL; self.imageURLs = imageURLs; self.terms = terms
-        self.sourcePostID = sourcePostID
+        self.sourcePostID = sourcePostID; self.locationIDs = locationIDs
     }
 
     /// Терпимый к схеме декодер кэша — см. `HostVenueDTO.init(from:)`.
@@ -297,6 +298,7 @@ public struct HostDealDTO: Codable, Identifiable, Equatable {
         imageURLs = try c.decodeIfPresent([String].self, forKey: .imageURLs) ?? []
         terms = try c.decodeIfPresent([String].self, forKey: .terms) ?? []
         sourcePostID = try c.decodeIfPresent(String.self, forKey: .sourcePostID)
+        locationIDs = try c.decodeIfPresent([String].self, forKey: .locationIDs) ?? []
     }
 
     public var type: DealType { DealType(rawValue: typeRaw) ?? .discount }
@@ -311,7 +313,8 @@ public struct HostDealDTO: Codable, Identifiable, Equatable {
             status: status, startDate: startDate, imageEmojis: [emoji],
             imageURL: imageURL.isEmpty ? nil : imageURL,
             imageURLs: imageURLs,
-            terms: terms
+            terms: terms,
+            locationIDs: locationIDs
         )
     }
 }

@@ -114,7 +114,7 @@ struct Game2048View: View {
     private func award(bestBefore: Int) {
         let earned = state.bonuses
         guard earned > credited else { return }
-        let granted = bonus.awardGameplay(earned - credited)
+        let granted = bonus.awardGameplay(earned - credited, source: "game:2048")
         credited = earned
         withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
             awarded += granted

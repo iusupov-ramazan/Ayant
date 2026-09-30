@@ -377,7 +377,7 @@ private enum HostVenueTab: CaseIterable {
 /// 1. **Какое заведение открыто** — переключатель в шапке (и чипы всех
 ///    заведений под ним, если их несколько).
 /// 2. **Что это за заведение** — одна карточка: фото, название, адрес,
-///    специал дня, «Изменить».
+///    предложение дня, «Изменить».
 /// 3. **Видят ли его гости** — одна строка статуса с подписанным
 ///    переключателем «Показывать гостям».
 /// 4. **Что в нём есть** — разделы словами (Акции · Меню · Купоны ·
@@ -398,6 +398,9 @@ struct HostVenueDetailView: View {
     @AppStorage("san.hostMode") private var hostMode = true
     @State private var activeSheet: HostVenueSheet?
     @State private var showDeleteConfirm = false
+    /// Блюдо, удаление которого ждёт подтверждения. Корзина стоит вплотную к
+    /// строке блюда — промах пальцем стирал блюдо вместе с его отзывами.
+    @State private var itemPendingDelete: VenueItem?
     @State private var tab: HostVenueTab = .deals
 
     private var dto: HostVenueDTO? { host.state.venue(id: venueID) }
@@ -454,6 +457,17 @@ struct HostVenueDetailView: View {
             Button("Отмена", role: .cancel) {}
         } message: {
             Text("«\(dto?.name ?? "")» и все его предложения будут удалены без возможности восстановления.")
+        }
+        .alert("Удалить блюдо?",
+               isPresented: Binding(get: { itemPendingDelete != nil },
+                                    set: { if !$0 { itemPendingDelete = nil } }),
+               presenting: itemPendingDelete) { item in
+            Button("Удалить", role: .destructive) {
+                host.send(.deleteItem(venueID: venueID, itemID: item.id))
+            }
+            Button("Отмена", role: .cancel) {}
+        } message: { item in
+            Text("«\(item.name)» пропадёт из меню вместе с отзывами о нём.")
         }
     }
 
@@ -577,16 +591,22 @@ struct HostVenueDetailView: View {
                     if !subtitle.isEmpty {
                         Text(subtitle).font(.golos(13.5)).foregroundStyle(Color.sanInkSoft)
                     }
-                    if !v.address.isEmpty {
-                        Text(v.address).font(.golos(13.5)).foregroundStyle(Color.sanInkSoft)
+                    // Адреса равноправны: один — пишем его, несколько — число.
+                    let places = v.locations
+                    if places.count == 1 {
+                        Text(verbatim: places[0].address).font(.golos(13.5)).foregroundStyle(Color.sanInkSoft)
                             .lineLimit(2)
+                    } else if places.count > 1 {
+                        Label("\(places.count) \(Plural.ru(places.count, "адрес", "адреса", "адресов"))",
+                              systemImage: "mappin.and.ellipse")
+                            .font(.golos(13.5)).foregroundStyle(Color.sanInkSoft)
                     }
                 }
                 Spacer(minLength: 0)
                 moreMenu(v)
             }
 
-            // Специал дня — строкой в карточке, с понятным «что это».
+            // Предложение дня — строкой в карточке, с понятным «что это».
             Button { activeSheet = .todaySpecial } label: {
                 HStack(spacing: 10) {
                     Image(systemName: "star.fill")
@@ -595,7 +615,7 @@ struct HostVenueDetailView: View {
                         .frame(width: 30, height: 30)
                         .background(Color.sanAccent.opacity(0.12), in: Circle())
                     VStack(alignment: .leading, spacing: 1) {
-                        Text("Специал дня")
+                        Text("Предложение дня")
                             .font(.golos(12, .semibold)).foregroundStyle(Color.sanInkSoft)
                         Text((v.todaySpecial ?? "").isEmpty ? LS("Не задан — нажмите, чтобы добавить") : v.todaySpecial!)
                             .font(.golos(14, .medium))
@@ -1045,7 +1065,7 @@ struct HostVenueDetailView: View {
             }
             .buttonStyle(.plain)
             Button(role: .destructive) {
-                host.send(.deleteItem(venueID: venueID, itemID: item.id))
+                itemPendingDelete = item
             } label: { Image(systemName: "trash").foregroundStyle(.red) }
             .buttonStyle(.plain)
             .accessibilityLabel("Удалить")
@@ -1283,7 +1303,7 @@ private enum HostVenueSheet: Identifiable {
     /// общую форму заведения, и настройку карты приходилось искать среди
     /// часов работы и соцсетей.
     case stampCard
-    /// «Специал дня» — строка в шапке. Раньше редактор стоял отдельной
+    /// «Предложение дня» (бывший «Специал дня») — строка в шапке. Раньше редактор стоял отдельной
     /// секцией и занимал полэкрана ради одной строки.
     case todaySpecial
     case addDeal
@@ -1312,7 +1332,7 @@ private enum HostVenueSheet: Identifiable {
     }
 }
 
-// MARK: - Специал дня
+// MARK: - Предложение дня
 
 /// Короткая строка на карточке заведения — до 100 символов.
 private struct HostTodaySpecialSheet: View {
@@ -1324,7 +1344,7 @@ private struct HostTodaySpecialSheet: View {
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 10) {
-                Text("Короткая строка на карточке заведения: гости видят её в ленте.")
+                Text("Одна строка о том, что есть у вас сегодня. Гости видят её на странице заведения с пометкой «Предложение дня» и в ленте.")
                     .font(.golos(13)).foregroundStyle(Color.sanInkSoft)
                     .fixedSize(horizontal: false, vertical: true)
                 TextField("Например: суп дня — борщ", text: $special, axis: .vertical)
@@ -1337,7 +1357,7 @@ private struct HostTodaySpecialSheet: View {
                     }
                 HStack {
                     if !(venue.todaySpecial ?? "").isEmpty {
-                        Button("Убрать специал", role: .destructive) { save("") }
+                        Button("Убрать предложение", role: .destructive) { save("") }
                             .font(.golos(13.5, .semibold))
                     }
                     Spacer()
@@ -1349,7 +1369,7 @@ private struct HostTodaySpecialSheet: View {
             }
             .padding(SanMetrics.screenPadding)
             .sanScreenBackground()
-            .navigationTitle("Специал дня")
+            .navigationTitle("Предложение дня")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Отмена") { dismiss() } }
@@ -1508,8 +1528,14 @@ struct HostVenueFormView: View {
     @State private var loyaltyGoal: Int
     @State private var loyaltyReward: String
     @State private var couponsEnabled: Bool
-    @State private var showingMapPicker = false
-    @State private var showingBranchForm = false
+    /// Какой адрес правится в листе (см. `AddressEdit`).
+    @State private var editingAddress: AddressEdit?
+    /// «Сохранить изменения?» — по «Отмене» и по свайпу вниз при черновике.
+    @State private var confirmingDiscard = false
+    /// Поля формы в момент открытия: с ними сравнивается `fields`, чтобы
+    /// понять, есть ли что терять. Задаются в `onAppear`, а не в `init` —
+    /// там ещё нет `@State`-значений.
+    @State private var initialFields: HostForms.VenueFields?
 
     init(existing: HostVenueDTO?) {
         self.existing = existing
@@ -1541,12 +1567,8 @@ struct HostVenueFormView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 SanFormHeader(title: existing == nil ? "Новое заведение" : "Изменить заведение") {
-                    dismiss()
+                    if isDirty { confirmingDiscard = true } else { dismiss() }
                 }
-                // Обложка-цель загрузки (SCREENS.md H4).
-                coverTarget
-                    .padding(.horizontal, SanMetrics.screenPadding)
-                    .padding(.bottom, 8)
             Form {
                 Section("Основное") {
 
@@ -1556,7 +1578,6 @@ struct HostVenueFormView: View {
                     }
                     TextField("Эмодзи", text: $emoji)
                     TextField("Район", text: $district)
-                    TextField("Адрес", text: $address)
                     TextField("Телефон", text: $phone).keyboardType(.phonePad)
                 }
                 Section("Фото заведения") {
@@ -1598,49 +1619,43 @@ struct HostVenueFormView: View {
                 // «Лояльность». Поля остаются в состоянии формы и уходят в
                 // `save()` как были — иначе сохранение данных заведения
                 // выключало бы карту.
-                Section("Филиалы (доп. адреса)") {
-                    ForEach(branches) { b in
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(b.address).font(.subheadline)
-                            if !b.phone.isEmpty {
-                                Text(b.phone).font(.caption).foregroundStyle(.secondary)
+                // Все адреса одним списком: «главного» больше нет (см.
+                // `VenueLocations`). Первый хранится в полях заведения,
+                // остальные — в `branches`; для хозяина это просто «Адреса».
+                Section {
+                    ForEach(addressRows) { row in
+                        Button { editingAddress = row.edit } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "mappin.and.ellipse")
+                                    .foregroundStyle(Color.sanAccentText)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(verbatim: row.place.address.isEmpty ? LS("Укажите адрес") : row.place.address)
+                                        .font(.subheadline)
+                                        .foregroundStyle(row.place.address.isEmpty ? Color.sanInkSoft : Color.sanInk)
+                                    if !row.place.phone.isEmpty {
+                                        Text(verbatim: row.place.phone).font(.caption).foregroundStyle(.secondary)
+                                    }
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
                             }
                         }
+                        .buttonStyle(.plain)
+                        // Первый адрес не удаляется: у заведения должен быть хотя
+                        // бы один. Его можно поправить — нажатием.
+                        .deleteDisabled(row.edit == .first)
                     }
-                    .onDelete { branches.remove(atOffsets: $0) }
-                    Button {
-                        showingBranchForm = true
-                    } label: {
-                        Label("Добавить филиал", systemImage: "plus.circle")
+                    .onDelete { offsets in
+                        // Строка 0 — первый адрес, в `branches` индексы на 1 меньше.
+                        branches.remove(atOffsets: IndexSet(offsets.compactMap { $0 > 0 ? $0 - 1 : nil }))
                     }
-                }
-                Section("Местоположение") {
-                    Button {
-                        showingMapPicker = true
-                    } label: {
-                        HStack {
-                            Image(systemName: "mappin.and.ellipse")
-                            Text("Выбрать точку на карте")
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
+                    Button { editingAddress = .new } label: {
+                        Label("Добавить адрес", systemImage: "plus.circle")
                     }
-                    if let coord = currentCoordinate {
-                        Map(initialPosition: .region(MKCoordinateRegion(
-                            center: coord,
-                            span: MKCoordinateSpan(latitudeDelta: 0.008, longitudeDelta: 0.008)))) {
-                            Marker("", coordinate: coord).tint(.red)
-                        }
-                        .frame(height: 140)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                        .allowsHitTesting(false)
-                        .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
-                    }
-                    DisclosureGroup("Ввести координаты вручную") {
-                        TextField("Широта", text: $latitude).keyboardType(.decimalPad)
-                        TextField("Долгота", text: $longitude).keyboardType(.decimalPad)
-                    }
+                } header: {
+                    Text("Адреса")
+                } footer: {
+                    Text("Гости видят все адреса списком. Акцию можно сделать только для некоторых адресов — это выбирается в самой акции.")
                 }
                 Section("Часы работы") {
                     ForEach(0..<7, id: \.self) { i in
@@ -1688,16 +1703,84 @@ struct HostVenueFormView: View {
             }
             .sanScreenBackground()
             .toolbar(.hidden, for: .navigationBar)
-            .sheet(isPresented: $showingMapPicker) {
-                VenueLocationPicker(initial: currentCoordinate ?? bishkekCoordinate) { coord in
-                    latitude = String(coord.latitude)
-                    longitude = String(coord.longitude)
+            .sheet(item: $editingAddress) { edit in
+                switch edit {
+                case .first:
+                    HostBranchFormView(existing: firstAddress, showsPhone: false) { place in
+                        address = place.address
+                        latitude = String(place.latitude)
+                        longitude = String(place.longitude)
+                    }
+                case .branch(let branch):
+                    HostBranchFormView(existing: branch) { place in
+                        if let i = branches.firstIndex(where: { $0.id == place.id }) { branches[i] = place }
+                    }
+                case .new:
+                    HostBranchFormView { place in
+                        // Первым заполняется пустой первый адрес — иначе у нового
+                        // заведения «первый» так и остался бы пустым.
+                        if address.trimmingCharacters(in: .whitespaces).isEmpty {
+                            address = place.address
+                            latitude = String(place.latitude)
+                            longitude = String(place.longitude)
+                        } else {
+                            branches.append(place)
+                        }
+                    }
                 }
             }
-            .sheet(isPresented: $showingBranchForm) {
-                HostBranchFormView { branches.append($0) }
+        }
+        .onAppear { if initialFields == nil { initialFields = fields } }
+        .sanConfirmDismiss(isDirty: isDirty) { confirmingDiscard = true }
+        .confirmationDialog("Сохранить изменения?", isPresented: $confirmingDiscard,
+                            titleVisibility: .visible) {
+            Button("Сохранить") { save() }
+                .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+            Button("Не сохранять", role: .destructive) { dismiss() }
+            Button("Продолжить редактирование", role: .cancel) {}
+        } message: {
+            Text("Если закрыть без сохранения, правки пропадут.")
+        }
+    }
+
+    /// Что правит лист адреса: первый адрес (поля заведения), дополнительный
+    /// (элемент `branches`) или новый.
+    private enum AddressEdit: Identifiable, Equatable {
+        case first, new
+        case branch(Branch)
+        var id: String {
+            switch self {
+            case .first: return "first"
+            case .new: return "new"
+            case .branch(let b): return b.id
             }
         }
+    }
+
+    private struct AddressRow: Identifiable {
+        let place: Branch
+        let edit: AddressEdit
+        var id: String { edit.id }
+    }
+
+    /// Первый адрес — из полей заведения; координаты — как введены.
+    private var firstAddress: Branch {
+        Branch(id: VenueLocations.firstID, address: address,
+               latitude: Double(latitude.replacingOccurrences(of: ",", with: ".")) ?? City.bishkek.latitude,
+               longitude: Double(longitude.replacingOccurrences(of: ",", with: ".")) ?? City.bishkek.longitude)
+    }
+
+    /// Строки списка «Адреса»: первый адрес (даже пустой — чтобы было куда
+    /// нажать у нового заведения), затем остальные.
+    private var addressRows: [AddressRow] {
+        [AddressRow(place: firstAddress, edit: .first)]
+            + branches.map { AddressRow(place: $0, edit: .branch($0)) }
+    }
+
+    /// Есть ли правки, которые потеряются при закрытии.
+    private var isDirty: Bool {
+        guard let initialFields else { return false }
+        return fields != initialFields
     }
 
     /// Плитка-иконка соцсети с брендовым цветом.
@@ -1725,61 +1808,40 @@ struct HostVenueFormView: View {
         )
     }
 
-    /// Координаты из введённых строк, если они валидны.
-    private var currentCoordinate: CLLocationCoordinate2D? {
-        guard let lat = Double(latitude.replacingOccurrences(of: ",", with: ".")),
-              let lng = Double(longitude.replacingOccurrences(of: ",", with: ".")),
-              CLLocationCoordinate2DIsValid(CLLocationCoordinate2D(latitude: lat, longitude: lng))
-        else { return nil }
-        return CLLocationCoordinate2D(latitude: lat, longitude: lng)
-    }
-
-    private var bishkekCoordinate: CLLocationCoordinate2D {
-        CLLocationCoordinate2D(latitude: City.bishkek.latitude, longitude: City.bishkek.longitude)
-    }
-
-    /// Цель загрузки обложки: градиент + штриховка + подпись (SCREENS.md H4).
-    private var coverTarget: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: SanRadius.hero, style: .continuous)
-                .fill(LinearGradient.sanAccentGradient)
-            SanRisoHatch(opacity: 0.2, stripe: 1.5, period: 14)
-                .clipShape(RoundedRectangle(cornerRadius: SanRadius.hero, style: .continuous))
-            if !imageURL.isEmpty {
-                VenuePhoto(urlString: imageURL)
-                    .clipShape(RoundedRectangle(cornerRadius: SanRadius.hero, style: .continuous))
-            } else {
-                VStack(spacing: 8) {
-                    Image(systemName: "camera")
-                        .font(.system(size: 26, weight: .light)).foregroundStyle(.white)
-                    Text("Загрузить обложку")
-                        .font(.golos(12.5, .bold)).foregroundStyle(.white)
-                }
-            }
-        }
-        .frame(height: 150)
-        .frame(maxWidth: .infinity)
-    }
-
     private func save() {
-        // Разбор координат из полей ввода; сборка DTO — в HostStore.saveVenueForm.
+        host.send(.saveVenue(existing: existing, fields: fields))
+        dismiss()
+    }
+
+    /// Поля формы как они есть сейчас — и для сохранения, и для сравнения
+    /// с `initialFields`. Сборка DTO — в HostStore.saveVenueForm.
+    private var fields: HostForms.VenueFields {
+        // Разбор координат из полей ввода.
         let lat = Double(latitude.replacingOccurrences(of: ",", with: ".")) ?? City.bishkek.latitude
         let lng = Double(longitude.replacingOccurrences(of: ",", with: ".")) ?? City.bishkek.longitude
-        host.send(.saveVenue(existing: existing, fields: HostForms.VenueFields(
+        return HostForms.VenueFields(
             name: name, category: category, district: district, address: address,
             phone: phone, emoji: emoji, latitude: lat, longitude: lng,
             openHour: openHour, closeHour: closeHour, imageURL: imageURL,
             weekHours: weekHours, pdfMenuURL: pdfMenuURL, whatsapp: whatsapp,
             instagram: instagram, telegram: telegram, branches: branches,
             loyaltyEnabled: loyaltyEnabled, loyaltyGoal: loyaltyGoal,
-            loyaltyReward: loyaltyReward, couponsEnabled: couponsEnabled)))
-        dismiss()
+            loyaltyReward: loyaltyReward, couponsEnabled: couponsEnabled)
     }
 }
 
-// MARK: - Форма филиала (дополнительный адрес)
+// MARK: - Форма адреса
 
+/// Один адрес заведения: новый или правка существующего.
+///
+/// Бывшая «Форма филиала». Адреса больше не делятся на главный и
+/// дополнительные (см. `VenueLocations`), поэтому эта же форма правит и
+/// первый адрес — только без телефона: у первого адреса телефон — это
+/// телефон заведения, он в «Основном».
 struct HostBranchFormView: View {
+    /// Правка: id сохраняется — на него ссылаются акции «только по адресу».
+    var existing: Branch? = nil
+    var showsPhone = true
     var onSave: (Branch) -> Void
     @Environment(\.dismiss) private var dismiss
 
@@ -1788,13 +1850,16 @@ struct HostBranchFormView: View {
     @State private var latitude = String(City.bishkek.latitude)
     @State private var longitude = String(City.bishkek.longitude)
     @State private var showingMapPicker = false
+    @State private var loaded = false
 
     var body: some View {
         NavigationStack {
             Form {
-                Section("Филиал") {
-                    TextField("Адрес", text: $address)
-                    TextField("Телефон (необязательно)", text: $phone).keyboardType(.phonePad)
+                Section("Адрес") {
+                    TextField("Улица и дом", text: $address)
+                    if showsPhone {
+                        TextField("Телефон этого адреса (необязательно)", text: $phone).keyboardType(.phonePad)
+                    }
                 }
                 Section("Местоположение") {
                     Button { showingMapPicker = true } label: {
@@ -1823,15 +1888,21 @@ struct HostBranchFormView: View {
                 }
             }
             .sanFormBackground()
-            .navigationTitle("Новый филиал")
+            .navigationTitle(existing == nil ? "Новый адрес" : "Адрес")
             .navigationBarTitleDisplayMode(.inline)
+            .onAppear {
+                guard !loaded, let existing else { return }
+                loaded = true
+                address = existing.address; phone = existing.phone
+                latitude = String(existing.latitude); longitude = String(existing.longitude)
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Отмена") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Добавить") {
+                    Button(existing == nil ? "Добавить" : "Готово") {
                         let c = coordinate ?? CLLocationCoordinate2D(latitude: City.bishkek.latitude,
                                                                      longitude: City.bishkek.longitude)
-                        onSave(Branch(id: "br_\(UUID().uuidString.prefix(6))",
+                        onSave(Branch(id: existing?.id ?? "br_\(UUID().uuidString.prefix(6))",
                                       address: address.trimmingCharacters(in: .whitespaces),
                                       latitude: c.latitude, longitude: c.longitude,
                                       phone: phone.trimmingCharacters(in: .whitespaces)))
@@ -1884,6 +1955,10 @@ struct HostDealFormView: View {
     /// Условия — по строке на пункт. Так их и правят: список из трёх коротких
     /// фраз проще набрать в одном поле, чем в трёх отдельных.
     @State private var termsText: String
+    /// «Во всех адресах» — галочка по умолчанию. Снята — акция действует
+    /// только в `selectedLocations`, и гость видит «Действует только по адресу …».
+    @State private var allLocations: Bool
+    @State private var selectedLocations: Set<String>
 
     init(venueID: String, existing: HostDealDTO?, imported: InstagramImport? = nil) {
         self.venueID = venueID
@@ -1910,9 +1985,17 @@ struct HostDealFormView: View {
         let imgs = existing?.imageURLs ?? imported?.imageURLs ?? []
         _imageURLs = State(initialValue: imgs.isEmpty ? [existing?.imageURL].compactMap { $0 }.filter { !$0.isEmpty } : imgs)
         _termsText = State(initialValue: (existing?.terms ?? []).joined(separator: "\n"))
+        _allLocations = State(initialValue: existing?.locationIDs.isEmpty ?? true)
+        _selectedLocations = State(initialValue: Set(existing?.locationIDs ?? []))
     }
 
     private var venue: HostVenueDTO? { host.state.venue(id: venueID) }
+    private var locations: [Branch] { venue?.locations ?? [] }
+    /// Что уйдёт в `locationIDs`: пусто — во всех адресах. Удалённые с тех пор
+    /// адреса отбрасываются — отмечать можно только существующие.
+    private var locationIDsToSave: [String] {
+        allLocations ? [] : locations.map(\.id).filter(selectedLocations.contains)
+    }
 
     // MARK: Проверка полей
 
@@ -1932,6 +2015,8 @@ struct HostDealFormView: View {
         !title.trimmingCharacters(in: .whitespaces).isEmpty
             && priceIsValid && discountIsValid
             && (!needsOffer || hasOffer)
+            // Сняли «во всех» и не выбрали ни одного адреса — акция нигде.
+            && (allLocations || !locationIDsToSave.isEmpty)
     }
     private var priceHint: LocalizedStringKey? {
         priceIsValid ? nil : "Цена — целое число сомов, не меньше 0"
@@ -1987,6 +2072,18 @@ struct HostDealFormView: View {
                         VStack(alignment: .leading, spacing: 10) {
                             eyebrow("Фото")
                             MultiImagePickerField(urls: $imageURLs)
+                        }
+
+                        // Выбор адресов — только когда их больше одного: при одном
+                        // адресе «во всех» и «только здесь» — одно и то же.
+                        if locations.count > 1 {
+                            SanFieldCard {
+                                SanFieldRow(label: "Где действует",
+                                            hint: allLocations || !locationIDsToSave.isEmpty
+                                                ? nil : "Отметьте хотя бы один адрес") {
+                                    locationPicker
+                                }
+                            }
                         }
 
                         SanFieldCard {
@@ -2132,8 +2229,57 @@ struct HostDealFormView: View {
             newPrice: priceValue, discountPercent: discountValue,
             endDate: hasEnd ? endDate : nil, isDraft: isDraft, imageURLs: imageURLs,
             terms: termsText.split(separator: "\n").map(String.init),
-            sourcePostID: imported?.postID)))
+            sourcePostID: imported?.postID,
+            locationIDs: locationIDsToSave)))
         dismiss()
+    }
+
+    /// Галочки адресов: «Во всех адресах» сверху, под ней — каждый адрес.
+    /// Отметить конкретный адрес при включённом «во всех» — значит сузить
+    /// акцию до него: галочка «во всех» снимается сама.
+    private var locationPicker: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            checkboxRow(Text("Во всех адресах"), checked: allLocations) {
+                allLocations.toggle()
+            }
+            ForEach(locations) { place in
+                checkboxRow(Text(verbatim: place.address),
+                            checked: !allLocations && selectedLocations.contains(place.id)) {
+                    if allLocations {
+                        allLocations = false
+                        selectedLocations = [place.id]
+                    } else if selectedLocations.contains(place.id) {
+                        selectedLocations.remove(place.id)
+                    } else {
+                        selectedLocations.insert(place.id)
+                    }
+                }
+                .padding(.leading, 26)
+                .opacity(allLocations ? 0.55 : 1)
+            }
+        }
+    }
+
+    private func checkboxRow(_ title: Text, checked: Bool,
+                             action: @escaping () -> Void) -> some View {
+        Button {
+            SanHaptics.selection()
+            withAnimation(.sanStandard(0.2)) { action() }
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: checked ? "checkmark.square.fill" : "square")
+                    .font(.system(size: 20))
+                    .foregroundStyle(checked ? Color.sanAccentText : Color(hex: 0xB8B0A6))
+                title
+                    .font(.golos(14.5, .semibold)).foregroundStyle(Color.sanInk)
+                    .multilineTextAlignment(.leading)
+                Spacer(minLength: 0)
+            }
+            .padding(.vertical, 7)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(checked ? .isSelected : [])
     }
 }
 

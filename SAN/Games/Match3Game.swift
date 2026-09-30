@@ -55,7 +55,7 @@ struct Match3GameView: View {
             .padding()
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .sanScreenBackground()
-            .navigationTitle("Три в ряд")
+            .navigationTitle("Diamond")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -154,7 +154,7 @@ struct Match3GameView: View {
     private func award() {
         let earned = state.bonuses
         guard earned > credited else { return }
-        let granted = bonus.awardEndlessGameplay(earned - credited)
+        let granted = bonus.awardEndlessGameplay(earned - credited, source: "game:diamond")
         credited = earned
         guard granted > 0 else { return }
         withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) { awarded += granted }

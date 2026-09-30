@@ -133,6 +133,10 @@ public protocol CouponService {
     /// Каталог наград глобального кошелька (config/globalRewards).
     /// Пусто → показывать нечего: награда без партнёра не гасится.
     func fetchGlobalRewards() async throws -> [Reward]
+    /// Купоны, которые заведение продаёт за бонусы (`couponOffers` этого
+    /// заведения) — для «магазина купонов» на его странице. Все статусы:
+    /// что из этого можно купить сейчас, решает `CouponOffer.isAvailable(at:)`.
+    func fetchCouponOffers(venueID: String) async throws -> [CouponOffer]
     /// Купоны пользователя из Firestore (для синка used-статуса и наград).
     func fetchCoupons(userID: String) async throws -> [Coupon]
     /// Карты лояльности пользователя из Firestore (разовый запрос).
@@ -180,4 +184,73 @@ public protocol PushService {
 public protocol MenuParsingService: Sendable {
     func parseMenu(file: Data, kind: MenuFileKind,
                    progress: @escaping @Sendable (Double) -> Void) async throws -> [MenuDraftItem]
+}
+
+// MARK: - Кошелёк бонусов на сервере
+
+/// Что покупается за бонусы.
+public enum BonusPurchase: Equatable, Sendable {
+    /// Купон заведения (`couponOffers/{id}`).
+    case offer(id: String)
+    /// Награда из каталога (`config/globalRewards`) — себе или подарком.
+    case reward(id: String, asGift: Bool, fromName: String)
+
+    /// Что именно покупаем — для ключа идемпотентности на клиенте: повтор той
+    /// же покупки должен нести тот же ключ, другая покупка — другой.
+    public var ref: String {
+        switch self {
+        case .offer(let id): return "offer:\(id)"
+        case .reward(let id, let asGift, _): return "reward:\(id)\(asGift ? ":gift" : "")"
+        }
+    }
+}
+
+/// Ответ `buyCoupon`. `errorCode` — код сервера как есть (`insufficient`,
+/// `sold_out`, `unavailable`, `not_found`, `no_wallet`, `key_reused`, …).
+public struct BonusPurchaseOutcome: Equatable, Sendable {
+    public var ok: Bool
+    public var coupon: Coupon?
+    public var giftCode: String?
+    public var balance: Int
+    public var errorCode: String?
+    public var replayed: Bool
+
+    public init(ok: Bool, coupon: Coupon? = nil, giftCode: String? = nil, balance: Int = 0,
+                errorCode: String? = nil, replayed: Bool = false) {
+        self.ok = ok; self.coupon = coupon; self.giftCode = giftCode
+        self.balance = balance; self.errorCode = errorCode; self.replayed = replayed
+    }
+}
+
+/// Ответ `earnBonus`. `granted` может быть меньше запрошенного — сервер
+/// держит потолки (за вызов и за сутки).
+public struct BonusEarnOutcome: Equatable, Sendable {
+    public var ok: Bool
+    public var granted: Int
+    public var balance: Int
+    public var errorCode: String?
+
+    public init(ok: Bool, granted: Int = 0, balance: Int = 0, errorCode: String? = nil) {
+        self.ok = ok; self.granted = granted; self.balance = balance; self.errorCode = errorCode
+    }
+}
+
+/// Глобальный кошелёк бонусов, который ведёт сервер (`bonusWallets/{uid}`).
+///
+/// Баланс на устройстве с ним — только отражение: начисления уходят в
+/// `earn`, покупки — в `buy`, а число на экране приходит из `balance(userID:)`.
+/// Без него (мок-режим, тесты) `BonusEngine` работает по-старому, локально.
+public protocol BonusWalletService {
+    /// Живой баланс кошелька (снапшот-листенер; снимается с задачей-потребителем).
+    func balance(userID: String) -> AsyncStream<Int>
+    /// Заводит кошелёк (один раз переносит `localBalance` устройства) и
+    /// зачисляет незабранные награды. Возвращает баланс.
+    func sync(localBalance: Int) async throws -> Int
+    /// Начисление за игры/время. `idempotencyKey` — один на начисление.
+    func earn(amount: Int, source: String, idempotencyKey: String) async throws -> BonusEarnOutcome
+    /// Покупка за бонусы. `idempotencyKey` — один на попытку, повторяется при ретрае.
+    func buy(_ purchase: BonusPurchase, idempotencyKey: String) async throws -> BonusPurchaseOutcome
+    /// Забрать подарок по коду из ссылки: сервер создаёт купон заведения.
+    /// Повтор тем же получателем возвращает тот же купон.
+    func claimGift(code: String) async throws -> BonusPurchaseOutcome
 }

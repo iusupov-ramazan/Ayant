@@ -428,6 +428,21 @@ struct FeedDealCard: View {
                     Text(distanceKm.distanceText)
                 }
             }
+            // Акция не во всех адресах — говорим до того, как гость поехал.
+            // Полный список — на странице акции.
+            if let only = venue?.locations(for: deal) {
+                captionChip(fill: Color(hex: 0xFFF3E0), ink: Color(hex: 0xA85A00)) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "mappin")
+                        if only.count == 1 {
+                            Text("Только: \(only[0].address)")
+                        } else {
+                            Text("Только \(only.count) \(Plural.ru(only.count, LS("адрес"), LS("адреса"), LS("адресов")))")
+                        }
+                    }
+                    .lineLimit(1)
+                }
+            }
             if let earn = venue?.earnRateLabel {
                 captionChip(fill: Color(hex: 0xFFF3EC), ink: Color.sanAccentText) {
                     Text(earn)

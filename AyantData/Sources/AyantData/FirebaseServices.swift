@@ -696,6 +696,12 @@ public final class FirebaseCouponService: CouponService {
     /// Награды без `venueID` отбрасываем здесь же: купон по такой награде
     /// сотрудник не погасит (`scanCoupon` → `wrong_venue`), и показывать её
     /// значит обещать то, что не сработает.
+    public func fetchCouponOffers(venueID: String) async throws -> [CouponOffer] {
+        let snap = try await db.collection(FS.Collection.couponOffers)
+            .whereField(FS.CouponOfferDoc.venueID, isEqualTo: venueID).getDocuments()
+        return snap.documents.compactMap { CouponOffer(firestore: $0.data(), id: $0.documentID) }
+    }
+
     public func fetchGlobalRewards() async throws -> [Reward] {
         let snap = try await db.collection(FS.Collection.config)
             .document(FS.Document.globalRewards).getDocument()

@@ -225,22 +225,19 @@ struct AllVenuesView: View {
         if list.isEmpty {
             emptyState
         } else {
-            LazyVStack(spacing: 0) {
-                ForEach(Array(list.enumerated()), id: \.element.id) { index, venue in
+            // Сетка два в ряд: фото решает выбор быстрее, чем строка с
+            // аватаркой, а статус «Открыто/Закрыто» виден на каждой карточке.
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)],
+                      spacing: 12) {
+                ForEach(list) { venue in
                     NavigationLink(value: venue) {
-                        VenueCompactRow(venue: venue, distanceKm: distance(to: venue))
-                            .padding(.horizontal, SanMetrics.screenPadding)
-                            .padding(.vertical, 8)
+                        VenueGridCard(venue: venue, distanceKm: distance(to: venue))
                     }
-                    .buttonStyle(.sanPress(0.98))
-                    if index < list.count - 1 {
-                        Rectangle()
-                            .fill(Color.sanHairline)
-                            .frame(height: 0.5)
-                            .padding(.leading, SanMetrics.screenPadding + 62 + 14)
-                    }
+                    .buttonStyle(.sanPress(0.97))
                 }
             }
+            .padding(.horizontal, SanMetrics.screenPadding)
+            .padding(.top, 4)
         }
     }
 

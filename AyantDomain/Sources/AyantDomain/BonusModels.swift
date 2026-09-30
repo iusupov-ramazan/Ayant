@@ -41,7 +41,7 @@ public struct Reward: Identifiable, Hashable {
 }
 
 /// Купон, полученный пользователем за бонусы (показывается сотруднику).
-public struct Coupon: Identifiable, Codable, Hashable {
+public struct Coupon: Identifiable, Codable, Hashable, Sendable {
     public var id: String
     public var title: String
     public var code: String

@@ -18,12 +18,30 @@ public final class CouponStore: ObservableObject {
     private let key = "san.coupons"
     private let backend: CouponService
     private let clock: Clock
+    /// Серверный кошелёк: есть — покупки идут через `buyCoupon`, нет (мок,
+    /// тесты) — бонусы списываются на устройстве, как раньше.
+    private let wallet: BonusWalletService?
+    /// Ключ идемпотентности на покупку (по `BonusPurchase.ref`): живёт, пока
+    /// сервер не дал окончательный ответ. Обрыв сети → повтор с тем же ключом,
+    /// и сервер вернёт уже выданный купон, а не продаст второй.
+    private var purchaseKeys: [String: String] = [:]
     public private(set) var userID = ""
 
-    public init(backend: CouponService, clock: Clock = SystemClock()) {
+    public init(backend: CouponService, clock: Clock = SystemClock(), wallet: BonusWalletService? = nil) {
         self.backend = backend
         self.clock = clock
+        self.wallet = wallet
         load()
+    }
+
+    public var usesServerWallet: Bool { wallet != nil }
+
+    /// Итог покупки за бонусы. `failed` несёт код сервера (`insufficient`,
+    /// `sold_out`, `unavailable`, …) или `network` — тогда повтор безопасен.
+    public enum PurchaseResult: Equatable {
+        case coupon(Coupon)
+        case gift(code: String)
+        case failed(String)
     }
 
     public var activeCount: Int { coupons.filter { !$0.used }.count }
@@ -53,8 +71,46 @@ public final class CouponStore: ObservableObject {
     /// ищет купон по коду в Firestore и сверяет `venueID`. Раньше награда
     /// глобального кошелька оставалась только на устройстве, и предъявить её
     /// было невозможно.
-    public func redeem(_ reward: Reward, bonus: BonusEngine) -> Coupon? {
-        guard reward.isRedeemable else { return nil }
+    public func redeem(_ reward: Reward, bonus: BonusEngine) async -> PurchaseResult {
+        guard reward.isRedeemable else { return .failed("not_found") }
+        if wallet != nil { return await purchase(.reward(id: reward.id, asGift: false, fromName: ""), bonus: bonus) }
+        return redeemLocally(reward, bonus: bonus).map(PurchaseResult.coupon) ?? .failed("insufficient")
+    }
+
+    /// Подарок другу: списываются бонусы, сервер создаёт `giftCoupons/{code}`.
+    /// Без серверного кошелька — `failed("local")`: тогда подарок делает
+    /// `AppStore.createGift`, как раньше.
+    public func gift(_ reward: Reward, fromName: String, bonus: BonusEngine) async -> PurchaseResult {
+        guard wallet != nil else { return .failed("local") }
+        return await purchase(.reward(id: reward.id, asGift: true, fromName: fromName), bonus: bonus)
+    }
+
+    /// Одна покупка через `buyCoupon`. Цена, остаток и модерация проверяются
+    /// на сервере; клиент только показывает итог и кладёт купон в кошелёк.
+    private func purchase(_ item: BonusPurchase, bonus: BonusEngine) async -> PurchaseResult {
+        guard let wallet else { return .failed("local") }
+        let key = purchaseKeys[item.ref] ?? UUID().uuidString
+        purchaseKeys[item.ref] = key
+        guard let r = try? await wallet.buy(item, idempotencyKey: key) else {
+            return .failed("network")          // ключ остаётся — повтор безопасен
+        }
+        purchaseKeys[item.ref] = nil           // ответ окончательный: следующая покупка — новый ключ
+        guard r.ok else { return .failed(r.errorCode ?? "buy_failed") }
+        bonus.applyServerBalance(r.balance)
+        if let code = r.giftCode {
+            AnalyticsLog.log(.couponClaim, ["ref": item.ref, "gift": true])
+            return .gift(code: code)
+        }
+        guard let c = r.coupon else { return .failed("buy_failed") }
+        if !coupons.contains(where: { $0.code == c.code }) {
+            coupons.insert(c, at: 0)
+            save()
+        }
+        AnalyticsLog.log(.couponClaim, ["ref": item.ref])
+        return .coupon(c)
+    }
+
+    private func redeemLocally(_ reward: Reward, bonus: BonusEngine) -> Coupon? {
         guard bonus.spend(reward.cost) else { return nil }
         let c = Coupon(id: "cp_\(UUID().uuidString.prefix(8))",
                        title: reward.title,
@@ -70,10 +126,68 @@ public final class CouponStore: ObservableObject {
         return c
     }
 
+    // MARK: Купоны заведения за бонусы
+
+    /// Купоны, которые продаёт заведение, — по id заведения. Только доступные
+    /// к покупке (`CouponOffer.isAvailable`): снятое с продажи, разобранное и
+    /// не прошедшее модерацию гостю показывать незачем.
+    @Published public private(set) var offersByVenue: [String: [CouponOffer]] = [:]
+
+    public func offers(venueID: String) -> [CouponOffer] { offersByVenue[venueID] ?? [] }
+
+    /// Загружает купоны заведения. Ошибка сети — прежний список остаётся.
+    public func loadOffers(venueID: String) async {
+        guard let all = try? await backend.fetchCouponOffers(venueID: venueID) else { return }
+        let now = clock.now
+        offersByVenue[venueID] = all.filter { $0.isAvailable(at: now) }.sorted { $0.cost < $1.cost }
+    }
+
+    /// Обмен бонусов на купон заведения. Возвращает купон или nil (купон
+    /// недоступен или не хватило бонусов).
+    ///
+    /// С серверным кошельком — `buyCoupon`: списание, остаток (`soldCount`) и
+    /// сам купон в одной серверной транзакции. Без него (мок-режим) — на
+    /// устройстве: для оффлайн-демо, в продакшене этого пути нет.
+    public func buy(_ offer: CouponOffer, bonus: BonusEngine) async -> PurchaseResult {
+        guard offer.isAvailable(at: clock.now) else { return .failed("unavailable") }
+        if wallet != nil { return await purchase(.offer(id: offer.id), bonus: bonus) }
+        return buyLocally(offer, bonus: bonus).map(PurchaseResult.coupon) ?? .failed("insufficient")
+    }
+
+    private func buyLocally(_ offer: CouponOffer, bonus: BonusEngine) -> Coupon? {
+        guard bonus.spend(offer.cost) else { return nil }
+        let c = Coupon(id: "cp_\(UUID().uuidString.prefix(8))",
+                       title: offer.title,
+                       code: "AYANT-\(UUID().uuidString.prefix(6).uppercased())",
+                       createdAt: clock.now, used: false,
+                       venueID: offer.venueID, venueName: offer.venueName,
+                       kind: "offer")
+        coupons.insert(c, at: 0)
+        save()
+        AnalyticsLog.log(.couponClaim, ["offer_id": offer.id, "cost": offer.cost])
+        let uid = userID
+        Task { try? await backend.saveCoupon(c, userID: uid) }
+        return c
+    }
+
     // `createDealCoupon` удалён вместе с купоном у акции: акция теперь
     // объявление. Уже выданные купоны с `kind: "deal"` остаются в кошельках и
     // гасятся как раньше — `scanCoupon` их по-прежнему понимает, и отнимать у
     // людей то, что они успели получить, нельзя.
+
+    /// Забирает подарок через сервер (`claimGift`): купон приходит с
+    /// заведением и гасится у стойки. `nil` — без серверного кошелька
+    /// (тогда подарок забирает `AppStore.claimGift` по-старому).
+    public func claimGift(code: String) async -> PurchaseResult? {
+        guard let wallet else { return nil }
+        guard let r = try? await wallet.claimGift(code: code) else { return .failed("network") }
+        guard r.ok, let c = r.coupon else { return .failed(r.errorCode ?? "claim_failed") }
+        if !coupons.contains(where: { $0.code == c.code }) {
+            coupons.insert(c, at: 0)
+            save()
+        }
+        return .coupon(c)
+    }
 
     /// Кладёт полученный в подарок купон в кошелёк.
     public func addGifted(title: String, code: String) {

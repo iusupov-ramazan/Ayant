@@ -29,6 +29,8 @@ public enum FS {
         /// Купоны, которые заведение выпускает на продажу за бонусы.
         public static let couponOffers = "couponOffers"
         public static let giftCoupons = "giftCoupons"
+        /// Глобальный кошелёк бонусов, `bonusWallets/{uid}`. Пишут только функции.
+        public static let bonusWallets = "bonusWallets"
         public static let loyaltyCards = "loyaltyCards"
         /// Штампы дополнительных карт заведения (`{userID}_{venueID}_{cardID}`).
         /// Отдельно от `loyaltyCards`: Android и старые iOS склеивают карты
@@ -158,6 +160,9 @@ public enum FS {
         public static let city = "city"
         /// id поста в инстаграме, из которого импортирована акция.
         public static let igPostID = "igPostId"
+        /// Где действует акция: массив id адресов заведения (`Branch.id`,
+        /// первый адрес — `"main"`). Нет поля или пусто — во всех адресах.
+        public static let locationIDs = "locationIDs"
     }
 
     // MARK: - couponOffers/{id}
@@ -499,6 +504,40 @@ public enum FS {
         public static let userID = "userID"
         public static let rewardId = "rewardId"
         public static let pointsToSpend = "pointsToSpend"
+    }
+}
+
+extension FS {
+    /// Документ кошелька `bonusWallets/{uid}` (читается снапшот-листенером).
+    public enum BonusWalletDoc {
+        public static let balance = "balance"
+    }
+
+    /// Запросы и ответы функций кошелька: bonusWalletSync / earnBonus / buyCoupon.
+    /// Те же имена — в `functions/src/index.ts` (секция 9); компилятор их не
+    /// сверяет, поэтому они здесь одним списком.
+    public enum WalletAPI {
+        // Запрос.
+        public static let localBalance = "localBalance"
+        public static let amount = "amount"
+        public static let source = "source"
+        public static let offerID = "offerID"
+        public static let rewardID = "rewardID"
+        public static let asGift = "asGift"
+        public static let fromName = "fromName"
+        public static let idempotencyKey = "idempotencyKey"
+        // Ответ.
+        public static let ok = "ok"
+        public static let balance = "balance"
+        public static let granted = "granted"
+        public static let couponID = "couponID"
+        public static let code = "code"
+        public static let title = "title"
+        public static let venueID = "venueID"
+        public static let venueName = "venueName"
+        public static let giftCode = "giftCode"
+        public static let replayed = "replayed"
+        public static let error = "error"
     }
 }
 

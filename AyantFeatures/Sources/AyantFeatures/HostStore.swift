@@ -311,9 +311,21 @@ public final class HostStore: ObservableObject {
             for dto in unsentD { remoteSaveDeal(dto) }
             // Купоны: сервер знает `soldCount` и `status`, которых у клиента
             // нет и быть не может, поэтому серверная копия просто побеждает.
+            //
+            // Кроме купонов, которых сервер ещё не видел: запись не дошла (сеть,
+            // правила не задеплоены). Раньше такой купон молча пропадал из
+            // кабинета при следующем синке — и в админ-панель так и не попадал.
+            // Теперь он остаётся и дозаливается. Только ни разу не одобренный:
+            // одобренный, которого нет на сервере, удалён там, и воскрешать его
+            // с телефона нельзя.
             if let remoteOffers = try? await repo.fetchOwnedCouponOffers(ownerID: ownerID) {
-                couponOffers = remoteOffers
+                let remoteIDs = Set(remoteOffers.map(\.id))
+                let unsent = couponOffers.filter {
+                    !remoteIDs.contains($0.id) && $0.status == .pending && $0.soldCount == 0
+                }
+                couponOffers = remoteOffers + unsent
                 persistCouponOffers()
+                for offer in unsent { remoteSaveCouponOffer(offer) }
             }
             // Профиль (включая статус верификации, выставленный админом).
             if let remoteProfile = try await repo.fetchProfile(ownerID: ownerID) {
@@ -604,6 +616,9 @@ public final class HostStore: ObservableObject {
     }
 
     private func remoteSaveCouponOffer(_ offer: CouponOffer) {
+        // Без владельца запись уйдёт с `ownerID: ""`, и правила её отклонят —
+        // как у заведений и акций, ждём входа (sync дозальёт).
+        guard !ownerID.isEmpty else { return }
         let owner = ownerID
         Task { [weak self, repo] in
             do { try await repo.saveCouponOffer(offer, ownerID: owner) }

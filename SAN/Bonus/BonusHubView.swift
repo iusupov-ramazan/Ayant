@@ -26,6 +26,8 @@ struct BonusHubView: View {
     @State private var pendingReward: Reward?
     @State private var pendingGift: Reward?
     @State private var giftShare: ShareURL?
+    /// Отказ сервера при покупке — текстом (`BonusPurchaseErrorText`).
+    @State private var purchaseError: String?
     @State private var openedCard: VenuePointsCard?
     @State private var openedStampCard: LoyaltyCard?
 
@@ -134,7 +136,13 @@ struct BonusHubView: View {
                 get: { pendingReward != nil }, set: { if !$0 { pendingReward = nil } }),
                 presenting: pendingReward) { reward in
                 Button("Обменять за \(reward.cost)", role: .destructive) {
-                    if let c = coupons.redeem(reward, bonus: bonus) { justClaimed = c }
+                    Task {
+                        switch await coupons.redeem(reward, bonus: bonus) {
+                        case .coupon(let c): justClaimed = c
+                        case .failed(let code): purchaseError = BonusPurchaseErrorText.message(code)
+                        case .gift: break
+                        }
+                    }
                 }
                 Button("Отмена", role: .cancel) {}
             } message: { reward in
@@ -144,8 +152,20 @@ struct BonusHubView: View {
                 get: { pendingGift != nil }, set: { if !$0 { pendingGift = nil } }),
                 presenting: pendingGift) { r in
                 Button("Подарить за \(r.cost)", role: .destructive) {
-                    if let url = store.createGift(r, bonus: bonus) {
-                        giftShare = ShareURL(url: url, title: r.title)
+                    Task {
+                        // Серверный кошелёк — подарок покупает сервер; без него
+                        // (мок-режим) — прежний путь через AppStore.
+                        switch await coupons.gift(r, fromName: store.currentUserName, bonus: bonus) {
+                        case .gift(let code):
+                            giftShare = ShareURL(url: DeepLinks.giftURL(code), title: r.title)
+                        case .failed("local"):
+                            if let url = store.createGift(r, bonus: bonus) {
+                                giftShare = ShareURL(url: url, title: r.title)
+                            }
+                        case .failed(let code):
+                            purchaseError = BonusPurchaseErrorText.message(code)
+                        case .coupon: break
+                        }
                     }
                 }
                 Button("Отмена", role: .cancel) {}
@@ -154,6 +174,12 @@ struct BonusHubView: View {
             }
             .sheet(item: $giftShare) { item in
                 GiftShareSheet(url: item.url, title: item.title)
+            }
+            .alert("Не получилось", isPresented: Binding(
+                get: { purchaseError != nil }, set: { if !$0 { purchaseError = nil } })) {
+                Button("Понятно") {}
+            } message: {
+                Text(purchaseError ?? "")
             }
     }
 
@@ -390,7 +416,7 @@ struct BonusHubView: View {
 
             Button { if session.isGuest { showGuestAlert = true } else { showMatch3 = true } } label: {
                 gameTile(icon: GemView(kind: .ruby, power: .none).padding(6),
-                         title: "Три в ряд",
+                         title: "Diamond",
                          // Партия бесконечная — дневной потолок виден ещё до входа.
                          subtitle: "+1 / \(Match3.matchesPerBonus) совпадений · до \(GameEconomy.endlessDailyBonusCap) в день",
                          gradient: [Color(hex: 0xF2A03D), Color(hex: 0xE8556B)])

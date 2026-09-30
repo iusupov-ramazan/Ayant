@@ -519,6 +519,10 @@ public struct Deal: Identifiable, Hashable {
     /// в один текст, ограничения либо теряются в абзаце, либо превращают его в
     /// юридическую сноску. Пусто — блока условий в ленте просто нет.
     public var terms: [String] = []
+    /// Адреса заведения, где действует акция (`Branch.id`, первый адрес —
+    /// `VenueLocations.firstID`). Пусто — во всех адресах. Читать через
+    /// `Venue.locations(for:)`: он же прощает удалённые адреса.
+    public var locationIDs: [String] = []
 
     public init(id: String, venueID: String, type: DealType, title: String, details: String,
                 emoji: String, oldPrice: Int? = nil, newPrice: Int? = nil,
@@ -526,14 +530,14 @@ public struct Deal: Identifiable, Hashable {
                 citySlug: String = City.bishkek.id,
                 status: DealStatus = .active, startDate: Date? = nil,
                 imageEmojis: [String] = [], imageURL: String? = nil, imageURLs: [String] = [],
-                terms: [String] = []) {
+                terms: [String] = [], locationIDs: [String] = []) {
         self.id = id; self.venueID = venueID; self.type = type; self.title = title
         self.details = details; self.emoji = emoji; self.oldPrice = oldPrice
         self.newPrice = newPrice; self.discountPercent = discountPercent
         self.validUntil = validUntil; self.citySlug = citySlug
         self.status = status; self.startDate = startDate
         self.imageEmojis = imageEmojis; self.imageURL = imageURL; self.imageURLs = imageURLs
-        self.terms = terms
+        self.terms = terms; self.locationIDs = locationIDs
     }
 
     /// Все фото предложения (для карусели): imageURLs, иначе одно imageURL.

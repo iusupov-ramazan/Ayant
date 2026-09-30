@@ -73,6 +73,20 @@ public final class MockCouponService: CouponService {
 
     public func saveCoupon(_ coupon: Coupon, userID: String) async throws {}
     public func fetchCoupons(userID: String) async throws -> [Coupon] { userID.isEmpty ? [] : coupons }
+
+    /// Оффлайн-демо: у первого мок-заведения пара купонов — иначе магазин
+    /// купонов на его странице было бы нечем посмотреть.
+    public func fetchCouponOffers(venueID: String) async throws -> [CouponOffer] {
+        guard venueID == MockData.venues.first?.id else { return [] }
+        let name = MockData.venues.first?.name ?? ""
+        return [
+            CouponOffer(id: "co_demo1", venueID: venueID, venueName: name, title: "Капучино в подарок",
+                        details: "Любой объём", emoji: "☕️", cost: 120, stock: 20,
+                        statusRaw: ModerationStatus.approved.rawValue),
+            CouponOffer(id: "co_demo2", venueID: venueID, venueName: name, title: "Десерт дня",
+                        emoji: "🍰", cost: 200, statusRaw: ModerationStatus.approved.rawValue),
+        ]
+    }
     public func fetchLoyaltyCards(userID: String) async throws -> [LoyaltyCard] { userID.isEmpty ? [] : cards }
     public func loyaltyCards(userID: String) -> AsyncStream<[LoyaltyCard]> {
         let snapshot = userID.isEmpty ? [] : cards

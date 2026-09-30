@@ -70,6 +70,13 @@ enum AppConfig {
         useFirebase ? FirebasePushService() : MockPushService()
     }
 
+    /// Серверный кошелёк бонусов. В мок-режиме — `nil`: `BonusEngine` и
+    /// `CouponStore` тогда считают бонусы на устройстве, как раньше, и
+    /// приложение целиком работает без сети.
+    static func makeBonusWallet() -> BonusWalletService? {
+        useFirebase ? FirebaseBonusWalletService(auth: makeAuthService()) : nil
+    }
+
     static func makeCouponService() -> CouponService {
         if let shots = ScreenshotFixtures.mode {
             return MockCouponService(coupons: shots.coupons, loyaltyCards: shots.loyaltyCards)

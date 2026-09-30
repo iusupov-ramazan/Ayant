@@ -62,7 +62,7 @@ struct TetrisGameView: View {
         state = transform(state)
         let gained = state.bonuses - before
         if gained > 0 {
-            awarded += bonus.awardGameplay(gained)
+            awarded += bonus.awardGameplay(gained, source: "game:tetris")
             SanHaptics.selection()
         }
     }

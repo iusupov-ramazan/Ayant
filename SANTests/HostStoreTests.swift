@@ -156,18 +156,25 @@ final class HostStoreTests: XCTestCase {
     }
 
     /// Сервер знает `soldCount` и вердикт модерации — клиент их не выдумывает.
-    func testSyncTakesServerCopyOfCoupons() async {
+    /// Но купон, которого сервер ещё не видел (запись не дошла), не пропадает
+    /// из кабинета, а остаётся и дозаливается — иначе он так и не попадёт в
+    /// админ-панель на модерацию.
+    func testSyncTakesServerCopyOfCouponsAndKeepsUnsent() async {
         let store = makeStore()
         store.send(.saveCouponOffer(existing: nil, fields: couponFields()))
+        let localID = store.state.couponOffers[0].id
+        await waitUntil(self.repo.savedCouponOffers.count == 1)
         repo.remoteCouponOffers = [CouponOffer(id: "co_server", venueID: "hv_1",
                                                venueName: "Кафе", title: "С сервера",
                                                cost: 900, stock: 50, soldCount: 12,
                                                statusRaw: ModerationStatus.approved.rawValue)]
         await store.sync()
 
-        XCTAssertEqual(store.state.couponOffers.map(\.id), ["co_server"])
+        XCTAssertEqual(store.state.couponOffers.map(\.id), ["co_server", localID])
         XCTAssertEqual(store.state.couponOffers[0].soldCount, 12)
         XCTAssertEqual(store.state.couponOffers[0].remaining, 38)
+        await waitUntil(self.repo.savedCouponOffers.count == 2)
+        XCTAssertEqual(repo.savedCouponOffers.last?.id, localID, "неотправленный купон дозаливается")
     }
 
     func testCouponsAreListedPerVenue() {

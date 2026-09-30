@@ -539,6 +539,92 @@ struct VenueCompactRow: View {
     }
 }
 
+// MARK: - Карточка заведения в сетке (вкладка «Заведения»)
+
+/// Плитка два в ряд: фото сверху, под ним — открыто ли сейчас, название,
+/// категория с районом и рейтинг. Статус стоит первым: «можно ли пойти
+/// прямо сейчас» — главный вопрос, с которым листают список заведений.
+struct VenueGridCard: View {
+    let venue: Venue
+    var distanceKm: Double? = nil
+    @EnvironmentObject private var store: AppStore
+
+    private var agg: (rating: Double, count: Int) { store.aggregate(for: venue) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Color.clear задаёт пропорции — от фото размер не зависит.
+            Color.clear
+                .aspectRatio(1.6, contentMode: .fit)
+                .overlay { VenuePhoto(urlString: venue.imageURL, gradient: venue.gradientColors) }
+                .clipped()
+
+            VStack(alignment: .leading, spacing: 7) {
+                openPill
+                HStack(spacing: 4) {
+                    Text(venue.name)
+                        .font(.golos(15.5, .bold)).foregroundStyle(Color.sanInk)
+                        .lineLimit(1)
+                    if venue.isVerified {
+                        Image(systemName: "checkmark.seal.fill")
+                            .font(.system(size: 11)).foregroundStyle(.blue)
+                    }
+                }
+                HStack(spacing: 6) {
+                    subtitle
+                        .font(.golos(12.5)).foregroundStyle(Color.sanInkSoft)
+                        .lineLimit(1)
+                    Spacer(minLength: 2)
+                    rating
+                }
+            }
+            .padding(.horizontal, 11).padding(.top, 10).padding(.bottom, 12)
+        }
+        .background(Color.sanSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .strokeBorder(Color.sanHairline, lineWidth: 0.5))
+        .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .accessibilityElement(children: .combine)
+    }
+
+    private var openPill: some View {
+        let open = venue.isOpenNow
+        let color = open ? Color.sanOpen : Color.sanInkSoft
+        return HStack(spacing: 5) {
+            Circle().fill(color).frame(width: 6, height: 6)
+            Text(open ? "Открыто" : "Закрыто")
+        }
+        .font(.golos(11.5, .semibold))
+        .foregroundStyle(color)
+        .padding(.horizontal, 9).padding(.vertical, 4)
+        .background(color.opacity(0.12), in: Capsule())
+    }
+
+    /// Категория и район, при известной геопозиции — расстояние вместо района.
+    private var subtitle: Text {
+        if let distanceKm {
+            return Text(venue.category.locKey) + Text(verbatim: " · \(distanceKm.distanceText)")
+        }
+        return venue.district.isEmpty
+            ? Text(venue.category.locKey)
+            : Text(venue.category.locKey) + Text(verbatim: " · \(venue.district)")
+    }
+
+    @ViewBuilder
+    private var rating: some View {
+        if agg.count > 0 {
+            HStack(spacing: 3) {
+                Image(systemName: "star.fill").font(.system(size: 11))
+                Text(String(format: "%.1f", agg.rating)).monospacedDigit()
+            }
+            .font(.golos(12.5, .bold)).foregroundStyle(Color.sanInk)
+        } else {
+            Text("Новое").font(.golos(11.5, .semibold)).foregroundStyle(Color.sanAccentText)
+        }
+    }
+}
+
 // MARK: - Компактная строка предложения (поиск, избранное, заведение)
 
 struct CompactDealRow: View {

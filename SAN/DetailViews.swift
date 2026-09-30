@@ -13,10 +13,57 @@ struct DealDetailView: View {
     @EnvironmentObject private var loyalty: LoyaltyStore
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
-    @State private var showMapOptions = false
+    /// Адрес, для которого спрашиваем «2GIS или Google Maps».
+    @State private var mapTarget: Branch?
     @State private var showGuestAlert = false
 
     private var venue: Venue? { store.venue(for: deal) }
+
+    /// Где действует акция. Ограничена адресами — пишем прямо: «Действует
+    /// только по адресу …», иначе гость придёт не туда и услышит «у нас такой
+    /// акции нет». Во всех адресах — показываем адрес, если он один, или
+    /// «во всех N адресах», если их несколько.
+    @ViewBuilder
+    private func dealLocations(_ venue: Venue) -> some View {
+        let all = venue.locations
+        let only = venue.locations(for: deal)
+        VStack(alignment: .leading, spacing: 8) {
+            if let only {
+                Label(only.count == 1 ? "Действует только по адресу:" : "Действует только по адресам:",
+                      systemImage: "exclamationmark.circle.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color(hex: 0xC26A00))
+            } else if all.count > 1 {
+                Label("Действует во всех адресах (\(all.count))", systemImage: "checkmark.circle.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.sanOpen)
+            }
+            ForEach(only ?? all) { place in
+                Button {
+                    store.log(AnalyticsMetric.maps, for: venue.id)
+                    mapTarget = place
+                } label: {
+                    HStack {
+                        Label { Text(verbatim: place.address) } icon: { Image(systemName: "mappin.and.ellipse") }
+                            .font(.subheadline)
+                        Spacer()
+                        Image(systemName: "map.fill").foregroundStyle(Color.sanAccentText)
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .confirmationDialog("Открыть на карте",
+                            isPresented: Binding(get: { mapTarget != nil },
+                                                 set: { if !$0 { mapTarget = nil } }),
+                            titleVisibility: .visible, presenting: mapTarget) { place in
+            Button("2GIS") { openURL(Directions.dgis(lat: place.latitude, lng: place.longitude)) }
+            Button("Google Maps") { openURL(Directions.google(lat: place.latitude, lng: place.longitude)) }
+            Button("Отмена", role: .cancel) {}
+        } message: { place in
+            Text(verbatim: place.address)
+        }
+    }
 
     var body: some View {
         if isPushed {
@@ -156,24 +203,7 @@ struct DealDetailView: View {
                     }
                 }
                 .buttonStyle(.plain)
-                if !venue.address.trimmingCharacters(in: .whitespaces).isEmpty {
-                    Button {
-                        store.log(AnalyticsMetric.maps, for: venue.id)
-                        showMapOptions = true
-                    } label: {
-                        HStack {
-                            Label(venue.address, systemImage: "mappin.and.ellipse").font(.subheadline)
-                            Spacer()
-                            Image(systemName: "map.fill").foregroundStyle(Color.sanAccentText)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .confirmationDialog("Открыть на карте", isPresented: $showMapOptions, titleVisibility: .visible) {
-                        Button("2GIS") { openURL(Directions.dgis(lat: venue.latitude, lng: venue.longitude)) }
-                        Button("Google Maps") { openURL(Directions.google(lat: venue.latitude, lng: venue.longitude)) }
-                        Button("Отмена", role: .cancel) {}
-                    }
-                }
+                dealLocations(venue)
                 if !venue.phone.trimmingCharacters(in: .whitespaces).isEmpty,
                    let url = URL(string: "tel:\(venue.phone.filter { !$0.isWhitespace })") {
                     // Кнопка, а не `Link`: звонок по номеру — такое же обращение,
@@ -215,7 +245,8 @@ struct VenueDetailView: View {
     @State private var reportSent = false
     @State private var showGuestPrompt = false
     @State private var guestMessage = GuestGate.saveVenue
-    @State private var showMapOptions = false
+    /// Адрес, для которого спрашиваем «2GIS или Google Maps».
+    @State private var mapTarget: Branch?
     @State private var showAllBranches = false
 
     private var deals: [Deal] { detail.state.deals }
@@ -271,6 +302,16 @@ struct VenueDetailView: View {
         .onChange(of: store.reviews) { _, _ in detail.refresh() }
         .onChange(of: store.savedVenueIDs) { _, _ in detail.refresh() }
         .guestAlert(isPresented: $showGuestPrompt, message: guestMessage)
+        .confirmationDialog("Открыть на карте",
+                            isPresented: Binding(get: { mapTarget != nil },
+                                                 set: { if !$0 { mapTarget = nil } }),
+                            titleVisibility: .visible, presenting: mapTarget) { place in
+            Button("2GIS") { openURL(Directions.dgis(lat: place.latitude, lng: place.longitude)) }
+            Button("Google Maps") { openURL(Directions.google(lat: place.latitude, lng: place.longitude)) }
+            Button("Отмена", role: .cancel) {}
+        } message: { place in
+            Text(verbatim: place.address)
+        }
         .sheet(item: $activeSheet) { sheet in
             switch sheet {
             case .deal(let deal): DealDetailView(deal: deal)
@@ -324,18 +365,14 @@ struct VenueDetailView: View {
         }
     }
 
+    /// «Сохранить» здесь нет: он один — закладка в нижней панели рядом с
+    /// «Показать QR». Две одинаковые кнопки (сверху закладка, снизу сердце)
+    /// выглядели как два разных действия.
     private var floatingControls: some View {
         HStack {
             floatingButton("chevron.left") { dismiss() }
             Spacer()
             HStack(spacing: 8) {
-                floatingButton(detail.state.isSaved ? "bookmark.fill" : "bookmark") {
-                    if session.isGuest { guestMessage = GuestGate.saveVenue; showGuestPrompt = true }
-                    else {
-                        if !detail.state.isSaved { SanHaptics.save() }
-                        detail.send(.toggleSave)
-                    }
-                }
                 ShareLink(item: DeepLinkRouter.venueURL(venue.id),
                           subject: Text(venue.name),
                           message: Text("\(venue.name), \(venue.address). Нашёл в Ayant!")) {
@@ -374,6 +411,9 @@ struct VenueDetailView: View {
             chipsRow.padding(.top, 16)
             if venue.pointsActive { pointsHeroCard.padding(.top, 20) }
             if venue.hasTodaySpecial { todaySpecialBanner.padding(.top, 16) }
+            // Купоны заведения за бонусы — сразу под «чем заведение живёт
+            // сегодня», до вкладок: это то, ради чего копят бонусы.
+            VenueCouponShop(venue: venue)
             segmentedTabs.padding(.top, 22)
             tabContent.padding(.top, 16)
         }
@@ -431,8 +471,8 @@ struct VenueDetailView: View {
             .padding(.horizontal, 13).padding(.vertical, 8)
             .background((venue.isOpenNow ? Color.sanOpen : Color.sanInkSoft).opacity(0.12), in: Capsule())
 
-            if !venue.branches.isEmpty {
-                Text("\(venue.branches.count + 1) адреса")
+            if venue.locations.count > 1 {
+                Text(verbatim: "\(venue.locations.count) \(Plural.ru(venue.locations.count, LS("адрес"), LS("адреса"), LS("адресов")))")
                     .font(.golos(12.5, .semibold)).foregroundStyle(Color.sanInkSoft)
                     .padding(.horizontal, 13).padding(.vertical, 8)
                     .background(Color.sanSurface, in: Capsule())
@@ -552,7 +592,9 @@ struct VenueDetailView: View {
                     detail.send(.toggleSave)
                 }
             } label: {
-                Image(systemName: detail.state.isSaved ? "heart.fill" : "heart")
+                // Закладка, а не сердце: это «сохранить заведение», тот же
+                // значок, что в «Сохранённом» и на карточках.
+                Image(systemName: detail.state.isSaved ? "bookmark.fill" : "bookmark")
                     .font(.system(size: 19, weight: .semibold))
                     .foregroundStyle(Color.sanAccent)
                     .frame(width: 56).frame(maxHeight: .infinity)
@@ -747,20 +789,26 @@ struct VenueDetailView: View {
         .foregroundStyle(Color.sanAccentText)
     }
 
-    // MARK: Сегодняшний специал
+    // MARK: Предложение дня
 
+    /// Подпись та же, что у хозяина в кабинете («Предложение дня»): одно
+    /// название с двух сторон — хозяин понимает, где гость это увидит.
     private var todaySpecialBanner: some View {
         HStack(spacing: 10) {
-            Text("⭐️").font(.title2)
+            Image(systemName: "star.fill")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Color.sanAccentText)
+                .frame(width: 34, height: 34)
+                .background(Color.sanAccent.opacity(0.15), in: Circle())
             VStack(alignment: .leading, spacing: 2) {
-                Text("Сегодня").font(.caption.weight(.bold)).foregroundStyle(Color.sanAccentText)
+                Text("Предложение дня").font(.caption.weight(.bold)).foregroundStyle(Color.sanAccentText)
                 Text(venue.todaySpecialText ?? "").font(.subheadline.weight(.medium))
             }
             Spacer()
         }
         .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.sanAccent.opacity(0.1), in: RoundedRectangle(cornerRadius: 14))
-        .padding(.horizontal, 16)
     }
 
     // MARK: Карта лояльности
@@ -871,32 +919,31 @@ struct VenueDetailView: View {
 
     private var infoSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            if !venue.address.trimmingCharacters(in: .whitespaces).isEmpty {
+            // Все адреса одним списком — без «главного» и «филиалов»
+            // (см. `VenueLocations`). Больше трёх — сворачиваем.
+            let places = venue.locations
+            let shown = showAllBranches ? places : Array(places.prefix(3))
+            ForEach(shown) { place in
                 Button {
-                    store.log(AnalyticsMetric.maps, for: venue.id)
-                    showMapOptions = true
+                    detail.send(.logContact(.maps))
+                    mapTarget = place
                 } label: {
                     HStack {
-                        Label(venue.address, systemImage: "mappin.and.ellipse").font(.subheadline)
+                        Label { Text(verbatim: place.address) } icon: { Image(systemName: "mappin.and.ellipse") }
+                            .font(.subheadline)
                         Spacer()
                         Image(systemName: "map.fill").foregroundStyle(Color.sanAccentText)
                     }
                 }
                 .buttonStyle(.plain)
-                .confirmationDialog("Открыть на карте", isPresented: $showMapOptions, titleVisibility: .visible) {
-                    Button("2GIS") { openURL(Directions.dgis(lat: venue.latitude, lng: venue.longitude)) }
-                    Button("Google Maps") { openURL(Directions.google(lat: venue.latitude, lng: venue.longitude)) }
-                    Button("Отмена", role: .cancel) {}
-                }
             }
-            // Дополнительные адреса (филиалы) — свёрнуты за кнопкой «Посмотреть все адреса».
-            if !venue.branches.isEmpty {
+            if places.count > 3 {
                 Button {
                     withAnimation { showAllBranches.toggle() }
                 } label: {
                     HStack {
                         Label(showAllBranches ? "Скрыть адреса"
-                                              : "Посмотреть все адреса (\(venue.branches.count + 1))",
+                                              : "Все адреса (\(places.count))",
                               systemImage: "mappin.circle")
                             .font(.subheadline.weight(.medium))
                         Spacer()
@@ -905,21 +952,6 @@ struct VenueDetailView: View {
                     }
                 }
                 .buttonStyle(.plain)
-                if showAllBranches {
-                    ForEach(venue.branches) { b in
-                        Button {
-                            detail.send(.logContact(.maps))
-                            openURL(Directions.dgis(lat: b.latitude, lng: b.longitude))
-                        } label: {
-                            HStack {
-                                Label(b.address, systemImage: "mappin.and.ellipse").font(.subheadline)
-                                Spacer()
-                                Image(systemName: "map").foregroundStyle(Color.sanAccentText)
-                            }
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
             }
             if !venue.phone.trimmingCharacters(in: .whitespaces).isEmpty,
                let url = URL(string: "tel:\(venue.phone.filter { !$0.isWhitespace })") {

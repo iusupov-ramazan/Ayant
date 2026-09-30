@@ -236,6 +236,12 @@ struct SANApp: App {
     /// и гостю: он «зарабатывал» в запись, которая исчезает вместе с выходом.
     private func startBonusIfAllowed() {
         guard session.isSignedIn, !session.isGuest else { bonus.pause(); return }
+        // Серверный кошелёк: подключаем (один раз на пользователя) и досылаем
+        // начисления, которые не ушли из-за сети. В мок-режиме — ничего.
+        if let id = session.user?.id {
+            bonus.attach(userID: id)
+            bonus.retryPending()
+        }
         bonus.start()
     }
 

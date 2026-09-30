@@ -77,6 +77,12 @@
   .badge-pending  { background:#fff3e0; color:#e65100; }
   .badge-approved { background:#e8f5e9; color:#2e7d32; }
   .badge-rejected { background:#ffebee; color:#c62828; }
+  .badge-muted    { background:#eceff1; color:#546e7a; }
+  /* Счётчик «ждёт модерации» на вкладке — обновляется снапшот-листенером. */
+  .nav-count { display:inline-block; min-width:18px; padding:0 5px; margin-left:4px;
+               border-radius:9px; background:#e65100; color:#fff; font-size:11px;
+               font-weight:700; line-height:18px; text-align:center; }
+  .nav-count:empty { display:none; }
   .btn-success { background: var(--success); color:#fff; }
   .row-actions { display: flex; gap: 8px; }
 
@@ -175,13 +181,13 @@
 <div id="app">
   <nav>
     <h1>Ayant Админ</h1>
-    <button onclick="showPage('venues')" id="navVenues" class="active">Заведения</button>
+    <button onclick="showPage('venues')" id="navVenues" class="active">Заведения<span class="nav-count" id="navVenuesCount"></span></button>
     <button onclick="showPage('deals')"  id="navDeals">Предложения</button>
     <button onclick="showPage('categories')" id="navCategories">Категории</button>
-    <button onclick="showPage('hosts')"  id="navHosts">Хосты</button>
-    <button onclick="showPage('boosts')" id="navBoosts">Реклама</button>
+    <button onclick="showPage('hosts')"  id="navHosts">Хосты<span class="nav-count" id="navHostsCount"></span></button>
+    <button onclick="showPage('boosts')" id="navBoosts">Реклама<span class="nav-count" id="navBoostsCount"></span></button>
     <button onclick="showPage('reports')" id="navReports">Жалобы</button>
-    <button onclick="showPage('coupons')" id="navCoupons">Купоны</button>
+    <button onclick="showPage('coupons')" id="navCoupons">Купоны<span class="nav-count" id="navCouponsCount"></span></button>
     <button onclick="showPage('rewards')" id="navRewards">Награды</button>
     <button onclick="showPage('settings')" id="navSettings">Настройки</button>
     <button id="signOutBtn" onclick="signOut()">Выйти</button>
@@ -299,22 +305,26 @@
   <div class="page" id="pageCoupons">
     <div class="toolbar">
       <h2>Купоны заведений</h2>
-      <label style="display:flex;align-items:center;gap:6px;color:var(--muted);font-size:14px">
-        <input type="checkbox" id="couponsShowAll" onchange="loadCoupons()" /> показать все
-      </label>
-      <button class="btn btn-secondary" onclick="loadCoupons()">Обновить</button>
+      <select id="couponsFilter" onchange="renderCoupons()"
+              style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:14px">
+        <option value="all">Все</option>
+        <option value="pending">На модерации</option>
+        <option value="approved">Одобренные</option>
+        <option value="rejected">Отклонённые</option>
+      </select>
+      <span id="couponsLive" style="color:var(--muted);font-size:12px"></span>
     </div>
     <p style="color:var(--muted);margin:0 0 12px">
       Заведение выпускает купон и само назначает цену в бонусах — оно же его и отдаёт.
       До одобрения купон в приложении не продаётся. Остаток и «продано» считает сервер,
-      отсюда они не меняются.
+      отсюда они не меняются. Список обновляется сам — новые купоны появляются без перезагрузки.
     </p>
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>Купон</th><th>Заведение</th><th>Цена</th><th>Остаток</th><th>Статус</th><th></th></tr>
+          <tr><th>Купон</th><th>Заведение</th><th>Цена, бонусы</th><th>Остаток</th><th>Срок</th><th>Статус</th><th></th></tr>
         </thead>
-        <tbody id="couponsBody"><tr><td colspan="6" class="spinner">Загрузка…</td></tr></tbody>
+        <tbody id="couponsBody"><tr><td colspan="7" class="spinner">Загрузка…</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -764,7 +774,7 @@ import { initializeApp }           from 'https://www.gstatic.com/firebasejs/11.1
 import { getAuth, signInWithEmailAndPassword, signOut as fbSignOut, onAuthStateChanged }
   from 'https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js';
 import { getFirestore, collection, getDocs, getDoc, doc, setDoc, updateDoc, addDoc, deleteDoc,
-         deleteField, query, where, writeBatch, Timestamp }
+         deleteField, query, where, writeBatch, Timestamp, onSnapshot }
   from 'https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js';
 
 // ── PASTE YOUR FIREBASE CONFIG HERE ──────────────────────────────────────
@@ -790,6 +800,67 @@ let editingVenueId = null;
 let editingDealId  = null;
 let editingCategoryId = null;
 let pendingDeleteFn = null;
+
+// ── ЖИВЫЕ ПОДПИСКИ ────────────────────────────────────────────────────────
+// Раньше каждая страница читала коллекцию один раз (getDocs), и купон,
+// выпущенный заведением после открытия панели, не появлялся до перезагрузки.
+// Теперь очереди модерации слушаются снапшотами. Реестр по ключу: повторный
+// вызов не создаёт второй листенер (иначе при каждом переходе по вкладкам
+// их копилось бы по одному), а выход из аккаунта снимает все.
+//
+// Два вида подписок:
+//  • сессионные (venues, deals, hosts, couponOffers, pushCampaigns) — нужны
+//    на нескольких страницах и для счётчиков «ждёт модерации» в меню;
+//  • страничные (reviewReports) — снимаются при уходе со страницы.
+const liveSubs = new Map();   // key → { unsub, ready: Promise }
+const liveLoaded = new Set(); // ключи, по которым уже пришёл первый снапшот
+
+function subscribe(key, ref, onData, onError) {
+  const existing = liveSubs.get(key);
+  if (existing) return existing.ready;
+  let markReady;
+  const ready = new Promise(r => { markReady = r; });
+  const unsub = onSnapshot(ref,
+    snap => {
+      liveLoaded.add(key);
+      try { onData(snap); }
+      catch (e) { console.error(`[live:${key}] render failed`, e); }
+      finally { markReady(); }
+    },
+    err => {
+      // После ошибки SDK сам закрывает листенер — убираем из реестра, чтобы
+      // следующий заход на страницу попробовал подписаться заново.
+      console.error(`[live:${key}]`, err);
+      liveSubs.delete(key);
+      try { onError?.(err); } finally { markReady(); }
+    });
+  liveSubs.set(key, { unsub, ready });
+  return ready;
+}
+function unsubscribe(key) {
+  const s = liveSubs.get(key);
+  if (s) { s.unsub(); liveSubs.delete(key); }
+  liveLoaded.delete(key);
+}
+function unsubscribeAll() {
+  for (const key of [...liveSubs.keys()]) unsubscribe(key);
+}
+// Страничные подписки: какая страница какие держит.
+const PAGE_SUBS = { reports: ['reviewReports'] };
+
+function setNavCount(id, n) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = n > 0 ? String(n) : '';
+}
+
+// Firestore Timestamp | Date | число (мс) | строка → Date или null.
+function toDate(v) {
+  if (v === null || v === undefined || v === '') return null;
+  if (typeof v.toDate === 'function') return v.toDate();
+  if (typeof v.seconds === 'number') return new Date(v.seconds * 1000);
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? null : d;
+}
 
 // Встроенные категории — используются для первичного заполнения (seed),
 // если коллекция `categories` пуста.
@@ -1130,6 +1201,9 @@ onAuthStateChanged(auth, async user => {
     app.style.display = 'block';
     loadAll();
   } else {
+    // Вышел или прав нет — снимаем все листенеры: без токена они всё равно
+    // упадут с permission-denied, а при входе под другим аккаунтом дублировались бы.
+    unsubscribeAll();
     if (user && status === 'denied') {
       // Вошёл, но без прав администратора — выкидываем и показываем причину.
       if (errEl) errEl.textContent = 'Недостаточно прав: аккаунт не является администратором';
@@ -1163,7 +1237,9 @@ async function loadAll() {
   // Категории — первыми: от них зависят подписи и выпадающий список в форме заведения.
   await loadCategories();
   // allSettled: сбой одной коллекции (напр. нет правил) не ломает остальные.
-  await Promise.allSettled([loadVenues(), loadDeals(), loadHosts(), loadBoosts()]);
+  // Всё ниже — живые подписки (см. «ЖИВЫЕ ПОДПИСКИ»): повторный вызов не
+  // плодит листенеры, а только дожидается первого снапшота.
+  await Promise.allSettled([loadVenues(), loadDeals(), loadHosts(), loadBoosts(), loadCoupons()]);
 }
 
 // ── CATEGORIES ──────────────────────────────────────────────────────────────
@@ -1288,12 +1364,27 @@ function boostStatus(c) {
   }
 }
 
-async function loadBoosts() {
+let boosts = [];
+function loadBoosts() {
+  return subscribe('pushCampaigns', collection(db, 'pushCampaigns'),
+    snap => {
+      boosts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setNavCount('navBoostsCount', boosts.filter(c => c.status === 'pending').length);
+      renderBoosts();
+    },
+    e => {
+      document.getElementById('boostsBody').innerHTML =
+        `<tr><td colspan="5" class="spinner">Ошибка: ${escapeHtml(e.message)}</td></tr>`;
+    });
+}
+
+function renderBoosts() {
   const body = document.getElementById('boostsBody');
-  try {
-    const snap = await getDocs(collection(db, 'pushCampaigns'));
-    const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-      .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+  {
+    // Ждущие решения — сверху, дальше свежие первыми.
+    const rank = c => (c.status === 'pending' ? 0 : 1);
+    const rows = boosts.slice()
+      .sort((a, b) => rank(a) - rank(b) || (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
     if (!rows.length) { body.innerHTML = '<tr><td colspan="5" class="spinner">Нет кампаний</td></tr>'; return; }
     body.innerHTML = rows.map(c => {
       const st = boostStatus(c);
@@ -1302,15 +1393,13 @@ async function loadBoosts() {
            <button class="btn btn-secondary btn-sm" onclick="rejectBoost('${c.id}')">⨯ Отклонить</button>`
         : '';
       return `<tr>
-        <td><b>${c.headline || ''}</b></td>
-        <td>${(c.body || '').slice(0, 70)}</td>
-        <td>${c.city || ''}</td>
-        <td><span class="badge badge-${st.cls}">${st.label}</span></td>
+        <td><b>${escapeHtml(c.headline || '')}</b></td>
+        <td>${escapeHtml((c.body || '').slice(0, 70))}</td>
+        <td>${escapeHtml(c.city || '')}</td>
+        <td><span class="badge badge-${st.cls}">${escapeHtml(st.label)}</span></td>
         <td>${actions}</td>
       </tr>`;
     }).join('');
-  } catch (e) {
-    body.innerHTML = `<tr><td colspan="5" class="spinner">Ошибка: ${e.message}</td></tr>`;
   }
 }
 
@@ -1431,12 +1520,34 @@ window.saveSettings = async () => {
 
 const REPORT_REASONS = { fake: 'Фейк', spam: 'Спам', offensive: 'Оскорбительное' };
 
-async function loadReports() {
+// Страничная подписка: пока открыта вкладка «Жалобы», новые жалобы
+// появляются сами; при уходе со страницы листенер снимается (showPage).
+let reports = [];
+let reportsRenderGen = 0;
+function loadReports() {
+  const ready = subscribe('reviewReports', collection(db, 'reviewReports'),
+    snap => {
+      reports = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderReports();
+    },
+    e => {
+      document.getElementById('reportsBody').innerHTML =
+        `<tr><td colspan="5" class="spinner">Ошибка: ${escapeHtml(e.message)}</td></tr>`;
+    });
+  // Чекбокс «Показывать разобранные» зовёт loadReports() — подписка уже есть,
+  // просто перерисовываем из кэша.
+  renderReports();
+  return ready;
+}
+
+async function renderReports() {
   const body = document.getElementById('reportsBody');
   const showClosed = document.getElementById('reportsShowClosed').checked;
+  // Рендер асинхронный (тексты отзывов подтягиваются отдельно): снапшот,
+  // пришедший во время загрузки, не должен быть перезаписан старым рендером.
+  const gen = ++reportsRenderGen;
   try {
-    const snap = await getDocs(collection(db, 'reviewReports'));
-    let rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    let rows = reports.slice();
     if (!showClosed) rows = rows.filter(r => (r.status ?? 'open') === 'open');
     rows.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
     if (!rows.length) {
@@ -1447,11 +1558,13 @@ async function loadReports() {
     // коллекцию отзывов ради них — та самая ошибка, из-за которой убрали
     // fetchReviews() без аргументов (docs/design/system-design.md §2, B2).
     const texts = await Promise.all(rows.map(async r => {
+      if (!r.reviewID) return null;
       try {
         const d = await getDoc(doc(db, 'reviews', r.reviewID));
         return d.exists() ? d.data() : null;
       } catch { return null; }
     }));
+    if (gen !== reportsRenderGen) return;   // пришёл более свежий снапшот
     body.innerHTML = rows.map((r, i) => {
       const rv = texts[i];
       const closed = (r.status ?? 'open') !== 'open';
@@ -1467,14 +1580,15 @@ async function loadReports() {
            <button class="btn btn-secondary btn-sm" onclick="dismissReport('${r.id}')">Отклонить жалобу</button>`;
       return `<tr>
         <td>${text}</td>
-        <td>${REPORT_REASONS[r.reason] ?? r.reason ?? ''}</td>
+        <td>${escapeHtml(REPORT_REASONS[r.reason] ?? r.reason ?? '')}</td>
         <td>${escapeHtml(venueName(r.venueID))}</td>
         <td>${when}</td>
         <td>${actions}</td>
       </tr>`;
     }).join('');
   } catch (e) {
-    body.innerHTML = `<tr><td colspan="5" class="spinner">Ошибка: ${e.message}</td></tr>`;
+    if (gen === reportsRenderGen)
+      body.innerHTML = `<tr><td colspan="5" class="spinner">Ошибка: ${escapeHtml(e.message)}</td></tr>`;
   }
 }
 window.loadReports = loadReports;
@@ -1506,29 +1620,35 @@ window.dismissReport = async (reportID) => {
   } catch (e) { toast('Ошибка: ' + e.message, 'error'); }
 };
 
+// Список перерисует листенер pushCampaigns — перечитывать вручную не нужно.
 window.approveBoost = async (id) => {
-  await setDoc(doc(db, 'pushCampaigns', id), { status: 'approved' }, { merge: true });
-  toast('Кампания одобрена — рассылка запущена', 'success');
-  await loadBoosts();
+  try {
+    await setDoc(doc(db, 'pushCampaigns', id), { status: 'approved' }, { merge: true });
+    toast('Кампания одобрена — рассылка запущена', 'success');
+  } catch (e) { toast('Ошибка: ' + e.message, 'error'); }
 };
 window.rejectBoost = async (id) => {
-  await setDoc(doc(db, 'pushCampaigns', id), { status: 'rejected' }, { merge: true });
-  toast('Кампания отклонена', 'success');
-  await loadBoosts();
+  try {
+    await setDoc(doc(db, 'pushCampaigns', id), { status: 'rejected' }, { merge: true });
+    toast('Кампания отклонена', 'success');
+  } catch (e) { toast('Ошибка: ' + e.message, 'error'); }
 };
 
 let hosts = [];
-async function loadHosts() {
-  try {
-    const snap = await getDocs(collection(db, 'hosts'));
-    hosts = snap.docs.map(d => ({ uid: d.id, ...d.data() }));
-    const rank = v => (v === 'pending' ? 0 : v === 'rejected' ? 1 : 2);
-    hosts.sort((a, b) => rank(a.verification) - rank(b.verification));
-    renderHosts();
-  } catch (e) {
-    document.getElementById('hostsBody').innerHTML =
-      `<tr><td colspan="4" class="empty">Нет доступа к коллекции hosts. Опубликуй правила: firebase deploy --only firestore:rules<br><small>${e.message}</small></td></tr>`;
-  }
+function loadHosts() {
+  return subscribe('hosts', collection(db, 'hosts'),
+    snap => {
+      hosts = snap.docs.map(d => ({ uid: d.id, ...d.data() }));
+      const rank = v => (v === 'pending' ? 0 : v === 'rejected' ? 1 : 2);
+      hosts.sort((a, b) => rank(a.verification) - rank(b.verification)
+        || (a.businessName || '').localeCompare(b.businessName || ''));
+      setNavCount('navHostsCount', hosts.filter(h => h.verification === 'pending').length);
+      renderHosts();
+    },
+    e => {
+      document.getElementById('hostsBody').innerHTML =
+        `<tr><td colspan="4" class="empty">Нет доступа к коллекции hosts. Опубликуй правила: firebase deploy --only firestore:rules<br><small>${escapeHtml(e.message)}</small></td></tr>`;
+    });
 }
 
 function renderHosts() {
@@ -1547,8 +1667,8 @@ function renderHosts() {
          <button class="btn btn-secondary btn-sm" onclick="rejectHost('${h.uid}')">Отклонить</button>`;
     return `
     <tr>
-      <td><strong>${h.businessName || '—'}</strong></td>
-      <td>${h.email || ''}<br><small style="color:var(--muted)">${h.phone || ''}</small></td>
+      <td><strong>${escapeHtml(h.businessName || '—')}</strong></td>
+      <td>${escapeHtml(h.email || '')}<br><small style="color:var(--muted)">${escapeHtml(h.phone || '')}</small></td>
       <td><span class="badge badge-${cls}">${label}</span></td>
       <td><div class="row-actions">${btns}</div></td>
     </tr>`;
@@ -1576,29 +1696,48 @@ window.rejectHost = async (uid) => {
   catch (e) { toast('Ошибка: ' + e.message, 'error'); }
 };
 
-async function loadVenues() {
-  const snap = await getDocs(collection(db, 'venues'));
-  venues = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  // На модерации — выше, затем по имени.
-  const rank = s => ((s || 'approved') === 'pending' ? 0 : (s === 'rejected' ? 1 : 2));
-  venues.sort((a, b) => rank(a.status) - rank(b.status) || a.name.localeCompare(b.name));
-  renderVenues();
-  populateVenueSelect();
+// Сессионная подписка: заведение, созданное хостом, появляется в очереди
+// модерации без перезагрузки. Прежние вызовы `await loadVenues()` после записи
+// остаются безвредными — повторная подписка не создаётся.
+function loadVenues() {
+  return subscribe('venues', collection(db, 'venues'),
+    snap => {
+      venues = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      // На модерации — выше, затем по имени (имени может не быть у черновика).
+      const rank = s => ((s || 'approved') === 'pending' ? 0 : (s === 'rejected' ? 1 : 2));
+      venues.sort((a, b) => rank(a.status) - rank(b.status)
+        || (a.name || '').localeCompare(b.name || ''));
+      setNavCount('navVenuesCount', venues.filter(v => v.status === 'pending').length);
+      renderVenues();
+      populateVenueSelect();
+      // Названия заведений показываются в акциях, купонах и жалобах.
+      if (liveLoaded.has('deals')) renderDeals();
+      if (liveLoaded.has('couponOffers')) renderCoupons();
+    },
+    e => {
+      document.getElementById('venuesBody').innerHTML =
+        `<tr><td colspan="6" class="empty">Ошибка: ${escapeHtml(e.message)}</td></tr>`;
+    });
 }
 
 window.setVenueStatus = async (id, status) => {
   try {
     await setDoc(doc(db, 'venues', id), { status }, { merge: true });
-    await loadVenues();
     toast(status === 'approved' ? 'Заведение одобрено' : 'Статус обновлён', 'success');
   } catch (e) { toast('Ошибка: ' + e.message, 'error'); }
 };
 
-async function loadDeals() {
-  const snap = await getDocs(collection(db, 'deals'));
-  deals = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  deals.sort((a, b) => a.title.localeCompare(b.title));
-  renderDeals();
+function loadDeals() {
+  return subscribe('deals', collection(db, 'deals'),
+    snap => {
+      deals = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      deals.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+      renderDeals();
+    },
+    e => {
+      document.getElementById('dealsBody').innerHTML =
+        `<tr><td colspan="7" class="empty">Ошибка: ${escapeHtml(e.message)}</td></tr>`;
+    });
 }
 
 // ── RENDER VENUES ─────────────────────────────────────────────────────────
@@ -1621,22 +1760,23 @@ function renderVenues() {
   tbody.innerHTML = list.map(v => {
     const status = v.status || 'approved';
     const statusLabel = { pending:'На модерации', approved:'Одобрено', rejected:'Отклонено' }[status] || status;
-    const modBtns =
-      status !== 'approved'
-        ? `<button class="btn btn-success btn-sm" onclick="setVenueStatus('${v.id}','approved')">✓ Одобрить</button>`
-        : `<button class="btn btn-secondary btn-sm" onclick="setVenueStatus('${v.id}','rejected')">⨯ Отклонить</button>`;
+    // На модерации — обе кнопки; иначе — переход в противоположный статус.
+    const approveBtn = `<button class="btn btn-success btn-sm" onclick="setVenueStatus('${v.id}','approved')">✓ Одобрить</button>`;
+    const rejectBtn  = `<button class="btn btn-secondary btn-sm" onclick="setVenueStatus('${v.id}','rejected')">⨯ Отклонить</button>`;
+    const modBtns = status === 'pending' ? approveBtn + rejectBtn
+                  : status === 'approved' ? rejectBtn : approveBtn;
     return `
     <tr>
       <td class="emoji-cell">${v.emoji ?? '🍽'}</td>
-      <td><strong>${v.name}</strong>${(v.loyaltyEnabled && !v.pointsEnabled) ? ` <span class="badge" style="background:#fff0e8;color:#c0490f" title="${v.loyaltyGoal ?? 6} визитов → ${v.loyaltyReward ?? ''}">🎟 Лояльность</span>` : ''}<br><small style="color:var(--muted)">${v.address ?? ''}</small></td>
+      <td><strong>${escapeHtml(v.name ?? '')}</strong>${(v.loyaltyEnabled && !v.pointsEnabled) ? ` <span class="badge" style="background:#fff0e8;color:#c0490f" title="${v.loyaltyGoal ?? 6} визитов → ${v.loyaltyReward ?? ''}">🎟 Лояльность</span>` : ''}<br><small style="color:var(--muted)">${escapeHtml(v.address ?? '')}</small></td>
       <td><span class="badge badge-${v.category}">${categoryLabel(v.category)}</span></td>
-      <td>${v.district ?? ''}</td>
+      <td>${escapeHtml(v.district ?? '')}</td>
       <td><span class="badge badge-${status}">${statusLabel}</span></td>
       <td>
         <div class="row-actions">
           ${modBtns}
           <button class="btn btn-secondary btn-sm" onclick="openVenueModal('${v.id}')">✏️</button>
-          <button class="btn btn-danger btn-sm"    onclick="askDelete('venue','${v.id}','${v.name}')">🗑</button>
+          <button class="btn btn-danger btn-sm"    onclick="askDelete('venue','${v.id}')">🗑</button>
         </div>
       </td>
     </tr>`;
@@ -1652,20 +1792,20 @@ function renderDeals() {
   }
   tbody.innerHTML = deals.map(d => {
     const venue   = venues.find(v => v.id === d.venueID);
-    const until   = d.validUntil?.toDate ? d.validUntil.toDate() : new Date(d.validUntil);
-    const expired = until < new Date();
+    const until   = toDate(d.validUntil);
+    const expired = until ? until < new Date() : false;
     return `
     <tr style="${expired ? 'opacity:.45' : ''}">
       <td class="emoji-cell">${d.emoji ?? '🔥'}</td>
-      <td><strong>${d.title}</strong></td>
+      <td><strong>${escapeHtml(d.title ?? '')}</strong></td>
       <td><span class="badge badge-${d.type}">${typeLabel(d.type)}</span></td>
-      <td>${venue ? venue.name : d.venueID}</td>
+      <td>${escapeHtml(venue ? (venue.name ?? '') : (d.venueID ?? ''))}</td>
       <td>${d.discountPercent ? '−' + d.discountPercent + '%' : (d.newPrice ? d.newPrice + ' сом' : '—')}</td>
-      <td>${until.toLocaleDateString('ru-RU')}${expired ? ' ⚠️' : ''}</td>
+      <td>${until ? until.toLocaleDateString('ru-RU') : '—'}${expired ? ' ⚠️' : ''}</td>
       <td>
         <div class="row-actions">
           <button class="btn btn-secondary btn-sm" onclick="openDealModal('${d.id}')">✏️ Изменить</button>
-          <button class="btn btn-danger btn-sm"    onclick="askDelete('deal','${d.id}','${d.title}')">🗑</button>
+          <button class="btn btn-danger btn-sm"    onclick="askDelete('deal','${d.id}')">🗑</button>
         </div>
       </td>
     </tr>`}).join('');
@@ -1987,6 +2127,13 @@ window.saveDeal = async () => {
 
 // ── DELETE ────────────────────────────────────────────────────────────────
 window.askDelete = (type, id, name) => {
+  // Названия заведений/акций пишет хост — в inline-обработчик их не кладём
+  // (кавычка в названии ломала бы разметку), а берём по id.
+  if (name === undefined) {
+    name = type === 'venue' ? venues.find(v => v.id === id)?.name
+         : type === 'deal'  ? deals.find(d => d.id === id)?.title : undefined;
+    name = name ?? id;
+  }
   document.getElementById('confirmText').textContent = `«${name}» будет удалено безвозвратно.`;
   const coll = type === 'venue' ? 'venues' : (type === 'category' ? 'categories' : 'deals');
   pendingDeleteFn = async () => {
@@ -2008,6 +2155,15 @@ window.showPage = (page) => {
   document.querySelectorAll('nav button:not(#signOutBtn)').forEach(b => b.classList.remove('active'));
   document.getElementById('page' + page.charAt(0).toUpperCase() + page.slice(1)).classList.add('active');
   document.getElementById('nav'  + page.charAt(0).toUpperCase() + page.slice(1)).classList.add('active');
+  // Страничные листенеры других вкладок снимаем, чтобы не держать их фоном.
+  for (const [p, keys] of Object.entries(PAGE_SUBS)) {
+    if (p !== page) keys.forEach(unsubscribe);
+  }
+  // Сессионные подписки: если листенер упал (напр. сеть/правила), заход на
+  // вкладку переподписывает; если жив — ничего не делает.
+  if (page === 'venues') loadVenues();
+  if (page === 'deals') loadDeals();
+  if (page === 'hosts') loadHosts();
   if (page === 'boosts') loadBoosts();
   if (page === 'reports') loadReports();
   if (page === 'coupons') loadCoupons();
@@ -2019,54 +2175,105 @@ window.showPage = (page) => {
 // ── Купоны заведений ───────────────────────────────────────────────────────
 // Модерация: админ решает, можно ли продавать. Цену и текст задаёт заведение —
 // сюда они приходят только на проверку, править их отсюда незачем.
-async function loadCoupons() {
-  const body = document.getElementById('couponsBody');
-  const showAll = document.getElementById('couponsShowAll').checked;
-  try {
-    const snap = await getDocs(collection(db, 'couponOffers'));
-    let rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    if (!showAll) rows = rows.filter(r => (r.status ?? 'pending') === 'pending');
-    // Непроверенные сверху: очередь модерации, а не каталог.
-    rows.sort((a, b) => ((a.status ?? 'pending') === 'pending' ? -1 : 1));
-    if (!rows.length) {
-      body.innerHTML = `<tr><td colspan="6" class="spinner">${showAll ? 'Купонов нет' : 'Всё проверено'}</td></tr>`;
-      return;
-    }
-    body.innerHTML = rows.map(r => {
-      const status = r.status ?? 'pending';
-      const sold = r.soldCount ?? 0;
-      const stock = (r.stock === null || r.stock === undefined) ? null : r.stock;
-      const left = stock === null ? '∞' : Math.max(0, stock - sold);
-      const badge = status === 'approved' ? 'badge-approved'
-                  : status === 'rejected' ? 'badge-rejected' : 'badge-pending';
-      const label = status === 'approved' ? 'Одобрен'
-                  : status === 'rejected' ? 'Отклонён' : 'На модерации';
-      const paused = r.isPaused ? ' · снят заведением' : '';
-      return `
-        <tr>
-          <td>${escapeHtml(r.emoji ?? '')} ${escapeHtml(r.title ?? '')}
-            <div style="color:var(--muted);font-size:12px">${escapeHtml(r.details ?? '')}</div></td>
-          <td>${escapeHtml(r.venueName ?? r.venueID ?? '')}</td>
-          <td>${r.cost ?? 0}</td>
-          <td>${left}${sold ? ` <span style="color:var(--muted)">(продано ${sold})</span>` : ''}</td>
-          <td><span class="badge ${badge}">${label}</span>${paused}</td>
-          <td style="white-space:nowrap">
-            ${status !== 'approved' ? `<button class="btn btn-primary" onclick="setCouponStatus('${r.id}','approved')">Одобрить</button>` : ''}
-            ${status !== 'rejected' ? `<button class="btn btn-secondary" onclick="setCouponStatus('${r.id}','rejected')">Отклонить</button>` : ''}
-          </td>
-        </tr>`;
-    }).join('');
-  } catch (e) {
-    body.innerHTML = `<tr><td colspan="6" class="spinner">Ошибка: ${escapeHtml(e.message)}</td></tr>`;
-  }
+//
+// Живая подписка на всю коллекцию `couponOffers` (без where/orderBy: документ
+// без поля, по которому сортирует запрос, Firestore молча выкидывает — поэтому
+// сортируем и фильтруем на клиенте). Имена полей — те же, что в
+// FS.CouponOfferDoc (AyantData/.../FirestoreSchema.swift): venueID, venueName,
+// title, details, emoji, imageURL, cost, stock, soldCount, expiresAt, status,
+// isPaused, ownerID, city. Панель пишет ТОЛЬКО `status`: soldCount считает
+// сервер при покупке, остальное принадлежит заведению.
+let couponOffers = [];
+
+function loadCoupons() {
+  return subscribe('couponOffers', collection(db, 'couponOffers'),
+    snap => {
+      couponOffers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setNavCount('navCouponsCount',
+        couponOffers.filter(r => (r.status ?? 'pending') === 'pending').length);
+      const live = document.getElementById('couponsLive');
+      if (live) live.textContent = '● обновлено ' + new Date().toLocaleTimeString('ru-RU');
+      renderCoupons();
+    },
+    e => {
+      document.getElementById('couponsBody').innerHTML =
+        `<tr><td colspan="7" class="spinner">Ошибка: ${escapeHtml(e.message)}</td></tr>`;
+      const live = document.getElementById('couponsLive');
+      if (live) live.textContent = 'нет связи — откройте вкладку ещё раз';
+    });
 }
 
+const COUPON_STATUS = {
+  pending:  { label: 'На модерации', cls: 'badge-pending',  rank: 0 },
+  approved: { label: 'Одобрен',      cls: 'badge-approved', rank: 1 },
+  rejected: { label: 'Отклонён',     cls: 'badge-rejected', rank: 2 },
+};
+
+function renderCoupons() {
+  const body = document.getElementById('couponsBody');
+  if (!body) return;
+  const filter = document.getElementById('couponsFilter')?.value || 'all';
+  const statusOf = r => (COUPON_STATUS[r.status] ? r.status : 'pending');
+  let rows = couponOffers.slice();
+  if (filter !== 'all') rows = rows.filter(r => statusOf(r) === filter);
+  // Непроверенные сверху: очередь модерации, а не каталог. Дальше — по
+  // заведению и названию, чтобы строки не прыгали при каждом снапшоте.
+  const vName = r => r.venueName || venueName(r.venueID) || '';
+  rows.sort((a, b) => COUPON_STATUS[statusOf(a)].rank - COUPON_STATUS[statusOf(b)].rank
+    || vName(a).localeCompare(vName(b))
+    || (a.title || '').localeCompare(b.title || '')
+    || a.id.localeCompare(b.id));
+  if (!rows.length) {
+    const empty = filter === 'pending' ? 'Всё проверено' : 'Купонов нет';
+    body.innerHTML = `<tr><td colspan="7" class="spinner">${empty}</td></tr>`;
+    return;
+  }
+  const now = new Date();
+  body.innerHTML = rows.map(r => {
+    const status = statusOf(r);
+    const st = COUPON_STATUS[status];
+    const sold = Number(r.soldCount) || 0;
+    const stock = (r.stock === null || r.stock === undefined) ? null : Number(r.stock);
+    const left = stock === null ? null : Math.max(0, stock - sold);
+    const expires = toDate(r.expiresAt);
+    const expired = expires ? expires < now : false;
+    // Почему купон сейчас не продаётся, даже если одобрен.
+    const flags = [];
+    if (r.isPaused) flags.push('<span class="badge badge-muted">снят заведением</span>');
+    if (left === 0) flags.push('<span class="badge badge-muted">распродан</span>');
+    if (expired)    flags.push('<span class="badge badge-muted">срок истёк</span>');
+    const selling = status === 'approved' && !r.isPaused && left !== 0 && !expired;
+    const venueLabel = r.venueName || venueName(r.venueID) || '—';
+    return `
+      <tr style="${(expired || r.isPaused) ? 'opacity:.6' : ''}">
+        <td>${escapeHtml(r.emoji ?? '')} <strong>${escapeHtml(r.title ?? '(без названия)')}</strong>
+          <div style="color:var(--muted);font-size:12px">${escapeHtml(r.details ?? '')}</div></td>
+        <td>${escapeHtml(venueLabel)}</td>
+        <td>${Number(r.cost) || 0}</td>
+        <td>${left === null ? '∞' : left}${stock !== null ? ` из ${stock}` : ''}
+          <div style="color:var(--muted);font-size:12px">продано ${sold}</div></td>
+        <td>${expires ? expires.toLocaleDateString('ru-RU') : 'бессрочно'}</td>
+        <td><span class="badge ${st.cls}">${st.label}</span>
+          ${selling ? '<div style="color:var(--success);font-size:12px">продаётся</div>' : ''}
+          ${flags.length ? `<div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap">${flags.join('')}</div>` : ''}</td>
+        <td style="white-space:nowrap">
+          ${status !== 'approved' ? `<button class="btn btn-success btn-sm" onclick="setCouponStatus('${r.id}','approved')">✓ Одобрить</button>` : ''}
+          ${status !== 'rejected' ? `<button class="btn btn-secondary btn-sm" onclick="setCouponStatus('${r.id}','rejected')">⨯ Отклонить</button>` : ''}
+        </td>
+      </tr>`;
+  }).join('');
+}
+window.renderCoupons = renderCoupons;
+window.loadCoupons = loadCoupons;
+
+// Пишем только status (правила: заведение его менять не может, админ — может).
+// Таблицу перерисует листенер.
 window.setCouponStatus = async (id, status) => {
   try {
     await updateDoc(doc(db, 'couponOffers', id), { status });
-    loadCoupons();
+    toast(status === 'approved' ? 'Купон одобрен — теперь он продаётся' : 'Купон отклонён', 'success');
   } catch (e) {
-    alert('Не удалось сохранить: ' + e.message);
+    toast('Не удалось сохранить: ' + e.message, 'error');
   }
 };
 

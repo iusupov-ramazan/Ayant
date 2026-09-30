@@ -307,7 +307,8 @@ extension Deal {
             imageEmojis: d[FS.DealDoc.imageEmojis] as? [String] ?? [],
             imageURL: d.string(FS.DealDoc.imageURL),
             imageURLs: d[FS.DealDoc.imageURLs] as? [String] ?? [],
-            terms: d[FS.DealDoc.terms] as? [String] ?? []
+            terms: d[FS.DealDoc.terms] as? [String] ?? [],
+            locationIDs: d[FS.DealDoc.locationIDs] as? [String] ?? []
         )
     }
 }
@@ -656,6 +657,9 @@ extension HostDealDTO {
         d[FS.DealDoc.terms] = terms
         // Источник импорта: по нему кабинет помечает пост как уже добавленный.
         if let sourcePostID, !sourcePostID.isEmpty { d[FS.DealDoc.igPostID] = sourcePostID }
+        // Пишется всегда, в том числе пустым: вернуть акцию «во все адреса»
+        // — это стереть прежний список, а не оставить его как был.
+        d[FS.DealDoc.locationIDs] = locationIDs
         return d
     }
 
@@ -677,7 +681,8 @@ extension HostDealDTO {
             imageURL: d.string(FS.DealDoc.imageURL) ?? "",
             imageURLs: d[FS.DealDoc.imageURLs] as? [String] ?? [],
             terms: d[FS.DealDoc.terms] as? [String] ?? [],
-            sourcePostID: d.string(FS.DealDoc.igPostID))
+            sourcePostID: d.string(FS.DealDoc.igPostID),
+            locationIDs: d[FS.DealDoc.locationIDs] as? [String] ?? [])
     }
 }
 

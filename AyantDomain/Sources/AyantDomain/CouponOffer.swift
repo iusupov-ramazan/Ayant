@@ -99,6 +99,9 @@ public struct CouponOffer: Identifiable, Codable, Equatable, Sendable {
     /// стороны. Проверка живёт здесь, а не в экране: её повторяет сервер в
     /// `buyCoupon`, и расходиться они не должны.
     public func isAvailable(at now: Date) -> Bool {
+        // Цена и заведение — те же проверки, что у buyCoupon: купон без цены
+        // или без стойки, где его гасить, продавать нечем.
         status == .approved && !isPaused && !isSoldOut && !isExpired(at: now)
+            && cost > 0 && !venueID.isEmpty
     }
 }

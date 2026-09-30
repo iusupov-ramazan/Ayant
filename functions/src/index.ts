@@ -79,6 +79,8 @@ const WEEKLY_CAP = capFromEnv(process.env.PUSH_WEEKLY_CAP, 3);
 
 // Награды за рефералку (бонусы).
 const REFERRAL_REWARD = 100;
+// Приветственный бонус тому, кого пригласили.
+const REFERRAL_WELCOME = 100;
 // Анти-фарм: потолок реферальных наград на одного пригласившего. Без него можно
 // нафармить бонусы, создав N аккаунтов, каждый из которых указывает твой userID
 // пригласившим (Sybil). Настраивается через env REFERRAL_MAX_REWARDS.
@@ -699,6 +701,19 @@ export const rewardReferral = onDocumentCreated("referrals/{inviteeID}", async (
     amount: REFERRAL_REWARD,
     reason: "referral",
     inviteeID,
+    claimed: false,
+    createdAt: new Date(),
+  });
+  // Приветственный бонус приглашённому — тоже грантом: с серверным кошельком
+  // клиент больше не начисляет его сам (это было бы число на телефоне).
+  // Документ с фиксированным id — повторный запуск триггера его не удвоит.
+  // Под потолком пригласившего не выдаётся: иначе фарм аккаунтами (Sybil)
+  // приносил бы по 100 бонусов за каждый новый аккаунт.
+  await db.collection("bonusGrants").doc(`welcome_${inviteeID}`).set({
+    userID: inviteeID,
+    amount: REFERRAL_WELCOME,
+    reason: "welcome",
+    referrerID,
     claimed: false,
     createdAt: new Date(),
   });
@@ -1542,7 +1557,8 @@ const HEARTBEAT_STALE_HOURS = 26;
 /** Не заваливаем алертами: в один прогон пишем не больше стольких расхождений. */
 const MAX_ALERTS_PER_RUN = 50;
 
-type AlertKind = "balance_mismatch" | "job_stale" | "issuance_spike";
+type AlertKind = "balance_mismatch" | "job_stale" | "issuance_spike"
+  | "wallet_mismatch" | "wallet_cap_hit";
 
 async function raiseAlert(kind: AlertKind, detail: Record<string, unknown>): Promise<void> {
   console.error(`ALERT ${kind}`, JSON.stringify(detail));
@@ -1696,6 +1712,8 @@ export const deleteAccount = onRequest({ cors: true }, async (req, res) => {
     // 4) Документы с uid в качестве id.
     await db.collection("referrals").doc(uid).delete().catch(() => undefined);
     await db.collection("hosts").doc(uid).delete().catch(() => undefined);
+    // Кошелёк бонусов вместе с ledger и ключами идемпотентности.
+    try { await db.recursiveDelete(db.collection("bonusWallets").doc(uid)); } catch { /* кошелька нет */ }
 
     // 5) Сама запись Auth — последней: пока она есть, вызов можно повторить.
     await getAuth().deleteUser(uid);
@@ -2198,4 +2216,436 @@ export const instagramDataDeletion = onRequest(igOptions, async (req, res) => {
   // Формат ответа задан Meta: страница статуса + код обращения.
   const code = crypto.createHash("sha256").update(userID).digest("hex").slice(0, 16);
   res.status(200).json({ url: `https://ayant.kg/ig/deletion?code=${code}`, confirmation_code: code });
+});
+
+/* ───────────────────────────────────────────────────────────────────────────
+ * 9) ГЛОБАЛЬНЫЙ КОШЕЛЁК БОНУСОВ — на сервере.
+ *
+ *    Раньше баланс жил только на телефоне (`@AppStorage("san.bonus.balance")`).
+ *    Пока бонусы покупали награды, которые нельзя погасить, это ничего не
+ *    стоило; с купонами заведений, которые отдаются по-настоящему, число на
+ *    телефоне стало генератором бесплатного кофе. Теперь источник правды —
+ *    `bonusWallets/{uid}` (читает только владелец, пишут только функции):
+ *
+ *    • bonusWalletSync — один раз переносит баланс с устройства (с потолком
+ *      BONUS_MIGRATION_CAP) и зачисляет незабранные `bonusGrants` (рефералка).
+ *    • earnBonus — начисление за игры и время в приложении. Проверить игру
+ *      сервер не может, поэтому держит потолки: за вызов и за сутки.
+ *    • buyCoupon — покупка купона заведения (`couponOffers`) или награды из
+ *      каталога (`config/globalRewards`), в том числе подарком. Одна
+ *      транзакция: доступность → баланс → списание → soldCount → купон.
+ *
+ *    Все три идемпотентны по ключу клиента — как scanCoupon/redeemVenuePoints:
+ *    повтор с тем же ключом возвращает исходный ответ, не начисляя/не списывая
+ *    второй раз; тот же ключ на другую покупку — 409 key_reused.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+// Потолок одного начисления: самая щедрая партия (2048 до 2048, долгая Змейка)
+// приносит десятки бонусов, не сотни.
+const BONUS_EARN_MAX_PER_CALL = 100;
+// Потолок в сутки на пользователя по всем источникам. Дневного лимита у игр
+// нет по решению владельца (2026-09-22) — но это лимит для ЧЕЛОВЕКА. При
+// GameEconomy.minutesPerBonus = 1 тысяча бонусов — это ~16 часов игры подряд:
+// человек в него не упрётся, а скрипт, дёргающий earnBonus, упрётся.
+const BONUS_DAILY_EARN_CAP = capFromEnv(process.env.BONUS_DAILY_EARN_CAP, 1000);
+// Сколько баланса с устройства сервер принимает на веру при переносе. Число на
+// телефоне ничем не подтверждено — поправленное вручную «99999» не должно
+// стать настоящими деньгами.
+const BONUS_MIGRATION_CAP = capFromEnv(process.env.BONUS_MIGRATION_CAP, 1000);
+// Перенос баланса устройства — только для аккаунтов, созданных ДО серверного
+// кошелька. Иначе каждый новый аккаунт приносил бы BONUS_MIGRATION_CAP бонусов
+// одним вызовом — фабрика бонусов из регистраций.
+const BONUS_MIGRATION_CUTOFF_MS = Date.parse(
+  process.env.BONUS_MIGRATION_CUTOFF || "2026-10-01T00:00:00+06:00");
+// Источники начисления. «game:<id>» — любая мини-игра, «time» — активное время.
+const BONUS_EARN_SOURCE = /^(time|game(:[a-z0-9_]{1,24})?)$/;
+// Дневные потолки отдельных источников — зеркало клиентских правил, которым
+// сервер не может верить на слово. «Diamond» (бывшая «Три в ряд») бесконечна
+// и платит не больше GameEconomy.endlessDailyBonusCap в сутки.
+const BONUS_SOURCE_DAILY_CAPS: Record<string, number> = { "game:diamond": 30 };
+
+/** Сутки кошелька — по Бишкеку: «сегодня» у гостя, а не у сервера в США. */
+function bishkekDayKey(ms: number): string {
+  return new Date(ms + 6 * 3600000).toISOString().slice(0, 10);   // UTC+6, без перехода на летнее
+}
+
+/** uid из Bearer-токена или ответ 401. Общий вход для трёх функций кошелька. */
+async function walletUser(req: any, res: any, label: string): Promise<string | null> {
+  if (req.method !== "POST") { res.status(405).json({ error: "method_not_allowed" }); return null; }
+  if (!(await checkAppCheck(req, label))) { res.status(401).json({ error: "app_check_failed" }); return null; }
+  const authz = String(req.get("Authorization") || "");
+  const idToken = authz.startsWith("Bearer ") ? authz.slice(7) : "";
+  if (!idToken) { res.status(401).json({ error: "no_token" }); return null; }
+  let decoded: any;
+  try { decoded = await getAuth().verifyIdToken(idToken); }
+  catch { res.status(401).json({ error: "bad_token" }); return null; }
+  // Анонимный вход доступен любому скрипту (ключ веб-API публичный): кошелёк
+  // на таком аккаунте — это бонусы без человека. Приложение гостям кошелёк и
+  // так не даёт; здесь то же правило, но уже для всех.
+  if (decoded && decoded.firebase && decoded.firebase.sign_in_provider === "anonymous") {
+    res.status(403).json({ error: "anonymous_not_allowed" }); return null;
+  }
+  return String(decoded.uid);
+}
+
+/** Создан ли аккаунт до серверного кошелька (право на перенос баланса). */
+async function createdBeforeWallet(uid: string): Promise<boolean> {
+  try {
+    const user = await getAuth().getUser(uid);
+    const created = Date.parse(String(user.metadata && user.metadata.creationTime));
+    return Number.isFinite(created) && created < BONUS_MIGRATION_CUTOFF_MS;
+  } catch { return false; }
+}
+
+function walletKey(req: any): string {
+  return String((req.body && req.body.idempotencyKey) || "").trim().slice(0, 128);
+}
+
+function intOf(v: unknown): number { return parseInt(String(v), 10) || 0; }
+
+/** Код подарка: «GIFT-» + 8 символов без похожих (0/O, 1/I). */
+function newGiftCode(): string {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let s = "";
+  for (const b of crypto.randomBytes(8)) s += alphabet[b % alphabet.length];
+  return `GIFT-${s}`;
+}
+
+export const bonusWalletSync = onRequest(MONEY_PATH_OPTS, async (req, res) => {
+  try {
+    const uid = await walletUser(req, res, "bonusWalletSync");
+    if (!uid) return;
+    const eligible = await createdBeforeWallet(uid);
+    const localBalance = eligible ? Math.max(0, intOf(req.body && req.body.localBalance)) : 0;
+    const walletRef = db.collection("bonusWallets").doc(uid);
+
+    // Незабранные награды (рефералка) — запросом ВНЕ транзакции (в ней нет
+    // запросов), а внутри каждую перечитываем: забранную параллельно не
+    // зачислим второй раз.
+    const grantsSnap = await db.collection("bonusGrants").where("userID", "==", uid).get();
+    const grantRefs = grantsSnap.docs
+      .filter((d) => (d.data() || {}).claimed !== true)
+      .map((d) => d.ref);
+
+    let balance = 0;
+    let migrated = 0;
+    let granted = 0;
+    await db.runTransaction(async (tx) => {
+      const walletSnap = await tx.get(walletRef);
+      const grants = await Promise.all(grantRefs.map((r) => tx.get(r)));
+      const cur = walletSnap.exists ? (walletSnap.data() || {}) : null;
+      balance = cur ? intOf(cur.balance) : 0;
+      let lifetimeEarned = cur ? intOf(cur.lifetimeEarned) : 0;
+      const now = new Date();
+
+      if (!cur) {
+        // Первый вход с серверным кошельком: переносим то, что было на телефоне.
+        migrated = Math.min(localBalance, BONUS_MIGRATION_CAP);
+        balance += migrated;
+        lifetimeEarned += migrated;
+        if (migrated > 0) {
+          tx.set(walletRef.collection("ledger").doc(), {
+            type: "migrate", amount: migrated, claimed: localBalance, at: now,
+          });
+        }
+      }
+      for (const g of grants) {
+        const d = g.data() || {};
+        if (!g.exists || d.claimed === true) continue;
+        const amount = Math.max(0, intOf(d.amount));
+        granted += amount;
+        tx.set(g.ref, { claimed: true, claimedAt: now, claimedBy: "wallet" }, { merge: true });
+        tx.set(walletRef.collection("ledger").doc(), {
+          type: "grant", amount, reason: String(d.reason || ""), grantID: g.ref.id, at: now,
+        });
+      }
+      balance += granted;
+      lifetimeEarned += granted;
+      tx.set(walletRef, {
+        balance, lifetimeEarned,
+        lifetimeSpent: cur ? intOf(cur.lifetimeSpent) : 0,
+        ...(cur ? {} : { createdAt: now }),
+        updatedAt: now,
+      }, { merge: true });
+    });
+    res.status(200).json({ ok: true, balance, migrated, granted });
+  } catch (e: any) {
+    console.error("bonusWalletSync error:", e);
+    res.status(500).json({ error: "sync_failed" });
+  }
+});
+
+export const earnBonus = onRequest(MONEY_PATH_OPTS, async (req, res) => {
+  try {
+    const uid = await walletUser(req, res, "earnBonus");
+    if (!uid) return;
+    const amount = intOf(req.body && req.body.amount);
+    const source = String((req.body && req.body.source) || "").trim();
+    const key = walletKey(req);
+    if (!key) { res.status(400).json({ error: "missing_key" }); return; }
+    if (amount <= 0) { res.status(400).json({ error: "bad_amount" }); return; }
+    if (!BONUS_EARN_SOURCE.test(source)) { res.status(400).json({ error: "bad_source" }); return; }
+
+    const walletRef = db.collection("bonusWallets").doc(uid);
+    const keyRef = walletRef.collection("earnKeys").doc(key);
+    const nowMs = Date.now();
+    const day = bishkekDayKey(nowMs);
+
+    let granted = 0;
+    let balance = 0;
+    let replayed = false;
+    await db.runTransaction(async (tx) => {
+      const prior = await tx.get(keyRef);
+      const walletSnap = await tx.get(walletRef);
+      if (prior.exists) {
+        const p = prior.data() || {};
+        if (intOf(p.requested) !== amount || String(p.source || "") !== source) throw new Error("key_reused");
+        granted = intOf(p.granted);
+        balance = intOf((walletSnap.data() || {}).balance);
+        replayed = true;
+        return;
+      }
+      // Кошелёк заводит bonusWalletSync: начисление раньше переноса затёрло бы
+      // баланс устройства нулём. Клиент держит начисление в очереди и повторит.
+      if (!walletSnap.exists) throw new Error("no_wallet");
+      const cur = walletSnap.data() || {};
+      const sameDay = String(cur.earnDay || "") === day;
+      const earnedToday = sameDay ? intOf(cur.earnedToday) : 0;
+      const bySource: Record<string, number> = sameDay && cur.earnedBySource ? { ...cur.earnedBySource } : {};
+      const sourceCap = BONUS_SOURCE_DAILY_CAPS[source];
+      const sourceLeft = sourceCap === undefined ? Infinity : sourceCap - intOf(bySource[source]);
+      granted = Math.max(0, Math.min(amount, BONUS_EARN_MAX_PER_CALL,
+        BONUS_DAILY_EARN_CAP - earnedToday, sourceLeft));
+      bySource[source] = intOf(bySource[source]) + granted;
+      balance = intOf(cur.balance) + granted;
+      const now = new Date(nowMs);
+      tx.set(walletRef, {
+        balance,
+        lifetimeEarned: intOf(cur.lifetimeEarned) + granted,
+        earnDay: day, earnedToday: earnedToday + granted, earnedBySource: bySource,
+        updatedAt: now,
+      }, { merge: true });
+      if (granted > 0) {
+        tx.set(walletRef.collection("ledger").doc(), {
+          type: "earn", amount: granted, requested: amount, source, at: now,
+        });
+      }
+      tx.set(keyRef, { requested: amount, source, granted, at: now });
+    });
+    // `granted` может быть меньше запрошенного (потолок) — клиент показывает его.
+    res.status(200).json({ ok: true, granted, balance, replayed });
+  } catch (e: any) {
+    const m = String(e.message);
+    if (m === "key_reused" || m === "no_wallet") { res.status(409).json({ error: m }); return; }
+    console.error("earnBonus error:", e);
+    res.status(500).json({ error: "earn_failed" });
+  }
+});
+
+export const buyCoupon = onRequest(MONEY_PATH_OPTS, async (req, res) => {
+  try {
+    const uid = await walletUser(req, res, "buyCoupon");
+    if (!uid) return;
+    const offerID = String((req.body && req.body.offerID) || "").trim();
+    const rewardID = String((req.body && req.body.rewardID) || "").trim();
+    const asGift = req.body && req.body.asGift === true;
+    const fromName = String((req.body && req.body.fromName) || "").trim().slice(0, 80);
+    const key = walletKey(req);
+    if (!key) { res.status(400).json({ error: "missing_key" }); return; }
+    if (!offerID === !rewardID) { res.status(400).json({ error: "missing_params" }); return; }
+    // Подарок — только награда каталога: купон заведения привязан к гостю,
+    // который его купил, передавать его — значит продавать мимо остатка.
+    if (asGift && !rewardID) { res.status(400).json({ error: "gift_not_allowed" }); return; }
+    const ref = offerID ? `offer:${offerID}` : `reward:${rewardID}${asGift ? ":gift" : ""}`;
+
+    const walletRef = db.collection("bonusWallets").doc(uid);
+    const keyRef = walletRef.collection("buyKeys").doc(key);
+    const offerRef = offerID ? db.collection("couponOffers").doc(offerID) : null;
+    const catalogRef = db.collection("config").doc("globalRewards");
+    const nowMs = Date.now();
+
+    let out: Record<string, unknown> = {};
+    await db.runTransaction(async (tx) => {
+      // ВСЕ чтения — до записей.
+      const prior = await tx.get(keyRef);
+      const walletSnap = await tx.get(walletRef);
+      const offerSnap = offerRef ? await tx.get(offerRef) : null;
+      const catalogSnap = rewardID ? await tx.get(catalogRef) : null;
+      // Заведение купона — тоже чтение, и тоже до записей.
+      const offerVenueID = offerSnap && offerSnap.exists ? String((offerSnap.data() || {}).venueID || "") : "";
+      const offerVenueSnap = offerVenueID ? await tx.get(db.collection("venues").doc(offerVenueID)) : null;
+
+      if (prior.exists) {
+        const p = prior.data() || {};
+        if (String(p.ref || "") !== ref) throw new Error("key_reused");
+        out = { ...(p.response || {}), replayed: true };
+        return;
+      }
+      if (!walletSnap.exists) throw new Error("no_wallet");
+      const wallet = walletSnap.data() || {};
+
+      // Что покупаем и за сколько — только из серверных данных, не из запроса.
+      let cost = 0;
+      let title = "";
+      let venueID = "";
+      let venueName = "";
+      if (offerSnap) {
+        if (!offerSnap.exists) throw new Error("not_found");
+        const o = offerSnap.data() || {};
+        const stock = o.stock === null || o.stock === undefined ? null : intOf(o.stock);
+        const sold = intOf(o.soldCount);
+        const expires = toMillis(o.expiresAt);
+        // Те же четыре причины отказа, что в `CouponOffer.isAvailable(at:)`.
+        if (String(o.status || "") !== "approved" || o.isPaused === true) throw new Error("unavailable");
+        if (expires > 0 && expires < nowMs) throw new Error("unavailable");
+        if (stock !== null && sold >= stock) throw new Error("sold_out");
+        // Купон гасится у заведения из `venueID`. Если это заведение не
+        // принадлежит владельцу купона, купон перенацелили на чужую стойку —
+        // не продаём.
+        const venueOwner = String(((offerVenueSnap && offerVenueSnap.data()) || {}).ownerID || "");
+        if (!venueOwner || venueOwner !== String(o.ownerID || "")) throw new Error("unavailable");
+        cost = intOf(o.cost);
+        title = String(o.title || "");
+        venueID = String(o.venueID || "");
+        venueName = String(o.venueName || "");
+      } else {
+        const items: any[] = ((catalogSnap && catalogSnap.data()) || {}).items || [];
+        const item = items.find((i) => String(i && i.id) === rewardID);
+        // Награда без заведения-партнёра не гасится у стойки (wrong_venue) —
+        // продавать её не за что.
+        if (!item || !String(item.venueID || "")) throw new Error("not_found");
+        cost = intOf(item.cost);
+        title = String(item.title || "");
+        venueID = String(item.venueID || "");
+        venueName = String(item.venueName || "");
+      }
+      if (cost <= 0 || !venueID) throw new Error("unavailable");
+
+      const bal = intOf(wallet.balance);
+      if (bal < cost) throw new Error("insufficient");
+      const balance = bal - cost;
+      const now = new Date(nowMs);
+
+      tx.set(walletRef, {
+        balance, lifetimeSpent: intOf(wallet.lifetimeSpent) + cost, updatedAt: now,
+      }, { merge: true });
+      if (offerRef) tx.set(offerRef, { soldCount: intOf((offerSnap!.data() || {}).soldCount) + 1 }, { merge: true });
+
+      if (asGift) {
+        // Подарок — документ giftCoupons, как раньше создавал клиент; забирает
+        // получатель по коду из ссылки.
+        const giftCode = newGiftCode();
+        tx.set(db.collection("giftCoupons").doc(giftCode), {
+          title, code: giftCode, fromName, fromUserID: uid, claimed: false, createdAt: now,
+          venueID, venueName, rewardID,
+        });
+        out = { ok: true, gift: true, giftCode, title, cost, balance };
+      } else {
+        const couponRef = db.collection("coupons").doc();
+        const code = newCouponCode();
+        tx.set(couponRef, {
+          userID: uid, venueID, venueName, title, code,
+          kind: offerID ? "offer" : "reward", dealID: "",
+          used: false, createdAt: now,
+          source: offerID ? "couponOffer" : "globalReward", refID: offerID || rewardID,
+        });
+        out = { ok: true, couponID: couponRef.id, code, title, venueID, venueName, cost, balance };
+      }
+      tx.set(walletRef.collection("ledger").doc(), {
+        type: "spend", amount: -cost, ref, at: now,
+      });
+      tx.set(keyRef, { ref, response: out, at: now });
+      out = { ...out, replayed: false };
+    });
+    res.status(200).json(out);
+  } catch (e: any) {
+    const m = String(e.message);
+    if (m === "not_found") { res.status(404).json({ error: m }); return; }
+    if (["insufficient", "sold_out", "unavailable", "key_reused", "no_wallet"].includes(m)) {
+      res.status(409).json({ error: m }); return;
+    }
+    console.error("buyCoupon error:", e);
+    res.status(500).json({ error: "buy_failed" });
+  }
+});
+
+/* Забрать подарок. Раньше получатель помечал `giftCoupons/{code}` сам и
+ * клал себе купон БЕЗ заведения — такой купон не гасится у стойки, и
+ * бонусы дарителя пропадали. Теперь купон создаёт сервер, с заведением из
+ * подарка (его записал buyCoupon), в одной транзакции с пометкой claimed.
+ * Подарки старых сборок (без fromUserID — создавал клиент) забираются как
+ * раньше: купон без заведения, чтобы не превращать клиентскую запись в
+ * гасимый товар. */
+export const claimGift = onRequest(MONEY_PATH_OPTS, async (req, res) => {
+  try {
+    const uid = await walletUser(req, res, "claimGift");
+    if (!uid) return;
+    const code = String((req.body && req.body.code) || "").trim().slice(0, 64);
+    if (!code) { res.status(400).json({ error: "missing_code" }); return; }
+    const giftRef = db.collection("giftCoupons").doc(code);
+    let out: Record<string, unknown> = {};
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(giftRef);
+      if (!snap.exists) throw new Error("not_found");
+      const g = snap.data() || {};
+      if (g.claimed === true) {
+        // Повтор тем же получателем — отдаём тот же купон.
+        if (String(g.claimedBy || "") === uid && g.couponID) {
+          out = { ok: true, replayed: true, couponID: g.couponID, code: g.couponCode,
+            title: g.title, venueID: g.venueID || "", venueName: g.venueName || "" };
+          return;
+        }
+        throw new Error("already_claimed");
+      }
+      if (String(g.fromUserID || "") === uid) throw new Error("own_gift");
+      const serverMade = !!String(g.fromUserID || "");
+      const venueID = serverMade ? String(g.venueID || "") : "";
+      const venueName = serverMade ? String(g.venueName || "") : "";
+      const couponRef = db.collection("coupons").doc();
+      const couponCode = newCouponCode();
+      const now = new Date();
+      tx.set(couponRef, {
+        userID: uid, venueID, venueName, title: String(g.title || ""), code: couponCode,
+        kind: "gift", dealID: "", used: false, createdAt: now, source: "gift", refID: code,
+      });
+      tx.set(giftRef, { claimed: true, claimedBy: uid, claimedAt: now,
+        couponID: couponRef.id, couponCode }, { merge: true });
+      out = { ok: true, couponID: couponRef.id, code: couponCode, title: String(g.title || ""),
+        venueID, venueName, replayed: false };
+    });
+    res.status(200).json(out);
+  } catch (e: any) {
+    const m = String(e.message);
+    if (m === "not_found") { res.status(404).json({ error: m }); return; }
+    if (m === "already_claimed" || m === "own_gift") { res.status(409).json({ error: m }); return; }
+    console.error("claimGift error:", e);
+    res.status(500).json({ error: "claim_failed" });
+  }
+});
+
+/* Ночная сверка кошельков бонусов — как reconcileVenuePoints для баллов.
+ * Проверить игру сервер не может, поэтому это единственный детектор фарма
+ * «после факта»: баланс ≠ сумме ledger (деньги потеряны или напечатаны) и
+ * аккаунты, упёршиеся в дневной потолок начисления. */
+export const reconcileBonusWallets = onSchedule("every 24 hours", async () => {
+  const today = bishkekDayKey(Date.now());
+  const wallets = await db.collection("bonusWallets").get();
+  let checked = 0, mismatches = 0, capped = 0;
+  for (const w of wallets.docs) {
+    const data = w.data() || {};
+    const balance = intOf(data.balance);
+    const ledger = await w.ref.collection("ledger").get();
+    let sum = 0;
+    for (const entry of ledger.docs) sum += intOf((entry.data() || {}).amount);
+    checked++;
+    if (sum !== balance) {
+      mismatches++;
+      await raiseAlert("wallet_mismatch", { userID: w.id, balance, ledgerSum: sum });
+    }
+    if (String(data.earnDay || "") === today && intOf(data.earnedToday) >= BONUS_DAILY_EARN_CAP) {
+      capped++;
+      await raiseAlert("wallet_cap_hit", { userID: w.id, earnedToday: intOf(data.earnedToday) });
+    }
+  }
+  console.log(`🧾 wallets reconciled: ${checked}, mismatches: ${mismatches}, at cap: ${capped}`);
 });
