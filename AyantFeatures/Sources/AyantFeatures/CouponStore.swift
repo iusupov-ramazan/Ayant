@@ -51,10 +51,45 @@ public final class CouponStore: ObservableObject {
     public func sync(userID: String) async {
         self.userID = userID
         guard !userID.isEmpty, let fetched = try? await backend.fetchCoupons(userID: userID) else { return }
+        merge(fetched)
+    }
+
+    /// Слушает купоны пользователя на сервере. Купон гасит сотрудник —
+    /// сканом или вводом кода, — и `used` приходит сюда сразу: раньше купон
+    /// оставался «активным» у гостя до перезапуска приложения, потому что
+    /// синк был разовым (при входе).
+    public func observe(userID: String) {
+        guard !userID.isEmpty else { return }
+        if userID == observedUserID, observeTask != nil { return }
+        observeTask?.cancel()
+        self.userID = userID
+        observedUserID = userID
+        observeTask = Task { [weak self, backend] in
+            for await list in backend.coupons(userID: userID) {
+                guard let self, !Task.isCancelled else { return }
+                self.merge(list)
+            }
+        }
+    }
+
+    public func stopObserving() {
+        observeTask?.cancel()
+        observeTask = nil
+        observedUserID = ""
+    }
+
+    private var observeTask: Task<Void, Never>?
+    private var observedUserID = ""
+
+    /// Сервер — источник правды для купонов, которые он знает (по коду);
+    /// локальные купоны, которых на сервере нет (подарки, мок-режим), остаются.
+    private func merge(_ fetched: [Coupon]) {
         var map: [String: Coupon] = [:]
         for c in coupons { map[c.code] = c }        // локальные (в т.ч. общие бонус-купоны)
         for c in fetched { map[c.code] = c }         // бэкенд перекрывает по коду
-        coupons = map.values.sorted { $0.createdAt > $1.createdAt }
+        let merged = map.values.sorted { $0.createdAt > $1.createdAt }
+        guard merged != coupons else { return }     // снапшот без изменений — не перерисовываем
+        coupons = merged
         save()
     }
 
@@ -135,6 +170,18 @@ public final class CouponStore: ObservableObject {
 
     public func offers(venueID: String) -> [CouponOffer] { offersByVenue[venueID] ?? [] }
 
+    /// Витрина «Купоны заведений» во вкладке «Бонусы»: всё, что можно купить
+    /// прямо сейчас, по всем заведениям, от дешёвого к дорогому.
+    @Published public private(set) var shopOffers: [CouponOffer] = []
+
+    /// Загружает витрину. Ошибка сети — прежний список остаётся.
+    public func loadShopOffers() async {
+        guard let all = try? await backend.fetchApprovedCouponOffers() else { return }
+        let now = clock.now
+        shopOffers = all.filter { $0.isAvailable(at: now) }
+            .sorted { ($0.cost, $0.venueName, $0.title) < ($1.cost, $1.venueName, $1.title) }
+    }
+
     /// Загружает купоны заведения. Ошибка сети — прежний список остаётся.
     public func loadOffers(venueID: String) async {
         guard let all = try? await backend.fetchCouponOffers(venueID: venueID) else { return }
@@ -207,6 +254,9 @@ public final class CouponStore: ObservableObject {
     /// Купоны лежат в `UserDefaults` по ключу устройства — после выхода их
     /// увидел бы следующий вошедший.
     public func resetForNewUser() {
+        // Слушатель прежнего пользователя снимаем — иначе его купоны
+        // вернулись бы в кошелёк следующего.
+        stopObserving()
         coupons = []
         userID = ""
         UserDefaults.standard.removeObject(forKey: key)
@@ -218,5 +268,23 @@ public final class CouponStore: ObservableObject {
     private func load() {
         if let d = UserDefaults.standard.data(forKey: key),
            let c = try? JSONDecoder().decode([Coupon].self, from: d) { coupons = c }
+        purgeLegacyOnce()
+    }
+
+    /// Купоны до серверного кошелька (их создавал клиент, часть из них не
+    /// гасится) убираются с устройства один раз. С сервера их убирает
+    /// `scripts/purge-legacy-coupons.js` — иначе синк вернул бы их обратно.
+    /// Отсечка та же, что у переноса баланса в кошелёк.
+    public static let legacyCutoff = Date(timeIntervalSince1970: 1_790_791_200)   // 2026-10-01 00:00 Бишкек
+    private static let legacyPurgeKey = "san.coupons.legacyPurged.v1"
+
+    private func purgeLegacyOnce() {
+        let d = UserDefaults.standard
+        guard !d.bool(forKey: Self.legacyPurgeKey) else { return }
+        d.set(true, forKey: Self.legacyPurgeKey)
+        let kept = coupons.filter { $0.createdAt >= Self.legacyCutoff }
+        guard kept.count != coupons.count else { return }
+        coupons = kept
+        save()
     }
 }

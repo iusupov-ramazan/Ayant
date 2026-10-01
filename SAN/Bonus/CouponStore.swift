@@ -394,8 +394,11 @@ struct CouponDetailView: View {
 
     private static let perforationHeight: CGFloat = 30
 
+    /// Живой статус — по КОДУ, а не по id: у купона, сохранённого на
+    /// телефоне, и у его серверной копии id могут различаться, и тогда экран
+    /// так и показывал «активен» после погашения у стойки.
     private var isUsed: Bool {
-        coupons.coupons.first(where: { $0.id == coupon.id })?.used ?? coupon.used
+        coupons.coupons.first(where: { $0.code == coupon.code })?.used ?? coupon.used
     }
 
     /// «11 сентября» — родительный падеж даёт сам формат `d MMMM` в ru_RU.

@@ -137,8 +137,16 @@ public protocol CouponService {
     /// заведения) — для «магазина купонов» на его странице. Все статусы:
     /// что из этого можно купить сейчас, решает `CouponOffer.isAvailable(at:)`.
     func fetchCouponOffers(venueID: String) async throws -> [CouponOffer]
+    /// Одобренные купоны всех заведений — витрина «Купоны заведений» во
+    /// вкладке «Бонусы». Пауза, остаток и срок отсекаются на клиенте
+    /// (`CouponOffer.isAvailable(at:)`) — запрос фильтрует только модерацию.
+    func fetchApprovedCouponOffers() async throws -> [CouponOffer]
     /// Купоны пользователя из Firestore (для синка used-статуса и наград).
     func fetchCoupons(userID: String) async throws -> [Coupon]
+    /// Живой поток купонов пользователя: сотрудник сканирует (или вводит код)
+    /// — купон гасится на сервере, и экран гостя видит это сразу, без
+    /// перезапуска. Снапшот-листенер снимается вместе с задачей-потребителем.
+    func coupons(userID: String) -> AsyncStream<[Coupon]>
     /// Карты лояльности пользователя из Firestore (разовый запрос).
     func fetchLoyaltyCards(userID: String) async throws -> [LoyaltyCard]
     /// Живой поток карт лояльности: штампы меняет сканер заведения, и экран

@@ -73,6 +73,13 @@ public final class MockCouponService: CouponService {
 
     public func saveCoupon(_ coupon: Coupon, userID: String) async throws {}
     public func fetchCoupons(userID: String) async throws -> [Coupon] { userID.isEmpty ? [] : coupons }
+    public func coupons(userID: String) -> AsyncStream<[Coupon]> {
+        let snapshot = userID.isEmpty ? [] : coupons
+        return AsyncStream { continuation in
+            continuation.yield(snapshot)
+            continuation.finish()
+        }
+    }
 
     /// Оффлайн-демо: у первого мок-заведения пара купонов — иначе магазин
     /// купонов на его странице было бы нечем посмотреть.
@@ -86,6 +93,11 @@ public final class MockCouponService: CouponService {
             CouponOffer(id: "co_demo2", venueID: venueID, venueName: name, title: "Десерт дня",
                         emoji: "🍰", cost: 200, statusRaw: ModerationStatus.approved.rawValue),
         ]
+    }
+    /// Витрина «Купоны заведений» в «Бонусах» — те же демо-купоны.
+    public func fetchApprovedCouponOffers() async throws -> [CouponOffer] {
+        guard let id = MockData.venues.first?.id else { return [] }
+        return try await fetchCouponOffers(venueID: id)
     }
     public func fetchLoyaltyCards(userID: String) async throws -> [LoyaltyCard] { userID.isEmpty ? [] : cards }
     public func loyaltyCards(userID: String) -> AsyncStream<[LoyaltyCard]> {

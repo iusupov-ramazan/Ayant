@@ -24,6 +24,16 @@ struct HostMenuImportView: View {
 
     private var state: MenuImportState { store.state }
 
+    /// Разделы на выбор при правке черновика: уже есть в меню + найденные в
+    /// файле, без повторов (без учёта регистра).
+    private var draftSections: [String] {
+        let parsed = MenuImport.grouped(state.drafts) { $0.section }.map(\.section)
+        var seen = Set<String>()
+        return (MenuImport.sections(venue.items) + parsed).filter {
+            !$0.isEmpty && seen.insert($0.lowercased()).inserted
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             SanFormHeader(title: "Меню из файла") {
@@ -51,7 +61,7 @@ struct HostMenuImportView: View {
             parse(data, kind: kind)
         }
         .sheet(item: $editing) { draft in
-            DraftDishEditor(draft: draft) { store.send(.update($0)) }
+            DraftDishEditor(draft: draft, sections: draftSections) { store.send(.update($0)) }
                 .presentationDetents([.medium, .large])
         }
     }
@@ -299,11 +309,13 @@ private struct DraftDishEditor: View {
     @Environment(\.dismiss) private var dismiss
     @State private var draft: MenuDraftItem
     @State private var priceText: String
+    let sections: [String]
     let onSave: (MenuDraftItem) -> Void
 
-    init(draft: MenuDraftItem, onSave: @escaping (MenuDraftItem) -> Void) {
+    init(draft: MenuDraftItem, sections: [String], onSave: @escaping (MenuDraftItem) -> Void) {
         _draft = State(initialValue: draft)
         _priceText = State(initialValue: draft.price.map(String.init) ?? "")
+        self.sections = sections
         self.onSave = onSave
     }
 
@@ -312,7 +324,7 @@ private struct DraftDishEditor: View {
             SanFormHeader(title: "Блюдо") { dismiss() }
             ScrollView {
                 DishFields(name: $draft.name, section: $draft.section,
-                           priceText: $priceText, details: $draft.details)
+                           priceText: $priceText, details: $draft.details, sections: sections)
                     .padding(.horizontal, SanMetrics.screenPadding)
                     .padding(.top, 8).padding(.bottom, 20)
             }
@@ -336,6 +348,8 @@ struct DishFields: View {
     @Binding var section: String
     @Binding var priceText: String
     @Binding var details: String
+    /// Разделы, которые уже есть в меню, — на выбор в `MenuSectionPicker`.
+    var sections: [String] = []
 
     var body: some View {
         VStack(spacing: 0) {
@@ -347,8 +361,9 @@ struct DishFields: View {
                 SanFieldInput(placeholder: "Например, 350", text: $priceText, keyboard: .numberPad)
             }
             SanHairline(leading: 16)
-            SanFieldRow(label: "Раздел меню") {
-                SanFieldInput(placeholder: "Например: Супы", text: $section)
+            SanFieldRow(label: "Раздел меню",
+                        hint: sections.isEmpty ? "Супы, Горячее, Напитки — гости увидят меню по разделам" : nil) {
+                MenuSectionPicker(section: $section, sections: sections)
             }
             SanHairline(leading: 16)
             SanFieldRow(label: "Описание") {
@@ -356,6 +371,162 @@ struct DishFields: View {
             }
         }
         .sanGroupCard(radius: SanRadius.card)
+    }
+}
+
+// MARK: - Выбор раздела меню
+
+/// Раздел — выбором, а не вводом: «Без раздела», все разделы меню и
+/// «+ Новый раздел». Свободное поле давало «Супы», «супы» и «Супы » тремя
+/// разделами в меню гостя. Новый раздел сразу выбран и появляется в списке у
+/// следующих блюд — разделы живут в самих блюдах (`VenueItem.section`),
+/// отдельного списка нет: раздел без единого блюда гостю не нужен.
+struct MenuSectionPicker: View {
+    @Binding var section: String
+    let sections: [String]
+    @State private var creating = false
+    @State private var newName = ""
+    @FocusState private var focused: Bool
+
+    /// Разделы меню плюс текущий, если его только что создали.
+    private var options: [String] {
+        let current = section.trimmingCharacters(in: .whitespaces)
+        guard !current.isEmpty,
+              !sections.contains(where: { $0.lowercased() == current.lowercased() }) else { return sections }
+        return sections + [current]
+    }
+
+    private func isSelected(_ name: String) -> Bool {
+        section.trimmingCharacters(in: .whitespaces).lowercased() == name.lowercased()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            FlowLayout(spacing: 6) {
+                chip(LS("Без раздела"), selected: section.trimmingCharacters(in: .whitespaces).isEmpty) {
+                    section = ""
+                }
+                ForEach(options, id: \.self) { name in
+                    chip(name, selected: isSelected(name)) { section = name }
+                }
+                if !creating {
+                    Button {
+                        newName = ""
+                        creating = true
+                        focused = true
+                    } label: {
+                        Label("Новый раздел", systemImage: "plus")
+                            .font(.golos(13, .semibold))
+                            .foregroundStyle(Color.sanAccentText)
+                            .padding(.horizontal, 12).frame(height: 32)
+                            .overlay(Capsule().strokeBorder(Color.sanAccent.opacity(0.5),
+                                                            style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            if creating {
+                HStack(spacing: 8) {
+                    TextField("Например: Супы", text: $newName)
+                        .font(.golos(15))
+                        .focused($focused)
+                        .submitLabel(.done)
+                        .onSubmit(commitNew)
+                        .padding(.horizontal, 12).frame(height: 40)
+                        .background(Color.sanSurfaceMuted,
+                                    in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    Button("Готово", action: commitNew)
+                        .font(.golos(14, .semibold))
+                        .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty)
+                    Button {
+                        creating = false
+                    } label: {
+                        Image(systemName: "xmark").font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(Color.sanInkSoft)
+                            .frame(width: 32, height: 32)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Отмена")
+                }
+            }
+        }
+        .padding(.top, 2)
+    }
+
+    /// Новый раздел с тем же именем, что уже есть, становится выбором
+    /// существующего (`MenuImport.canonicalSection`), а не дублем.
+    private func commitNew() {
+        let name = MenuImport.canonicalSection(newName, existing: sections)
+        guard !name.isEmpty else { return }
+        SanHaptics.selection()
+        section = name
+        creating = false
+    }
+
+    private func chip(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button {
+            SanHaptics.selection()
+            action()
+        } label: {
+            HStack(spacing: 4) {
+                if selected { Image(systemName: "checkmark").font(.system(size: 10, weight: .heavy)) }
+                Text(verbatim: title).lineLimit(1)
+            }
+            .font(.golos(13, .semibold))
+            .foregroundStyle(selected ? Color.white : Color.sanInk)
+            .padding(.horizontal, 12).frame(height: 32)
+            .background(selected ? AnyShapeStyle(LinearGradient.sanAccentGradient)
+                                 : AnyShapeStyle(Color.sanSurfaceMuted),
+                        in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+
+/// Раскладка «строками с переносом» — чипы разделов видны все сразу, без
+/// горизонтальной прокрутки, которую не все замечают.
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let rows = arrange(subviews, width: proposal.width ?? .infinity)
+        let height = rows.last.map { $0.y + $0.height } ?? 0
+        let width = rows.map(\.width).max() ?? 0
+        return CGSize(width: proposal.width ?? width, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        for row in arrange(subviews, width: bounds.width) {
+            var x = bounds.minX
+            for index in row.indices {
+                let size = subviews[index].sizeThatFits(.unspecified)
+                subviews[index].place(at: CGPoint(x: x, y: bounds.minY + row.y),
+                                      proposal: ProposedViewSize(size))
+                x += size.width + spacing
+            }
+        }
+    }
+
+    private struct Row { var indices: [Int] = []; var y: CGFloat = 0; var width: CGFloat = 0; var height: CGFloat = 0 }
+
+    private func arrange(_ subviews: Subviews, width: CGFloat) -> [Row] {
+        var rows: [Row] = []
+        var row = Row()
+        for index in subviews.indices {
+            let size = subviews[index].sizeThatFits(.unspecified)
+            let needed = row.indices.isEmpty ? size.width : row.width + spacing + size.width
+            if needed > width, !row.indices.isEmpty {
+                rows.append(row)
+                row = Row(y: row.y + row.height + spacing)
+            }
+            row.width = row.indices.isEmpty ? size.width : row.width + spacing + size.width
+            row.indices.append(index)
+            row.height = max(row.height, size.height)
+        }
+        if !row.indices.isEmpty { rows.append(row) }
+        return rows
     }
 }
 
@@ -392,7 +563,8 @@ struct HostItemEditView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .sanGroupCard(radius: SanRadius.card)
                     DishFields(name: $item.name, section: $item.section,
-                               priceText: $priceText, details: $item.details)
+                               priceText: $priceText, details: $item.details,
+                               sections: MenuImport.sections(host.state.venue(id: venueID)?.items ?? []))
                 }
                 .padding(.horizontal, SanMetrics.screenPadding)
                 .padding(.top, 8).padding(.bottom, 20)

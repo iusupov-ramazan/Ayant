@@ -22,12 +22,6 @@ struct BonusHubView: View {
     @State private var showTetris = false
     @State private var showMatch3 = false
     @State private var show2048 = false
-    @State private var justClaimed: Coupon?
-    @State private var pendingReward: Reward?
-    @State private var pendingGift: Reward?
-    @State private var giftShare: ShareURL?
-    /// Отказ сервера при покупке — текстом (`BonusPurchaseErrorText`).
-    @State private var purchaseError: String?
     @State private var openedCard: VenuePointsCard?
     @State private var openedStampCard: LoyaltyCard?
 
@@ -60,39 +54,48 @@ struct BonusHubView: View {
         }
     }
 
+    /// Сверху вниз — от «сколько у меня» к «на что потратить» и «где взять»:
+    /// баланс бонусов → магазин купонов (лентой) → игры → баллы и карты
+    /// заведений (отдельная валюта — в самом низу).
+    ///
+    /// Раньше экран открывался большой картой заведения с «320 баллов», а
+    /// бонусы жили в маленькой капсуле в углу — и люди принимали баллы
+    /// заведения за свои бонусы. Теперь бонусы — первая и самая крупная
+    /// цифра, а баллы заведений — отдельный раздел со своим заголовком.
     private var hubContent: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                headerRow
-                if walletPages.isEmpty {
-                    emptyPointsCard
-                } else {
-                    WalletCarousel(pages: walletPages, venues: venuesByID,
-                                   onOpenPoints: { openedCard = $0 },
-                                   onOpenStamps: { openedStampCard = $0 })
-                        // Карусель на всю ширину экрана — отступ возвращает
-                        // `contentMargins` внутри, чтобы следующая карта выглядывала.
-                        .padding(.horizontal, -SanMetrics.screenPadding)
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 26) {
+                    headerRow
+                    if ReleaseFlags.globalBonusWallet {
+                        balanceCard { withAnimation { proxy.scrollTo(Self.gamesAnchor, anchor: .top) } }
+                        BonusStoreSection()
+                        gamesSection.id(Self.gamesAnchor)
+                        venuePointsSection
+                    } else {
+                        // Без глобального кошелька экран — баллы и карты
+                        // заведений и строка в купоны.
+                        venuePointsSection
+                        couponsSection
+                    }
                 }
-                // Глобальный кошелёк (награды, подарки, игры) выключен на
-                // релиз: он локальный и без записи в Firestore. Без него
-                // хаб — карусель баллов и штампов и строка в купоны.
-                if ReleaseFlags.globalBonusWallet {
-                    rewardsSection
-                    gamesSection
-                } else {
-                    couponsSection
-                }
+                .padding(.horizontal, SanMetrics.screenPadding)
+                .padding(.top, 8)
+                .padding(.bottom, 28)
+                .sanScreenEnter()
             }
-            .padding(.horizontal, SanMetrics.screenPadding)
-            .padding(.top, 8)
-            .padding(.bottom, 28)
-            .sanScreenEnter()
         }
         .sanScreenBackground()
         .sanStatusBarCap()
         .toolbar(.hidden, for: .navigationBar)
         .task { if ReleaseFlags.globalBonusWallet { await coupons.loadRewards() } }
+        // Потянуть вниз — свежая витрина: заведение могло выпустить купон,
+        // модерация — одобрить, остаток — кончиться.
+        .refreshable {
+            guard ReleaseFlags.globalBonusWallet else { return }
+            await coupons.loadShopOffers()
+            await coupons.loadRewards()
+        }
         .navigationDestination(item: $openedCard) { card in
             if let venue = venuesByID[card.venueID] {
                 VenuePointsScreen(venue: venue)
@@ -126,107 +129,99 @@ struct BonusHubView: View {
         content
             .overlay(alignment: .top) { rewardToast }
             .guestAlert(isPresented: $showGuestAlert, message: GuestGate.game)
-            .alert("Купон получен 🎉", isPresented: Binding(
-                get: { justClaimed != nil }, set: { if !$0 { justClaimed = nil } })) {
-                Button("Отлично") {}
-            } message: {
-                Text("Найди его в «Мои купоны» и покажи сотруднику заведения.")
-            }
-            .alert("Обменять бонусы?", isPresented: Binding(
-                get: { pendingReward != nil }, set: { if !$0 { pendingReward = nil } }),
-                presenting: pendingReward) { reward in
-                Button("Обменять за \(reward.cost)", role: .destructive) {
-                    Task {
-                        switch await coupons.redeem(reward, bonus: bonus) {
-                        case .coupon(let c): justClaimed = c
-                        case .failed(let code): purchaseError = BonusPurchaseErrorText.message(code)
-                        case .gift: break
-                        }
-                    }
-                }
-                Button("Отмена", role: .cancel) {}
-            } message: { reward in
-                Text("«\(reward.title)» за \(reward.cost) бонусов. Купон нельзя вернуть после обмена.")
-            }
-            .alert("Подарить купон?", isPresented: Binding(
-                get: { pendingGift != nil }, set: { if !$0 { pendingGift = nil } }),
-                presenting: pendingGift) { r in
-                Button("Подарить за \(r.cost)", role: .destructive) {
-                    Task {
-                        // Серверный кошелёк — подарок покупает сервер; без него
-                        // (мок-режим) — прежний путь через AppStore.
-                        switch await coupons.gift(r, fromName: store.currentUserName, bonus: bonus) {
-                        case .gift(let code):
-                            giftShare = ShareURL(url: DeepLinks.giftURL(code), title: r.title)
-                        case .failed("local"):
-                            if let url = store.createGift(r, bonus: bonus) {
-                                giftShare = ShareURL(url: url, title: r.title)
-                            }
-                        case .failed(let code):
-                            purchaseError = BonusPurchaseErrorText.message(code)
-                        case .coupon: break
-                        }
-                    }
-                }
-                Button("Отмена", role: .cancel) {}
-            } message: { r in
-                Text("Спишется \(r.cost) бонусов. Отправь ссылку другу — он заберёт «\(r.title)».")
-            }
-            .sheet(item: $giftShare) { item in
-                GiftShareSheet(url: item.url, title: item.title)
-            }
-            .alert("Не получилось", isPresented: Binding(
-                get: { purchaseError != nil }, set: { if !$0 { purchaseError = nil } })) {
-                Button("Понятно") {}
-            } message: {
-                Text(purchaseError ?? "")
-            }
     }
 
     // MARK: Шапка
 
+    private static let gamesAnchor = "games"
+
     private var headerRow: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 0) {
-                Text("Бонусы")
-                    .sanEditorialTitle(44)
-                    .foregroundStyle(Color.sanInk)
-                // На экране две валюты сразу: капсула «БОНУСЫ» справа и баллы
-                // САН в карусели. Их путают, и в подпись объяснение не влезает.
-                // Справка нужна только при включённом глобальном кошельке —
-                // без него никаких «бонусов» на экране нет и путать не с чем.
-                HStack(spacing: 2) {
-                    Text("Баллы САН в каждом заведении")
-                        .font(.golos(14)).foregroundStyle(Color.sanInkSoft)
-                    if ReleaseFlags.globalBonusWallet {
-                        SanInfoDot(
-                            title: "Два разных счёта",
-                            text: "Баллы САН — свои у каждого заведения: их начисляет само заведение за покупки, и потратить их можно только там же.\n\nБонусы — общий кошелёк приложения: копятся в играх и за время в приложении, тратятся на купоны.")
-                    }
-                }
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Бонусы")
+                .sanEditorialTitle(44)
+                .foregroundStyle(Color.sanInk)
+            Text(ReleaseFlags.globalBonusWallet
+                 ? "Копите в играх — меняйте на купоны заведений"
+                 : "Баллы САН в каждом заведении")
+                .font(.golos(14)).foregroundStyle(Color.sanInkSoft)
                 .padding(.top, 9)
-            }
-            Spacer(minLength: 8)
-            // Глобальный кошелёк BonusEngine — визуально подчинённый: он
-            // зарабатывается почти в ноль и не должен спорить с баллами САН.
-            // Скрыт вместе с кошельком (`ReleaseFlags.globalBonusWallet`).
-            if ReleaseFlags.globalBonusWallet {
-                NavigationLink { MyCouponsView() } label: {
-                    VStack(alignment: .trailing, spacing: 1) {
-                        Text("БОНУСЫ")
-                            .font(.golos(10.5, .heavy)).tracking(0.4)
-                            .foregroundStyle(Color(hex: 0x9A9188))
-                        Text("\(bonus.balance)")
-                            .font(.golos(16, .heavy)).tracking(-0.5)
-                            .foregroundStyle(Color.sanInk)
-                            .contentTransition(.numericText())
-                            .animation(.snappy, value: bonus.balance)
-                    }
-                    .padding(.horizontal, 14).padding(.vertical, 9)
-                    .background(Color.sanSurface, in: Capsule())
-                    .overlay(Capsule().strokeBorder(Color.sanHairline, lineWidth: 0.5))
+        }
+    }
+
+    /// Баланс бонусов — главная цифра экрана. Отсюда же — «Мои купоны» и
+    /// «Как заработать» (прокрутка к играм).
+    private func balanceCard(onEarn: @escaping () -> Void) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Ваши бонусы")
+                        .font(.golos(13.5, .semibold)).foregroundStyle(.white.opacity(0.9))
+                    Text("\(bonus.balance)")
+                        .sanText(46, .heavy, tracking: -2)
+                        .foregroundStyle(.white)
+                        .contentTransition(.numericText())
+                        .animation(.snappy, value: bonus.balance)
                 }
-                .buttonStyle(.sanPress(0.94))
+                Spacer(minLength: 8)
+                Image(systemName: "star.circle.fill")
+                    .font(.system(size: 30, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.9))
+            }
+            Text("Общий счёт приложения: тратится на купоны в магазине ниже, в любом заведении-партнёре.")
+                .font(.golos(12.5)).foregroundStyle(.white.opacity(0.9))
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 8) {
+                NavigationLink { MyCouponsView() } label: {
+                    balanceChip(coupons.activeCount > 0 ? "Мои купоны · \(coupons.activeCount)" : "Мои купоны",
+                                icon: "ticket.fill")
+                }
+                .buttonStyle(.sanPress(0.95))
+                Button(action: onEarn) { balanceChip("Как заработать", icon: "gamecontroller.fill") }
+                    .buttonStyle(.sanPress(0.95))
+            }
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(LinearGradient.sanAccentGradient,
+                    in: RoundedRectangle(cornerRadius: SanRadius.hero, style: .continuous))
+        .sanShadow(.hero)
+    }
+
+    private func balanceChip(_ title: String, icon: String) -> some View {
+        Label { Text(title) } icon: { Image(systemName: icon) }
+            .font(.golos(13, .bold)).foregroundStyle(.white)
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .background(.white.opacity(0.2), in: Capsule())
+    }
+
+    // MARK: Баллы и карты заведений
+
+    /// Карусель карт заведений — отдельным разделом и с объяснением: это не
+    /// бонусы, а счёт в конкретном заведении, и потратить его можно только там.
+    private var venuePointsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Баллы и карты заведений")
+                    .font(.golos(20, .heavy)).tracking(-0.5)
+                    .foregroundStyle(Color.sanInk)
+                Text("Свои в каждом заведении: начисляет заведение за покупки, тратятся только там же.")
+                    .font(.golos(12.5)).foregroundStyle(Color.sanInkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if walletPages.isEmpty {
+                emptyPointsCard
+            } else {
+                WalletCarousel(pages: walletPages, venues: venuesByID,
+                               onOpenPoints: { openedCard = $0 },
+                               onOpenStamps: { openedStampCard = $0 })
+                    // Карусель на всю ширину экрана — отступ возвращает
+                    // `contentMargins` внутри, чтобы следующая карта выглядывала.
+                    .padding(.horizontal, -SanMetrics.screenPadding)
+            }
+            // Карусель показывает не все карты — ссылки на полные списки.
+            HStack(spacing: 10) {
+                listLink("Все баллы", "star.circle.fill") { VenuePointsListView() }
+                listLink("Все карты", "creditcard.fill") { LoyaltyView() }
             }
         }
     }
@@ -262,12 +257,6 @@ struct BonusHubView: View {
                 .sanCard(padding: 0, radius: SanRadius.card)
             }
             .buttonStyle(.sanPress(0.97))
-            // Карусель показывает не все карты штампов — ссылки на полные списки остаются.
-            HStack(spacing: 10) {
-                listLink("Все баллы", "star.circle.fill") { VenuePointsListView() }
-                listLink("Все карты", "creditcard.fill") { LoyaltyView() }
-            }
-            .padding(.top, 2)
         }
     }
 
@@ -282,45 +271,6 @@ struct BonusHubView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(20)
         .sanCard(padding: 0, radius: SanRadius.hero)
-    }
-
-    // MARK: Потратить бонусы
-
-    private var rewardsSection: some View {
-        VStack(alignment: .leading, spacing: 13) {
-            HStack {
-                Text("Награды")
-                    .textCase(.uppercase)
-                    .sanEyebrowText()
-                    .foregroundStyle(Color(hex: 0x9A9188))
-                Spacer()
-                NavigationLink { MyCouponsView() } label: {
-                    Text(coupons.activeCount > 0 ? "Мои купоны · \(coupons.activeCount)" : "Мои купоны")
-                        .font(.golos(12.5, .bold))
-                        // Акцент мелким текстом — только контрастный вариант.
-                        .foregroundStyle(Color.sanAccentText)
-                }
-                .buttonStyle(.sanPress(0.94))
-            }
-            if coupons.rewards.isEmpty {
-                // Партнёров ещё нет. Показывать награды без заведения нельзя:
-                // купон по такой награде сотрудник не погасит.
-                Text("Награды появятся, когда подключатся заведения-партнёры. Бонусы копятся — тратить их будет на что.")
-                    .font(.golos(13.5)).foregroundStyle(Color.sanInkSoft)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.vertical, 2)
-            } else {
-                ForEach(Array(coupons.rewards.enumerated()), id: \.element.id) { index, reward in
-                    rewardRow(reward).sanRise(index, stagger: 0.07, duration: 0.5)
-                }
-            }
-            // Ссылки на полные списки остаются — карусель показывает не все карты штампов.
-            HStack(spacing: 10) {
-                listLink("Все баллы", "star.circle.fill") { VenuePointsListView() }
-                listLink("Все карты", "creditcard.fill") { LoyaltyView() }
-            }
-            .padding(.top, 2)
-        }
     }
 
     private func listLink<Destination: View>(_ title: LocalizedStringKey, _ icon: String,
@@ -339,53 +289,16 @@ struct BonusHubView: View {
         .buttonStyle(.sanPress(0.97))
     }
 
-    private func rewardRow(_ reward: Reward) -> some View {
-        let affordable = bonus.balance >= reward.cost
-        return HStack(spacing: 14) {
-            RoundedRectangle(cornerRadius: 15, style: .continuous)
-                .fill(LinearGradient.sanAccentGradient)
-                .frame(width: 46, height: 46)
-                .overlay(Image(systemName: "star.fill")
-                    .font(.system(size: 19, weight: .semibold)).foregroundStyle(.white))
-            VStack(alignment: .leading, spacing: 3) {
-                Text(L(reward.title)).font(.golos(14.5, .bold)).tracking(-0.2)
-                    .foregroundStyle(Color.sanInk)
-                    .fixedSize(horizontal: false, vertical: true)
-                // Где гасить — часть самой награды: без заведения купон
-                // некуда предъявить, и человек должен видеть куда идти.
-                Text(reward.venueName.isEmpty
-                     ? "\(reward.cost) бонусов"
-                     : "\(reward.cost) бонусов · \(reward.venueName)")
-                    .font(.golos(12.5)).foregroundStyle(Color.sanInkSoft)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 8)
-            Menu {
-                Button { pendingReward = reward } label: { Label("Обменять себе", systemImage: "ticket") }
-                Button { pendingGift = reward } label: { Label("Подарить другу", systemImage: "gift") }
-            } label: {
-                Text(affordable ? "Обменять" : "Не хватает")
-                    .font(.golos(13, .bold))
-                    .foregroundStyle(affordable ? Color.white : Color(hex: 0x9A9188))
-                    .padding(.horizontal, 15).padding(.vertical, 10)
-                    .background(affordable ? AnyShapeStyle(LinearGradient.sanAccentGradient)
-                                           : AnyShapeStyle(Color.sanSurfaceMuted),
-                                in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            }
-            .disabled(!affordable)
-        }
-        .padding(15)
-        .opacity(affordable ? 1 : 0.55)
-        .sanCard(padding: 0, radius: SanRadius.card)
-    }
+    // MARK: Игры
 
-    // MARK: Игры (тише, ниже)
-
+    /// Четыре игры сеткой 2×2 — все видны сразу, без прокрутки через список.
     private var gamesSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
-                SanSectionHeader("Играй и копи бонусы")
-                SanHairline().frame(maxWidth: .infinity)
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text("Играй и копи бонусы")
+                    .font(.golos(20, .heavy)).tracking(-0.5)
+                    .foregroundStyle(Color.sanInk)
+                Spacer(minLength: 8)
                 // Потолка больше нет, поэтому и обещать «сегодня ещё N» нечего.
                 // Показываем заработанное за день: это единственная цифра,
                 // которая здесь что-то значит, — и молчим, пока она нулевая.
@@ -398,6 +311,8 @@ struct BonusHubView: View {
             }
             // Игры начисляют бонусы в кошелёк аккаунта, поэтому гостю закрыты —
             // иначе он «зарабатывает» в запись, которая исчезнет вместе с выходом.
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)],
+                      spacing: 12) {
             Button { if session.isGuest { showGuestAlert = true } else { showSnake = true } } label: {
                 gameTile(emoji: "🐍", title: "Змейка",
                          subtitle: "+1 / \(GameEconomy.applesPerBonus) яблок",
@@ -418,7 +333,7 @@ struct BonusHubView: View {
                 gameTile(icon: GemView(kind: .ruby, power: .none).padding(6),
                          title: "Diamond",
                          // Партия бесконечная — дневной потолок виден ещё до входа.
-                         subtitle: "+1 / \(Match3.matchesPerBonus) совпадений · до \(GameEconomy.endlessDailyBonusCap) в день",
+                         subtitle: "+1 / \(Match3.matchesPerBonus) совпадений\nдо \(GameEconomy.endlessDailyBonusCap) в день",
                          gradient: [Color(hex: 0xF2A03D), Color(hex: 0xE8556B)])
             }
             .buttonStyle(.plain)
@@ -435,8 +350,8 @@ struct BonusHubView: View {
             }
             .buttonStyle(.plain)
             .fullScreenCover(isPresented: $show2048) { Game2048View() }
+            }
         }
-        .padding(.top, 4)
     }
 
     private func gameTile(emoji: String, title: LocalizedStringKey, subtitle: LocalizedStringKey,
@@ -450,18 +365,19 @@ struct BonusHubView: View {
     private func gameTile<Icon: View>(icon: Icon, title: LocalizedStringKey,
                                       subtitle: LocalizedStringKey,
                                       gradient: [Color]) -> some View {
-        HStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(LinearGradient(colors: gradient, startPoint: .topLeading, endPoint: .bottomTrailing))
-                .frame(width: 44, height: 44)
+                .frame(width: 48, height: 48)
                 .overlay(icon)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title).font(.golos(15, .bold)).foregroundStyle(Color.sanInk)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.golos(15.5, .bold)).foregroundStyle(Color.sanInk)
                 Text(subtitle).font(.golos(12, .medium)).foregroundStyle(Color.sanInkSoft)
+                    .lineLimit(2, reservesSpace: true)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            Spacer(minLength: 0)
         }
-        .padding(12)
+        .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.sanSurface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)

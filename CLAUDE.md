@@ -98,7 +98,7 @@ Read these cross-cutting patterns before editing; they span many files and are m
 
 ### iOS (`SAN/`)
 ```bash
-# Build (scheme SAN). CI uses iPhone 15; any installed simulator works.
+# Build (scheme SAN). Needs Xcode 16+ (project format 77). CI (macos-15) picks the newest stable Xcode and any available iPhone simulator; locally any installed simulator works.
 xcodebuild build -project SAN.xcodeproj -scheme SAN \
   -destination 'platform=iOS Simulator,name=iPhone 15' CODE_SIGNING_ALLOWED=NO
 
@@ -258,7 +258,11 @@ One server behavior is deliberately mirrored even though it looks like a bug —
 
 ## Host cabinet (iOS, 2026-09-29) — not mirrored on Android yet
 
-Owner's call: this round is iOS-only. Tabs are Заведения · Лояльность · Сканер · Аналитика · Профиль — «Отзывы» is a row inside «Профиль» (with the unanswered badge, also on the tab), so the sixth tab no longer falls under «Ещё». The venue page is a stack of section cards (`sectionCard` in `HostVenuesView.swift`); «Объекты для отзывов» is now «Меню»; the «Сканировать купоны гостей» button is gone (the scanner is its own tab); the loyalty card's «Настроить/Включить» opens `HostStampCardFormView` (stamp card only) instead of the whole venue form, and the venue form no longer edits the stamp card. Android still has the Отзывы tab, the old section layout and the scan button.
+Owner's call: this round is iOS-only. Tabs are Заведения · Лояльность · Сканер · Аналитика · Профиль — «Отзывы» is a row inside «Профиль» (with the unanswered badge, also on the tab), so the sixth tab no longer falls under «Ещё». «Объекты для отзывов» is now «Меню»; the «Сканировать купоны гостей» button is gone (the scanner is its own tab). Android still has the Отзывы tab, the old section layout and the scan button.
+
+**Tab 1 is split into work vs settings (2026-09-30).** The venue page (`HostVenueDetailView`) holds only daily work: card → «Данные заведения», «Предложение дня», and three pinned sections Акции · Меню · Купоны, each with the same «primary + second way» buttons (Новая акция / Из Instagram, Блюдо / Из файла, Новый купон). Loyalty is **not** on this page any more — it lives only in the Лояльность tab (`HostStampCardFormView` was removed). Everything about the venue itself is on `HostVenueSettingsView` (`SAN/Host/HostVenueSettingsView.swift`): «Показывать гостям», Название и фото / Адреса / Часы / Телефон и соцсети / Прайс-лист, promotion, delete. Each row opens `HostVenueFormView(existing:part:)` showing only that part; hidden parts stay in the form state and are saved as they were, so editing hours never wipes addresses — keep `fields` built from **all** state. `part: nil` is the full form (venue creation). «Принимать купоны» was dropped from the form (deals no longer issue coupons); the value is preserved. Venue switching: with 2+ venues a labelled strip «Ваши заведения · N» (chips + «Все» sheet + «Добавить»); with one venue no switcher — the second venue is added from «Профиль → Заведения». The title is no longer a dropdown.
+
+**Menu categories by hand.** `HostIntent.addItem(venueID:item:)` takes a whole `VenueItem` (section, price, description, photo), like `updateItem`; both go through one cleaner in `HostStore` that snaps the section to an existing spelling via `MenuImport.canonicalSection` (pinned by `MenuImportTests`) — the menu groups by exact string, so «супы» would otherwise become a second «Супы». The category is **chosen**, not typed: `MenuSectionPicker` (chips: «Без раздела», existing sections from `MenuImport.sections`, «+ Новый раздел»). Categories live only in `VenueItem.section`; there is no separate list, so a category with no dishes disappears. Each section header in «Меню» has «+ Добавить», which pre-fills that category.
 
 ## Меню из файла: PDF, Excel, CSV (iOS, 2026-09-29) — на устройстве, бесплатно
 

@@ -270,7 +270,7 @@ struct SANApp: App {
         guard let uid = session.user?.id, !session.isGuest else { return }
         points.send(.observe(userID: uid))   // живой поток; опрос больше не нужен
         loyalty.observe(userID: uid)         // и штампы — живьём, ради экрана «Начислено»
-        Task { await coupons.sync(userID: uid) }
+        coupons.observe(userID: uid)         // и купоны: погашенный у стойки — сразу «Использован»
     }
 }
 

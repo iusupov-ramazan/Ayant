@@ -84,8 +84,8 @@ public final class HostStore: ObservableObject {
         case .setTodaySpecial(let venueID, let text):
             setTodaySpecial(venueID: venueID, text: text)
         case .deleteVenue(let id):           deleteVenue(id: id)
-        case .addItem(let venueID, let name, let emoji, let kind, let imageURL):
-            addItem(venueID: venueID, name: name, emoji: emoji, kind: kind, imageURL: imageURL)
+        case .addItem(let venueID, let item):
+            addItem(venueID: venueID, item: item)
         case .deleteItem(let venueID, let itemID):
             deleteItem(venueID: venueID, itemID: itemID)
         case .updateItem(let venueID, let item):
@@ -532,29 +532,39 @@ public final class HostStore: ObservableObject {
 
     // MARK: Объекты для отзывов (блюда/услуги)
 
-    private func addItem(venueID: String, name: String, emoji: String, kind: String, imageURL: String = "") {
+    private func addItem(venueID: String, item: VenueItem) {
         guard let i = venueDTOs.firstIndex(where: { $0.id == venueID }) else { return }
-        let item = VenueItem(id: "it_\(UUID().uuidString.prefix(8))",
-                             name: name.trimmingCharacters(in: .whitespaces),
-                             emoji: emoji.isEmpty ? "🍽" : emoji, kind: kind, imageURL: imageURL)
-        venueDTOs[i].items.append(item)
+        var new = item
+        new.id = "it_\(UUID().uuidString.prefix(8))"
+        if new.emoji.isEmpty { new.emoji = "🍽" }
+        guard let clean = cleaned(new, in: venueDTOs[i].items) else { return }
+        venueDTOs[i].items.append(clean)
         persistVenues()
         remoteSaveVenue(venueDTOs[i])
     }
 
     private func updateItem(venueID: String, item: VenueItem) {
         guard let i = venueDTOs.firstIndex(where: { $0.id == venueID }),
-              let j = venueDTOs[i].items.firstIndex(where: { $0.id == item.id }) else { return }
-        var clean = item
-        clean.name = MenuImport.clip(item.name, MenuImport.nameLimit)
-        guard !clean.name.isEmpty else { return }
-        clean.section = MenuImport.clip(item.section, MenuImport.sectionLimit)
-        clean.details = MenuImport.clip(item.details, MenuImport.detailsLimit)
-        clean.price = MenuImport.validPrice(item.price)
-        clean.imageURL = item.imageURL.trimmingCharacters(in: .whitespaces)
+              let j = venueDTOs[i].items.firstIndex(where: { $0.id == item.id }),
+              let clean = cleaned(item, in: venueDTOs[i].items) else { return }
         venueDTOs[i].items[j] = clean
         persistVenues()
         remoteSaveVenue(venueDTOs[i])
+    }
+
+    /// Чистка блюда из ручной формы — те же пределы, что у импорта; раздел
+    /// приводится к написанию уже существующего (`canonicalSection`).
+    /// Пустое название — `nil`.
+    private func cleaned(_ item: VenueItem, in menu: [VenueItem]) -> VenueItem? {
+        var clean = item
+        clean.name = MenuImport.clip(item.name, MenuImport.nameLimit)
+        guard !clean.name.isEmpty else { return nil }
+        let others = menu.filter { $0.id != item.id }
+        clean.section = MenuImport.canonicalSection(item.section, existing: MenuImport.sections(others))
+        clean.details = MenuImport.clip(item.details, MenuImport.detailsLimit)
+        clean.price = MenuImport.validPrice(item.price)
+        clean.imageURL = item.imageURL.trimmingCharacters(in: .whitespaces)
+        return clean
     }
 
     private func importMenu(venueID: String, drafts: [MenuDraftItem]) {

@@ -14,12 +14,26 @@ jobs:
   # симулятора — секунды. Отдельная джоба, потому что падать должно ДО того, как
   # кто-то ждёт сборку приложения.
   domain:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
+      # Проект в формате Xcode 16 (objectVersion 77, синхронизированные папки):
+      # Xcode 15 его не открывает. Раньше здесь был жёсткий путь Xcode_16.app
+      # с `|| true` — такого пути на раннере нет, ошибка глоталась, и сборка
+      # молча шла на Xcode 15.4 по умолчанию. Теперь берём самый новый
+      # стабильный Xcode раннера и падаем, если он старше 16.
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.app || true
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_*.app | grep -vi beta | sort -V | tail -1)
+          echo "Using $XCODE"
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+          MAJOR=$(xcodebuild -version | head -1 | sed -E 's/Xcode ([0-9]+).*/\1/')
+          if [ "$MAJOR" -lt 16 ]; then
+            echo "::error::Нужен Xcode 16+ (формат проекта 77), на раннере $MAJOR."
+            exit 1
+          fi
 
       # Firebase в пакет не подключён, поэтому его импорт и так не соберётся.
       # А вот SwiftUI/UIKit — системные фреймворки, компилятор их пропустит:
@@ -60,15 +74,46 @@ jobs:
           fi
 
   app:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
+      # Проект в формате Xcode 16 (objectVersion 77, синхронизированные папки):
+      # Xcode 15 его не открывает. Раньше здесь был жёсткий путь Xcode_16.app
+      # с `|| true` — такого пути на раннере нет, ошибка глоталась, и сборка
+      # молча шла на Xcode 15.4 по умолчанию. Теперь берём самый новый
+      # стабильный Xcode раннера и падаем, если он старше 16.
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.app || true
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_*.app | grep -vi beta | sort -V | tail -1)
+          echo "Using $XCODE"
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+          MAJOR=$(xcodebuild -version | head -1 | sed -E 's/Xcode ([0-9]+).*/\1/')
+          if [ "$MAJOR" -lt 16 ]; then
+            echo "::error::Нужен Xcode 16+ (формат проекта 77), на раннере $MAJOR."
+            exit 1
+          fi
 
       - name: Resolve Swift packages
         run: xcodebuild -resolvePackageDependencies -project SAN.xcodeproj -scheme SAN
+
+      # Симулятор — любой доступный iPhone на самой новой iOS раннера. Имя
+      # «iPhone 15» зашивать нельзя: в свежих образах его уже нет.
+      - name: Pick simulator
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c "
+          import json, sys
+          devices = json.load(sys.stdin)['devices']
+          for runtime in sorted(devices, reverse=True):
+              if 'iOS' not in runtime: continue
+              for d in devices[runtime]:
+                  if d['name'].startswith('iPhone'):
+                      print(d['udid']); sys.exit(0)
+          sys.exit('no iPhone simulator')
+          ")
+          echo "Simulator: $UDID"
+          echo "SIM_UDID=$UDID" >> "$GITHUB_ENV"
 
       # Сборка и прогон разнесены (build-for-testing / test-without-building),
       # чтобы не компилировать проект дважды: ошибка сборки и упавший тест — разные шаги.
@@ -77,7 +122,7 @@ jobs:
           xcodebuild build-for-testing \
             -project SAN.xcodeproj \
             -scheme SAN \
-            -destination 'platform=iOS Simulator,name=iPhone 15' \
+            -destination "platform=iOS Simulator,id=$SIM_UDID" \
             CODE_SIGNING_ALLOWED=NO | xcpretty || exit ${PIPESTATUS[0]}
 
       - name: Test
@@ -85,5 +130,5 @@ jobs:
           xcodebuild test-without-building \
             -project SAN.xcodeproj \
             -scheme SAN \
-            -destination 'platform=iOS Simulator,name=iPhone 15' \
+            -destination "platform=iOS Simulator,id=$SIM_UDID" \
             CODE_SIGNING_ALLOWED=NO | xcpretty || exit ${PIPESTATUS[0]}

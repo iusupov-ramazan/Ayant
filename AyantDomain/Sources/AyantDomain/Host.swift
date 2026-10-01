@@ -142,7 +142,9 @@ public enum HostIntent: Equatable {
     case togglePause(venueID: String)
     case setTodaySpecial(venueID: String, text: String)
     case deleteVenue(id: String)
-    case addItem(venueID: String, name: String, emoji: String, kind: String, imageURL: String)
+    /// Новое блюдо вручную — те же поля, что у правки (раздел, цена,
+    /// описание, фото). `id` присваивает стор.
+    case addItem(venueID: String, item: VenueItem)
     case deleteItem(venueID: String, itemID: String)
     /// Правка одного блюда (название, цена, описание, раздел, фото).
     case updateItem(venueID: String, item: VenueItem)

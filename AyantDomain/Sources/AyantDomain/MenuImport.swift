@@ -136,6 +136,22 @@ public enum MenuImport {
         let collapsed = s.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
         return String(collapsed.prefix(limit))
     }
+
+    /// Разделы меню в порядке появления, без пустых и без повторов.
+    public static func sections(_ items: [VenueItem]) -> [String] {
+        grouped(items) { $0.section }.map(\.section).filter { !$0.isEmpty }
+    }
+
+    /// Раздел, введённый руками, — к написанию уже существующего: «супы» и
+    /// « Супы » попадают в «Супы». Меню группируется по точной строке, и без
+    /// этого одна опечатка регистра заводила второй раздел «Супы» в меню
+    /// гостя. Нового раздела нет — возвращается очищенный ввод.
+    public static func canonicalSection(_ typed: String, existing: [String]) -> String {
+        let clean = clip(typed, sectionLimit)
+        guard !clean.isEmpty else { return "" }
+        let key = clean.lowercased()
+        return existing.first { clip($0, sectionLimit).lowercased() == key } ?? clean
+    }
 }
 
 /// Этап импорта меню — одно значение вместо разрозненных флагов.

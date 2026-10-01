@@ -99,6 +99,50 @@ final class BonusWalletTests: XCTestCase {
         XCTAssertEqual(store.coupons.first?.code, c.code)
     }
 
+    /// Старые купоны (до серверного кошелька) убираются с устройства один раз;
+    /// новые остаются.
+    func testLegacyCouponsArePurgedOnce() throws {
+        let defaults = UserDefaults.standard
+        defaults.removeObject(forKey: "san.coupons.legacyPurged.v1")
+        let old = Coupon(id: "old", title: "Старый", code: "AYANT-OLD",
+                         createdAt: CouponStore.legacyCutoff.addingTimeInterval(-86_400))
+        let fresh = Coupon(id: "new", title: "Новый", code: "AYANT-NEW",
+                           createdAt: CouponStore.legacyCutoff.addingTimeInterval(60))
+        defaults.set(try JSONEncoder().encode([old, fresh]), forKey: "san.coupons")
+
+        let store = CouponStore(backend: StubCouponService())
+        XCTAssertEqual(store.coupons.map(\.code), ["AYANT-NEW"])
+
+        // Второй раз не чистит: купон, добавленный после очистки, остаётся.
+        defaults.set(try JSONEncoder().encode([old, fresh]), forKey: "san.coupons")
+        let again = CouponStore(backend: StubCouponService())
+        XCTAssertEqual(again.coupons.count, 2)
+        again.resetForNewUser()
+    }
+
+    /// Сотрудник погасил купон (скан или ввод кода) — у гостя он становится
+    /// использованным сразу, без перезапуска.
+    func testRedeemedOnServerShowsUsedImmediately() async {
+        let backend = StubCouponService()
+        let store = CouponStore(backend: backend)
+        store.resetForNewUser()
+        let active = Coupon(id: "c1", title: "Капучино", code: "AYANT-ABC123",
+                            createdAt: CouponStore.legacyCutoff.addingTimeInterval(60), venueID: "v1")
+        store.observe(userID: "u1")
+        try? await Task.sleep(nanoseconds: 50_000_000)   // дать задаче-слушателю подписаться
+        backend.pushCoupons([active])
+        await waitUntil(store.coupons.first?.used == false)
+        XCTAssertEqual(store.activeCount, 1)
+
+        var used = active
+        used.used = true
+        backend.pushCoupons([used])
+        await waitUntil(store.coupons.first?.used == true)
+        XCTAssertEqual(store.coupons.first?.used, true)
+        XCTAssertEqual(store.activeCount, 0)
+        store.resetForNewUser()
+    }
+
     func testLocalSpendIsDisabledWithServerWallet() {
         engine.balance = 500
         XCTAssertFalse(engine.spend(100), "списание только на сервере")
@@ -214,7 +258,15 @@ final class StubCouponService: CouponService {
     func saveCoupon(_ coupon: Coupon, userID: String) async throws {}
     func fetchGlobalRewards() async throws -> [Reward] { [] }
     func fetchCouponOffers(venueID: String) async throws -> [CouponOffer] { [] }
+    var approvedOffers: [CouponOffer] = []
+    func fetchApprovedCouponOffers() async throws -> [CouponOffer] { approvedOffers }
     func fetchCoupons(userID: String) async throws -> [Coupon] { [] }
+    /// Живой поток купонов: тест «гасит» купон на сервере через `pushCoupons`.
+    private var couponStream: AsyncStream<[Coupon]>.Continuation?
+    func coupons(userID: String) -> AsyncStream<[Coupon]> {
+        AsyncStream { self.couponStream = $0 }
+    }
+    func pushCoupons(_ list: [Coupon]) { couponStream?.yield(list) }
     func fetchLoyaltyCards(userID: String) async throws -> [LoyaltyCard] { [] }
     func loyaltyCards(userID: String) -> AsyncStream<[LoyaltyCard]> { AsyncStream { $0.finish() } }
     func fetchVenuePoints(userID: String) async throws -> [VenuePointsCard] { [] }

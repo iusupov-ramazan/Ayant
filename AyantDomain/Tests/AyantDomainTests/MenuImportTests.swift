@@ -90,4 +90,26 @@ final class MenuImportTests: XCTestCase {
         XCTAssertEqual(item.details, "")
         XCTAssertEqual(item.section, "")
     }
+
+    // MARK: Разделы при ручном добавлении
+
+    private func dish(_ name: String, _ section: String) -> VenueItem {
+        VenueItem(id: name, name: name, emoji: "🍽", kind: "food", section: section)
+    }
+
+    func testSectionsKeepMenuOrderWithoutEmptyAndRepeats() {
+        let menu = [dish("Лагман", "Супы"), dish("Чай", ""), dish("Плов", "Горячее"), dish("Шорпо", "Супы")]
+        XCTAssertEqual(MenuImport.sections(menu), ["Супы", "Горячее"])
+    }
+
+    func testCanonicalSectionSnapsToExistingSpelling() {
+        let existing = ["Супы", "Горячее"]
+        // Регистр и лишние пробелы не заводят второй раздел «Супы».
+        XCTAssertEqual(MenuImport.canonicalSection("  супы ", existing: existing), "Супы")
+        XCTAssertEqual(MenuImport.canonicalSection("ГОРЯЧЕЕ", existing: existing), "Горячее")
+        // Новый раздел — как ввели, но очищенный.
+        XCTAssertEqual(MenuImport.canonicalSection(" Десерты  дня ", existing: existing), "Десерты дня")
+        // Пустой — блюдо без раздела.
+        XCTAssertEqual(MenuImport.canonicalSection("   ", existing: existing), "")
+    }
 }

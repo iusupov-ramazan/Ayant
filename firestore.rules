@@ -341,9 +341,13 @@ service cloud.firestore {
     match /venuePoints/{cardId} {
       allow read:  if isSignedIn() && resource.data.userID == uid();
       allow write: if false;
+      // Владелец — по id карты (`{userID}_{venueID}`), а не через get() карты:
+      // у гостя, ещё не получавшего баллы в этом заведении, карты нет, get()
+      // падает, и Firestore отклонял весь запрос — экран истории показывал
+      // «Нет доступа к истории этого аккаунта» вместо пустой истории.
+      // UID Firebase — только буквы и цифры, так что префикс однозначен.
       match /ledger/{txnId} {
-        allow read: if isSignedIn()
-          && get(/databases/$(database)/documents/venuePoints/$(cardId)).data.userID == uid();
+        allow read: if isSignedIn() && cardId.matches(uid() + '_.+');
         allow write: if false;
       }
       // Ключи идемпотентности списания (redeemVenuePoints). Пишет только

@@ -15,13 +15,15 @@ import AyantFeatures
 //
 // • нет заведений — пустое состояние с «Добавить заведение»;
 // • одно — сразу его страница, без «назад»;
-// • несколько — та же страница, а под шапкой — чипы всех заведений
-//   (фото + название) с «Добавить» в конце.
+// • несколько — та же страница, а над ней — подписанная полоса «Ваши
+//   заведения · N»: чипы всех заведений (фото + название + статус),
+//   «Добавить» в конце и «Все» — лист со списком.
 //
-// Название в шапке — всегда переключатель (лист со списком и «Добавить
-// заведение»), даже при одном заведении: так второе заводится там же, где
-// потом между ними переключаются. Устройство самой страницы — в
-// комментарии к `HostVenueDetailView`.
+// Владельцу одного заведения переключатель не показываем вовсе: второе
+// заводится в «Профиль → Заведения» и в листе «Все». Название в шапке
+// больше не кнопка — заголовок-переключатель многие не узнавали.
+// Устройство самой страницы — в комментарии к `HostVenueDetailView`,
+// данные заведения — `HostVenueSettingsView`.
 //
 // Выбранное заведение помнится между запусками (`HostSelection.venueKey`).
 // Второе место, где заводят заведения и переходят между ними, — «Профиль».
@@ -67,6 +69,9 @@ struct HostVenuesView: View {
             }
             .navigationDestination(for: HostPromoteTarget.self) {
                 HostPromoteCreateView(venueID: $0.venueID)
+            }
+            .navigationDestination(for: HostVenueSettingsTarget.self) {
+                HostVenueSettingsView(venueID: $0.venueID)
             }
             .navigationDestination(for: HostInstagramTarget.self) {
                 HostInstagramView(venueID: $0.venueID)
@@ -358,48 +363,48 @@ private struct HostAddVenueSheet: ViewModifier {
 
 /// Разделы страницы заведения. Подписаны словами, а не иконками: хозяин
 /// должен читать, куда нажимает, а не угадывать, что значит «билетик».
+///
+/// «Лояльности» здесь больше нет: у неё своя вкладка кабинета рядом, и
+/// второй вход в те же настройки только путал, где их искать.
 private enum HostVenueTab: CaseIterable {
-    case deals, menu, coupons, loyalty
+    case deals, menu, coupons
 
     var title: LocalizedStringKey {
         switch self {
         case .deals: return "Акции"
         case .menu: return "Меню"
         case .coupons: return "Купоны"
-        case .loyalty: return "Лояльность"
         }
     }
 }
 
 /// Страница заведения — корень первой вкладки (см. `HostVenuesView`).
 ///
-/// Читается сверху вниз, по одному вопросу на блок:
-/// 1. **Какое заведение открыто** — переключатель в шапке (и чипы всех
-///    заведений под ним, если их несколько).
-/// 2. **Что это за заведение** — одна карточка: фото, название, адрес,
-///    предложение дня, «Изменить».
-/// 3. **Видят ли его гости** — одна строка статуса с подписанным
-///    переключателем «Показывать гостям».
-/// 4. **Что в нём есть** — разделы словами (Акции · Меню · Купоны ·
-///    Лояльность), закреплены при прокрутке; в каждом сверху — главное
-///    действие раздела кнопкой с текстом.
+/// Здесь только ежедневная работа; всё о самом заведении (название, адреса,
+/// часы, контакты, видимость, удаление) — на странице «Данные заведения»
+/// (`HostVenueSettingsView`), куда ведёт карточка. Сверху вниз:
+/// 1. **Какое заведение открыто** — при двух и больше: подписанная полоса
+///    «Ваши заведения» с чипами всех заведений и кнопкой «Все».
+/// 2. **Плашка модерации** — только когда гость не видит заведение не по
+///    воле хозяина (на проверке / отклонено).
+/// 3. **Карточка заведения** — фото, название, статус одной строкой и
+///    подписанный вход «Данные заведения».
+/// 4. **Предложение дня** — одна строка.
+/// 5. **Разделы** Акции · Меню · Купоны — закреплены при прокрутке; в каждом
+///    сверху одинаково: главное действие + второй способ (Instagram / файл).
 ///
-/// Ничего важного не спрятано в иконках без подписи: единственное меню «•••»
-/// хранит только редкое (продвижение, удаление).
+/// Ничего важного не спрятано в иконках без подписи.
 struct HostVenueDetailView: View {
     let venueID: String
-    /// Выбрать другое заведение (чипы под шапкой).
+    /// Выбрать другое заведение (чипы полосы «Ваши заведения»).
     var onSelectVenue: ((String) -> Void)? = nil
     /// «Добавить заведение» — в конце чипов и в листе заведений.
     var onAddVenue: (() -> Void)? = nil
-    /// Лист со списком заведений — по нажатию на название в шапке.
+    /// Лист со списком заведений — кнопка «Все» на полосе.
     var onShowAllVenues: (() -> Void)? = nil
     @EnvironmentObject private var host: HostStore
-    @AppStorage("san.hostMode") private var hostMode = true
     @State private var activeSheet: HostVenueSheet?
-    @State private var showDeleteConfirm = false
-    /// Блюдо, удаление которого ждёт подтверждения. Корзина стоит вплотную к
-    /// строке блюда — промах пальцем стирал блюдо вместе с его отзывами.
+    /// Блюдо, удаление которого ждёт подтверждения.
     @State private var itemPendingDelete: VenueItem?
     @State private var tab: HostVenueTab = .deals
 
@@ -410,12 +415,13 @@ struct HostVenueDetailView: View {
         ScrollView {
             if let v = dto {
                 LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
-                    header(v)
-                    if hasSeveralVenues { venueChips(current: v) }
+                    HostHomeTopBar()
+                    if hasSeveralVenues { venueSwitcher(current: v) }
                     VStack(alignment: .leading, spacing: 12) {
                         HostSyncFailureBanner()
-                        infoCard(v)
-                        statusCard(v)
+                        moderationBanner(v)
+                        venueCard(v)
+                        todaySpecialRow(v)
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 14).padding(.bottom, 18)
@@ -436,12 +442,10 @@ struct HostVenueDetailView: View {
         .task(id: venueID) { host.observeInstagram(venueID: venueID) }
         .sheet(item: $activeSheet) { sheet in
             switch sheet {
-            case .editVenue: if let v = dto { HostVenueFormView(existing: v) }
-            case .stampCard: if let v = dto { HostStampCardFormView(venue: v) }
             case .todaySpecial: if let v = dto { HostTodaySpecialSheet(venue: v) }
             case .addDeal: HostDealFormView(venueID: venueID, existing: nil)
             case .editDeal(let d): HostDealFormView(venueID: venueID, existing: d)
-            case .addItem: HostItemFormView(venueID: venueID)
+            case .addItem(let section): HostItemFormView(venueID: venueID, presetSection: section)
             case .menuImport: if let v = dto { HostMenuImportView(venue: v).environmentObject(host) }
             case .editItem(let item): HostItemEditView(venueID: venueID, item: item).environmentObject(host)
             case .addCoupon:
@@ -449,14 +453,6 @@ struct HostVenueDetailView: View {
             case .editCoupon(let c):
                 HostCouponFormView(venueID: venueID, venueName: dto?.name ?? "", existing: c)
             }
-        }
-        .alert("Удалить заведение?", isPresented: $showDeleteConfirm) {
-            // Страница — корень вкладки, закрывать нечего: после удаления
-            // вкладка сама покажет следующее заведение или пустое состояние.
-            Button("Удалить", role: .destructive) { host.send(.deleteVenue(id: venueID)) }
-            Button("Отмена", role: .cancel) {}
-        } message: {
-            Text("«\(dto?.name ?? "")» и все его предложения будут удалены без возможности восстановления.")
         }
         .alert("Удалить блюдо?",
                isPresented: Binding(get: { itemPendingDelete != nil },
@@ -471,320 +467,296 @@ struct HostVenueDetailView: View {
         }
     }
 
-    // MARK: 1. Шапка — какое заведение открыто
+    // MARK: 1. Какое заведение открыто
 
-    /// Одна строка вместо трёх: «Режим заведения» стал подписью над
-    /// названием, а название — переключателем. Он есть всегда, даже при одном
-    /// заведении: в листе — «Добавить заведение», и владельцу одного не
-    /// нужно искать, где заводится второе.
-    private func header(_ v: HostVenueDTO) -> some View {
-        HStack(alignment: .center, spacing: 12) {
-            Button {
-                SanHaptics.selection()
-                onShowAllVenues?()
-            } label: {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(hasSeveralVenues ? "Ваши заведения · \(host.state.venues.count)" : "Режим заведения")
-                        .textCase(.uppercase)
-                        .font(.golos(10.5, .heavy)).tracking(1)
-                        .foregroundStyle(Color.sanHostEyebrow)
-                    HStack(spacing: 6) {
-                        Text(v.name)
-                            .font(.golos(22, .heavy)).tracking(-0.5)
-                            .foregroundStyle(Color.sanInk)
-                            .lineLimit(1)
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(Color.sanInkSoft)
-                            .padding(5)
-                            .background(Color.sanSurfaceMuted, in: Circle())
+    /// Полоса заведений — только при двух и больше. Подписана словами
+    /// («Ваши заведения · 3»), чтобы было понятно, что это переключатель, а
+    /// не украшение; выбранное — залито и с галочкой; у неопубликованных и
+    /// скрытых — точка статуса прямо в чипе. «Все» открывает лист со
+    /// списком, статусами и «Добавить заведение».
+    ///
+    /// Название в шапке больше не переключатель: заголовок, который ведёт
+    /// себя как кнопка, многие не узнавали.
+    private func venueSwitcher(current: HostVenueDTO) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text("Ваши заведения · \(host.state.venues.count)")
+                    .textCase(.uppercase)
+                    .font(.golos(11, .heavy)).tracking(0.8)
+                    .foregroundStyle(Color.sanHostEyebrow)
+                Spacer(minLength: 8)
+                if let onShowAllVenues {
+                    Button {
+                        SanHaptics.selection()
+                        onShowAllVenues()
+                    } label: {
+                        HStack(spacing: 3) {
+                            Text("Все")
+                            Image(systemName: "chevron.right").font(.system(size: 11, weight: .bold))
+                        }
+                        .font(.golos(13.5, .semibold))
+                        .foregroundStyle(Color.sanAccentText)
+                        .frame(minHeight: 32)
+                        .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Все заведения")
                 }
-                .contentShape(Rectangle())
             }
-            .buttonStyle(.sanPress(0.97))
-            .accessibilityHint(Text("Выбрать или добавить заведение"))
-            Spacer(minLength: 8)
-            HostGuestPill { hostMode = false }
+            .padding(.horizontal, SanMetrics.screenPadding)
+
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(host.state.venues) { venue in
+                            venueChip(venue, selected: venue.id == current.id)
+                                .id(venue.id)
+                        }
+                        if let onAddVenue {
+                            Button(action: onAddVenue) {
+                                Label("Добавить", systemImage: "plus")
+                                    .font(.golos(14, .semibold))
+                                    .foregroundStyle(Color.sanAccentText)
+                                    .padding(.horizontal, 14)
+                                    .frame(height: 40)
+                                    .background(Color.sanAccent.opacity(0.12), in: Capsule())
+                            }
+                            .buttonStyle(.sanPress(0.96))
+                        }
+                    }
+                    .padding(.horizontal, SanMetrics.screenPadding)
+                }
+                // Без якоря — прокрутка ровно настолько, чтобы выбранный
+                // чип был виден: `.center` обрезал первый чип у края, когда
+                // все и так помещались.
+                .onAppear { proxy.scrollTo(current.id) }
+            }
         }
-        .padding(.horizontal, SanMetrics.screenPadding)
-        .padding(.top, 6).padding(.bottom, 12)
-        .frame(maxWidth: .infinity)
+        .padding(.bottom, 12)
         .background(Color.sanHostHeader)
     }
 
-    /// Все заведения — чипами с фото И названием: кружки без подписи
-    /// приходилось узнавать по картинке. Только при двух и больше.
-    private func venueChips(current: HostVenueDTO) -> some View {
-        ScrollViewReader { proxy in
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(host.state.venues) { venue in
-                        let selected = venue.id == current.id
-                        Button {
-                            guard !selected else { return }
-                            SanHaptics.selection()
-                            onSelectVenue?(venue.id)
-                        } label: {
-                            HStack(spacing: 8) {
-                                VenuePhoto(urlString: venue.imageURL.isEmpty ? nil : venue.imageURL,
-                                           gradient: venue.asVenue.gradientColors)
-                                    .frame(width: 26, height: 26)
-                                    .clipShape(Circle())
-                                Text(venue.name)
-                                    .font(.golos(14, .semibold))
-                                    .lineLimit(1)
-                                // Не опубликовано или скрыто — видно прямо в чипе.
-                                if venue.moderation != .approved || venue.isPaused {
-                                    Circle()
-                                        .fill(venue.moderation == .rejected ? Color.red : Color.orange)
-                                        .frame(width: 7, height: 7)
-                                }
-                            }
-                            .foregroundStyle(selected ? Color.white : Color.sanInk)
-                            .padding(.leading, 5).padding(.trailing, 14)
-                            .frame(height: 36)
-                            .background(selected ? AnyShapeStyle(LinearGradient.sanAccentGradient)
-                                                 : AnyShapeStyle(Color.sanSurface),
-                                        in: Capsule())
-                            .overlay(Capsule().strokeBorder(Color.sanHairline, lineWidth: selected ? 0 : 1))
-                        }
-                        .buttonStyle(.sanPress(0.96))
-                        .id(venue.id)
-                        .accessibilityAddTraits(selected ? .isSelected : [])
-                    }
-                    if let onAddVenue {
-                        Button(action: onAddVenue) {
-                            Label("Добавить", systemImage: "plus")
-                                .font(.golos(14, .semibold))
-                                .foregroundStyle(Color.sanAccentText)
-                                .padding(.horizontal, 14)
-                                .frame(height: 36)
-                                .background(Color.sanAccent.opacity(0.12), in: Capsule())
-                        }
-                        .buttonStyle(.sanPress(0.96))
-                    }
+    private func venueChip(_ venue: HostVenueDTO, selected: Bool) -> some View {
+        Button {
+            guard !selected else { return }
+            SanHaptics.selection()
+            onSelectVenue?(venue.id)
+        } label: {
+            HStack(spacing: 8) {
+                VenuePhoto(urlString: venue.imageURL.isEmpty ? nil : venue.imageURL,
+                           gradient: venue.asVenue.gradientColors)
+                    .frame(width: 28, height: 28)
+                    .clipShape(Circle())
+                Text(venue.name)
+                    .font(.golos(14, .semibold))
+                    .lineLimit(1)
+                if selected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 11, weight: .heavy))
+                } else if venue.moderation != .approved || venue.isPaused {
+                    // Не опубликовано или скрыто — видно прямо в чипе.
+                    Circle()
+                        .fill(venue.moderation == .rejected ? Color.red : Color.orange)
+                        .frame(width: 7, height: 7)
                 }
-                .padding(.horizontal, SanMetrics.screenPadding)
-                .padding(.vertical, 10)
             }
-            .background(Color.sanHostHeader)
-            .onAppear { proxy.scrollTo(current.id, anchor: .center) }
+            .foregroundStyle(selected ? Color.white : Color.sanInk)
+            .padding(.leading, 6).padding(.trailing, 14)
+            .frame(height: 40)
+            .background(selected ? AnyShapeStyle(LinearGradient.sanAccentGradient)
+                                 : AnyShapeStyle(Color.sanSurface),
+                        in: Capsule())
+            .overlay(Capsule().strokeBorder(Color.sanHairline, lineWidth: selected ? 0 : 1))
+        }
+        .buttonStyle(.sanPress(0.96))
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .accessibilityHint(selected ? Text("Открыто сейчас") : Text("Открыть это заведение"))
+    }
+
+    // MARK: 2. Плашка модерации
+
+    /// Только «на проверке» и «отклонено»: опубликованному заведению плашка
+    /// не нужна — всё сказано строкой статуса на карточке.
+    @ViewBuilder
+    private func moderationBanner(_ v: HostVenueDTO) -> some View {
+        let state = HostVenueVisibility(v)
+        if state.needsAttention {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: state.icon)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(state.color)
+                        .frame(width: 32, height: 32)
+                        .background(state.color.opacity(0.12), in: Circle())
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(state.title).font(.golos(15, .bold)).foregroundStyle(Color.sanInk)
+                        Text(state.text).font(.golos(12.5)).foregroundStyle(Color.sanInkSoft)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 0)
+                }
+                if v.moderation == .rejected {
+                    NavigationLink(value: HostVenueSettingsTarget(venueID: v.id)) {
+                        Text("Исправить данные")
+                            .font(.golos(13.5, .semibold)).foregroundStyle(.white)
+                            .padding(.horizontal, 16).frame(height: 36)
+                            .background(state.color, in: Capsule())
+                    }
+                    .buttonStyle(.sanPress(0.97))
+                    .padding(.leading, 44)
+                }
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(state.color.opacity(0.08),
+                        in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
     }
 
-    // MARK: 2. Карточка — что это за заведение
+    // MARK: 3. Карточка заведения
 
-    private func infoCard(_ v: HostVenueDTO) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top, spacing: 14) {
-                VenuePhoto(urlString: v.imageURL.isEmpty ? nil : v.imageURL,
-                           gradient: v.asVenue.gradientColors)
-                    .frame(width: 64, height: 64)
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(v.name)
-                        .font(.golos(18, .bold)).foregroundStyle(Color.sanInk)
-                        .lineLimit(2)
-                    let subtitle = [LS(v.category.rawValue), v.district]
-                        .filter { !$0.isEmpty }.joined(separator: " · ")
-                    if !subtitle.isEmpty {
-                        Text(subtitle).font(.golos(13.5)).foregroundStyle(Color.sanInkSoft)
-                    }
-                    // Адреса равноправны: один — пишем его, несколько — число.
-                    let places = v.locations
-                    if places.count == 1 {
-                        Text(verbatim: places[0].address).font(.golos(13.5)).foregroundStyle(Color.sanInkSoft)
-                            .lineLimit(2)
-                    } else if places.count > 1 {
-                        Label("\(places.count) \(Plural.ru(places.count, "адрес", "адреса", "адресов"))",
-                              systemImage: "mappin.and.ellipse")
-                            .font(.golos(13.5)).foregroundStyle(Color.sanInkSoft)
-                    }
-                }
-                Spacer(minLength: 0)
-                moreMenu(v)
-            }
-
-            // Предложение дня — строкой в карточке, с понятным «что это».
-            Button { activeSheet = .todaySpecial } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "star.fill")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Color.sanAccentText)
-                        .frame(width: 30, height: 30)
-                        .background(Color.sanAccent.opacity(0.12), in: Circle())
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text("Предложение дня")
-                            .font(.golos(12, .semibold)).foregroundStyle(Color.sanInkSoft)
-                        Text((v.todaySpecial ?? "").isEmpty ? LS("Не задан — нажмите, чтобы добавить") : v.todaySpecial!)
-                            .font(.golos(14, .medium))
-                            .foregroundStyle((v.todaySpecial ?? "").isEmpty ? Color.sanInkSoft : Color.sanInk)
+    /// Вся карточка — одна кнопка в «Данные заведения», и это написано
+    /// словами внизу карточки, а не спрятано в карандаше без подписи.
+    private func venueCard(_ v: HostVenueDTO) -> some View {
+        let state = HostVenueVisibility(v)
+        return NavigationLink(value: HostVenueSettingsTarget(venueID: v.id)) {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(alignment: .top, spacing: 14) {
+                    VenuePhoto(urlString: v.imageURL.isEmpty ? nil : v.imageURL,
+                               gradient: v.asVenue.gradientColors)
+                        .frame(width: 60, height: 60)
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(v.name)
+                            .font(.golos(19, .heavy)).tracking(-0.3)
+                            .foregroundStyle(Color.sanInk)
                             .lineLimit(2)
                             .multilineTextAlignment(.leading)
+                        Text(verbatim: cardSubtitle(v))
+                            .font(.golos(13)).foregroundStyle(Color.sanInkSoft)
+                            .lineLimit(1)
+                        // При модерации статус уже сказан плашкой над карточкой.
+                        if !state.needsAttention {
+                            HStack(spacing: 6) {
+                                Circle().fill(state.color).frame(width: 7, height: 7)
+                                Text(state.title)
+                                    .font(.golos(12.5, .semibold)).foregroundStyle(state.color)
+                            }
+                            .padding(.top, 1)
+                        }
                     }
-                    Spacer(minLength: 4)
+                    Spacer(minLength: 0)
+                }
+                .padding(16)
+                SanHairline()
+                HStack(spacing: 12) {
+                    Image(systemName: "slider.horizontal.3")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Color.sanAccentText)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Данные заведения")
+                            .font(.golos(14.5, .semibold)).foregroundStyle(Color.sanInk)
+                        Text("Адреса, часы, контакты, видимость")
+                            .font(.golos(12)).foregroundStyle(Color.sanInkSoft)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 8)
                     Image(systemName: "chevron.right")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(Color.sanInkSoft)
                 }
-                .padding(10)
-                .background(Color.sanSurfaceMuted, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .contentShape(Rectangle())
+                .padding(.horizontal, 16).padding(.vertical, 13)
             }
-            .buttonStyle(.plain)
-
-            Button { activeSheet = .editVenue } label: {
-                Label("Изменить данные заведения", systemImage: "pencil")
-                    .font(.golos(14, .semibold)).foregroundStyle(Color.sanInk)
-                    .frame(maxWidth: .infinity).frame(height: 40)
-                    .background(Color.sanSurfaceMuted, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            }
-            .buttonStyle(.sanPress(0.98))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .sanCard(padding: 0)
+            .contentShape(Rectangle())
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .sanCard(padding: 0)
+        .buttonStyle(.sanPress(0.98))
+        .accessibilityHint(Text("Название, адреса, часы работы, контакты, видимость"))
     }
 
-    /// Только редкое: то, что нажимают раз в месяц, не должно стоять рядом
-    /// с тем, что нажимают каждый день.
-    private func moreMenu(_ v: HostVenueDTO) -> some View {
-        Menu {
-            // Продвижение скрыто до подключения оплаты — см. `ReleaseFlags.promote`.
-            if ReleaseFlags.promote {
-                NavigationLink(value: HostPromoteTarget(venueID: v.id)) {
-                    Label("Продвигать заведение", systemImage: "megaphone")
-                }
-                NavigationLink(value: HostQuickAction.promote) {
-                    Label("Все кампании продвижения", systemImage: "list.bullet.rectangle")
-                }
-                Divider()
-            }
-            Button(role: .destructive) { showDeleteConfirm = true } label: {
-                Label("Удалить заведение", systemImage: "trash")
-            }
-        } label: {
-            Image(systemName: "ellipsis")
-                .font(.system(size: 16, weight: .bold))
-                .foregroundStyle(Color.sanInkSoft)
-                .frame(width: 36, height: 36)
-                .background(Color.sanSurfaceMuted, in: Circle())
+    /// Категория и адрес: один адрес — пишем его, несколько — число.
+    private func cardSubtitle(_ v: HostVenueDTO) -> String {
+        let places = v.locations.filter { !$0.address.isEmpty }
+        let where_: String
+        switch places.count {
+        case 0: where_ = v.district
+        case 1: where_ = places[0].address
+        default: where_ = "\(places.count) \(Plural.ru(places.count, "адрес", "адреса", "адресов"))"
         }
-        .accessibilityLabel("Ещё")
+        return [LS(v.category.rawValue), where_].filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
-    // MARK: 3. Статус — видят ли гости
+    // MARK: 4. Предложение дня
 
-    /// Модерация и видимость — в одной строке, потому что отвечают на один
-    /// вопрос: «увидит ли гость моё заведение сейчас». Переключатель раньше
-    /// стоял у названия без подписи; теперь он называется тем, что делает.
-    private func statusCard(_ v: HostVenueDTO) -> some View {
-        let (icon, color, title, text) = statusCopy(v)
-        // Одобренному заведению отдельная строка «Опубликовано» не нужна:
-        // всё сказано подписью под переключателем. Место — под акции.
-        let approved = v.moderation == .approved
-        return VStack(alignment: .leading, spacing: 0) {
-            if !approved {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: icon)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(color)
+    private func todaySpecialRow(_ v: HostVenueDTO) -> some View {
+        let special = v.todaySpecial ?? ""
+        return Button { activeSheet = .todaySpecial } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "star.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color.sanAccentText)
                     .frame(width: 32, height: 32)
-                    .background(color.opacity(0.12), in: Circle())
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(.golos(15, .bold)).foregroundStyle(Color.sanInk)
-                    Text(text).font(.golos(12.5)).foregroundStyle(Color.sanInkSoft)
-                        .fixedSize(horizontal: false, vertical: true)
+                    .background(Color.sanAccent.opacity(0.12), in: Circle())
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Предложение дня")
+                        .font(.golos(12, .semibold)).foregroundStyle(Color.sanInkSoft)
+                    Text(special.isEmpty ? LS("Не задано — нажмите, чтобы добавить") : special)
+                        .font(.golos(14.5, .medium))
+                        .foregroundStyle(special.isEmpty ? Color.sanInkSoft : Color.sanInk)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
                 }
-                Spacer(minLength: 0)
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color.sanInkSoft)
             }
-            SanHairline().padding(.vertical, 12)
-            }
-            Toggle(isOn: Binding(
-                get: { !v.isPaused },
-                set: { _ in host.send(.togglePause(venueID: v.id)) }
-            )) {
-                HStack(spacing: 12) {
-                    if approved {
-                        Image(systemName: icon)
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(color)
-                            .frame(width: 32, height: 32)
-                            .background(color.opacity(0.12), in: Circle())
-                    }
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Показывать гостям")
-                            .font(.golos(14.5, .semibold)).foregroundStyle(Color.sanInk)
-                        Text(approved ? text : "Выключите на ремонт или отпуск — данные сохранятся")
-                            .font(.golos(12)).foregroundStyle(approved ? color : Color.sanInkSoft)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-            }
-            .tint(Color.sanOpen)
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .sanCard(padding: 0)
+            .contentShape(Rectangle())
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .sanCard(padding: 0)
+        .buttonStyle(.sanPress(0.98))
     }
 
-    private func statusCopy(_ v: HostVenueDTO) -> (String, Color, LocalizedStringKey, LocalizedStringKey) {
-        switch v.moderation {
-        case .rejected:
-            return ("xmark.octagon.fill", .red, "Отклонено модерацией",
-                    "Исправьте данные в «Изменить данные заведения» и сохраните — отправим на проверку снова.")
-        case .pending:
-            return ("clock.fill", Color(hex: 0xC26A00), "На проверке",
-                    "Обычно в течение суток. После одобрения заведение появится в ленте.")
-        case .approved:
-            return v.isPaused
-                ? ("eye.slash.fill", Color(hex: 0xC26A00), "Скрыто от гостей",
-                   "Скрыто: заведения и его акций нет в ленте и поиске.")
-                : ("eye.fill", Color(hex: 0x1F7D3A), "Опубликовано",
-                   "Сейчас гости видят заведение в ленте.")
-        }
-    }
+    // MARK: 5. Разделы
 
-    // MARK: 4. Разделы
-
-    /// Закреплённые разделы — словами и с количеством: «Акции 7» читается
-    /// сразу, иконка «сетка» — нет.
+    /// Три раздела помещаются без прокрутки — делим ширину поровну.
     private func tabBar(_ v: HostVenueDTO) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                ForEach(HostVenueTab.allCases, id: \.self) { t in
-                    let selected = tab == t
-                    Button {
-                        SanHaptics.selection()
-                        withAnimation(.snappy(duration: 0.2)) { tab = t }
-                    } label: {
-                        HStack(spacing: 5) {
-                            Text(t.title).font(.golos(14, .semibold)).lineLimit(1)
-                            if let n = count(t, v), n > 0 {
-                                Text("\(n)")
-                                    .font(.golos(12, .bold)).monospacedDigit()
-                                    .foregroundStyle(selected ? Color.sanAccentText : Color.sanInkSoft)
-                                    .padding(.horizontal, 6).padding(.vertical, 1)
-                                    .background(selected ? Color.white : Color.sanSurfaceMuted, in: Capsule())
-                            }
+        HStack(spacing: 6) {
+            ForEach(HostVenueTab.allCases, id: \.self) { t in
+                let selected = tab == t
+                Button {
+                    SanHaptics.selection()
+                    withAnimation(.snappy(duration: 0.2)) { tab = t }
+                } label: {
+                    HStack(spacing: 5) {
+                        Text(t.title).font(.golos(14, .semibold)).lineLimit(1)
+                        if let n = count(t, v), n > 0 {
+                            Text("\(n)")
+                                .font(.golos(12, .bold)).monospacedDigit()
+                                .foregroundStyle(selected ? Color.sanAccentText : Color.sanInkSoft)
+                                .padding(.horizontal, 6).padding(.vertical, 1)
+                                .background(selected ? Color.white : Color.sanSurfaceMuted, in: Capsule())
                         }
-                        .foregroundStyle(selected ? Color.white : Color.sanInk)
-                        .padding(.horizontal, 11)
-                        .frame(height: 36)
-                        // Акцент, а не `sanInk`: в тёмной теме `sanInk` светлый,
-                        // и белая подпись выбранного пропадала на нём.
-                        .background(selected ? AnyShapeStyle(LinearGradient.sanAccentGradient)
-                                             : AnyShapeStyle(Color.sanSurface),
-                                    in: Capsule())
-                        .overlay(Capsule().strokeBorder(Color.sanHairline, lineWidth: selected ? 0 : 1))
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityAddTraits(selected ? .isSelected : [])
+                    .foregroundStyle(selected ? Color.white : Color.sanInk)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 38)
+                    // Акцент, а не `sanInk`: в тёмной теме `sanInk` светлый,
+                    // и белая подпись выбранного пропадала на нём.
+                    .background(selected ? AnyShapeStyle(LinearGradient.sanAccentGradient)
+                                         : AnyShapeStyle(Color.sanSurface),
+                                in: Capsule())
+                    .overlay(Capsule().strokeBorder(Color.sanHairline, lineWidth: selected ? 0 : 1))
+                    .contentShape(Capsule())
                 }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(selected ? .isSelected : [])
             }
-            .padding(.horizontal, 16).padding(.vertical, 10)
         }
+        .padding(.horizontal, 16).padding(.vertical, 10)
         .background(Color.sanCanvas)
         .overlay(alignment: .bottom) { Rectangle().fill(Color.sanHairline).frame(height: 0.5) }
     }
@@ -794,26 +766,70 @@ struct HostVenueDetailView: View {
         case .deals: return host.state.deals(forVenue: v.id).count
         case .menu: return v.items.count
         case .coupons: return host.state.couponOffers(forVenue: v.id).count
-        case .loyalty: return nil
         }
     }
 
     @ViewBuilder
     private func tabContent(_ v: HostVenueDTO) -> some View {
         switch tab {
-        case .deals:
-            dealsTab(v)
-        case .menu:
-            itemsSection(v).padding(16).padding(.bottom, 20)
-        case .coupons:
-            couponsSection(v).padding(16).padding(.bottom, 20)
-        case .loyalty:
-            VStack(alignment: .leading, spacing: 16) {
-                loyaltySection(v)
-                if v.pointsEnabled { pointsCard(v) }
-            }
-            .padding(16).padding(.bottom, 20)
+        case .deals: dealsTab(v)
+        case .menu: menuTab(v)
+        case .coupons: couponsTab(v)
         }
+    }
+
+    // MARK: Действия раздела
+
+    /// Главное действие раздела — залитая кнопка с текстом. Одинаковое место
+    /// и вид во всех трёх разделах: хозяин учит его один раз.
+    private func primaryAction(_ title: LocalizedStringKey, icon: String = "plus") -> some View {
+        Label(title, systemImage: icon)
+            .font(.golos(14.5, .semibold)).foregroundStyle(.white)
+            .frame(maxWidth: .infinity).frame(height: 44)
+            .background(LinearGradient.sanAccentGradient,
+                        in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    /// Второй способ добавить то же самое (Instagram, файл) — рядом, тоже
+    /// с текстом, но без заливки.
+    private func secondaryAction<Accessory: View>(
+        _ title: LocalizedStringKey, icon: String,
+        @ViewBuilder accessory: () -> Accessory = { EmptyView() }
+    ) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+            Text(title).lineLimit(1)
+            accessory()
+        }
+        .font(.golos(14.5, .semibold)).foregroundStyle(Color.sanInk)
+        .frame(maxWidth: .infinity).frame(height: 44)
+        .background(Color.sanSurface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .strokeBorder(Color.sanHairline, lineWidth: 1))
+    }
+
+    private func emptyState(icon: String, title: LocalizedStringKey, text: LocalizedStringKey) -> some View {
+        VStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 34, weight: .light))
+                .foregroundStyle(Color.sanInkSoft)
+            Text(title)
+                .font(.golos(16, .bold)).foregroundStyle(Color.sanInk)
+            Text(text)
+                .font(.golos(13)).foregroundStyle(Color.sanInkSoft)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 32).padding(.vertical, 36)
+    }
+
+    private func footnote(_ text: LocalizedStringKey) -> some View {
+        Text(text)
+            .font(.golos(12)).foregroundStyle(Color.sanInkSoft)
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 24).padding(.top, 14).padding(.bottom, 28)
     }
 
     // MARK: Акции — сетка как в Instagram
@@ -824,51 +840,23 @@ struct HostVenueDetailView: View {
     private func dealsTab(_ v: HostVenueDTO) -> some View {
         let deals = host.state.deals(forVenue: v.id)
         let ig = host.state.instagram(venueID: v.id)
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Акции видят гости в ленте. Скидку заведение применяет само, на кассе.")
-                .font(.golos(12.5)).foregroundStyle(Color.sanInkSoft)
-                .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 8) {
-                Button { activeSheet = .addDeal } label: {
-                    Label("Новая акция", systemImage: "plus")
-                        .font(.golos(14.5, .semibold)).foregroundStyle(.white)
-                        .frame(maxWidth: .infinity).frame(height: 44)
-                        .background(LinearGradient.sanAccentGradient,
-                                    in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                }
+        HStack(spacing: 8) {
+            Button { activeSheet = .addDeal } label: { primaryAction("Новая акция") }
                 .buttonStyle(.sanPress(0.97))
-                NavigationLink(value: HostInstagramTarget(venueID: v.id)) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "camera.on.rectangle")
-                        Text("Из Instagram")
-                        if ig.isConnected {
-                            Circle().fill(Color.green).frame(width: 6, height: 6)
-                        }
+            NavigationLink(value: HostInstagramTarget(venueID: v.id)) {
+                secondaryAction("Из Instagram", icon: "camera.on.rectangle") {
+                    if ig.isConnected {
+                        Circle().fill(Color.green).frame(width: 6, height: 6)
                     }
-                    .font(.golos(14.5, .semibold)).foregroundStyle(Color.sanInk)
-                    .frame(maxWidth: .infinity).frame(height: 44)
-                    .background(Color.sanSurface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(Color.sanHairline, lineWidth: 1))
                 }
-                .buttonStyle(.sanPress(0.97))
             }
+            .buttonStyle(.sanPress(0.97))
         }
         .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 14)
 
         if deals.isEmpty {
-            VStack(spacing: 8) {
-                Image(systemName: "photo.on.rectangle.angled")
-                    .font(.system(size: 34, weight: .light))
-                    .foregroundStyle(Color.sanInkSoft)
-                Text("Пока нет акций")
-                    .font(.golos(16, .bold)).foregroundStyle(Color.sanInk)
-                Text("Первая акция появится здесь плиткой — как пост в Instagram.")
-                    .font(.golos(13)).foregroundStyle(Color.sanInkSoft)
-                    .multilineTextAlignment(.center)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, 32).padding(.vertical, 40)
+            emptyState(icon: "photo.on.rectangle.angled", title: "Пока нет акций",
+                       text: "Акции видят гости в ленте, скидку вы применяете сами на кассе. Первая появится здесь плиткой — как пост в Instagram.")
         } else {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 2), count: 3),
                       spacing: 2) {
@@ -879,11 +867,7 @@ struct HostVenueDetailView: View {
                         .accessibilityLabel(Text(d.title))
                 }
             }
-            Text("Нажмите на акцию, чтобы изменить. Удержите — пауза, копия, удаление.")
-                .font(.golos(12)).foregroundStyle(Color.sanInkSoft)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, 24).padding(.top, 14).padding(.bottom, 28)
+            footnote("Нажмите на акцию, чтобы изменить. Удержите — пауза, копия, удаление.")
         }
     }
 
@@ -951,198 +935,153 @@ struct HostVenueDetailView: View {
             .contentShape(Rectangle())
     }
 
-    // MARK: Секции вкладок
+    // MARK: Меню
 
-    /// «Баллы САН»: сколько начислено и три стеклянные плитки правил.
-    private func pointsCard(_ v: HostVenueDTO) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Баллы САН")
-                        .font(.golos(12.5, .semibold)).foregroundStyle(.white.opacity(0.9))
-                    Text(v.pointsRewards.isEmpty ? "Награды не заведены" : "\(v.pointsRewards.count) наград")
-                        .sanText(24, .heavy, tracking: -1)
-                        .foregroundStyle(.white)
-                }
-                Spacer(minLength: 8)
-                if let mode = v.asVenue.pointsModeLabel {
-                    Text(mode)
-                        .font(.golos(12, .bold)).foregroundStyle(.white)
-                        .padding(.horizontal, 12).padding(.vertical, 7)
-                        .background(.white.opacity(0.2), in: Capsule())
-                        .fixedSize()
-                }
+    /// «Меню» — бывшие «Объекты для отзывов». Сверху тот же порядок, что в
+    /// «Акциях»: добавить вручную / взять из файла (PDF, Excel, CSV).
+    @ViewBuilder
+    private func menuTab(_ v: HostVenueDTO) -> some View {
+        HStack(spacing: 8) {
+            Button { activeSheet = .addItem(section: "") } label: { primaryAction("Блюдо") }
+                .buttonStyle(.sanPress(0.97))
+            Button { activeSheet = .menuImport } label: {
+                secondaryAction("Из файла", icon: "doc.text.magnifyingglass")
             }
-            HStack(spacing: 8) {
-                glassTile(LF("%lld мин", PointsMath.effectiveCooldownMinutes(v.earnCooldownMinutes)), "Пауза скана")
-                glassTile("\(v.pointsRewards.count)", "Награды")
-                glassTile(LF("%lld мес", v.pointsExpiryMonths > 0 ? v.pointsExpiryMonths : 6), "Сгорание")
-            }
-            .padding(.top, 16)
+            .buttonStyle(.sanPress(0.97))
         }
-        .padding(20)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(LinearGradient.sanAccentGradient,
-                    in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .sanShadow(.hero)
-    }
+        .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 14)
 
-    private func glassTile(_ value: String, _ label: LocalizedStringKey) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(value).font(.golos(15, .heavy)).foregroundStyle(.white).lineLimit(1)
-            Text(label).font(.golos(10.5)).foregroundStyle(.white.opacity(0.88))
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(11)
-        .background(Color.white.opacity(0.16),
-                    in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-    }
-
-    /// «Меню» — бывшие «Объекты для отзывов». Хозяин думает не «объект
-    /// для отзыва», а «моё меню»; то, что по блюду можно оставить отзыв, —
-    /// свойство, а не название раздела.
-    private func itemsSection(_ v: HostVenueDTO) -> some View {
-        sectionCard("Меню", icon: "menucard.fill",
-                    subtitle: "Блюда и услуги, которые гости могут оценить") {
-            Spacer(minLength: 8)
-            addButton { activeSheet = .addItem }
-        } content: {
-            menuImportRow(v)
-            if v.items.isEmpty {
-                Text("Пока пусто. Загрузите PDF меню или добавьте первое блюдо вручную.")
-                    .font(.golos(13)).foregroundStyle(Color.sanInkSoft)
-                    .fixedSize(horizontal: false, vertical: true)
-            } else {
+        if v.items.isEmpty {
+            emptyState(icon: "menucard", title: "Меню пока пустое",
+                       text: "Загрузите меню файлом — PDF, Excel или CSV: блюда, цены и описания заполнятся сами. Или добавьте первое блюдо вручную.")
+        } else {
+            let groups = MenuImport.grouped(v.items) { $0.section }
+            VStack(alignment: .leading, spacing: 14) {
                 // По разделам, в порядке меню; без разделов — одним списком.
-                ForEach(MenuImport.grouped(v.items) { $0.section }, id: \.section) { group in
+                ForEach(groups, id: \.section) { group in
                     VStack(alignment: .leading, spacing: 8) {
-                        if !group.section.isEmpty {
-                            Text(group.section)
-                                .textCase(.uppercase)
-                                .font(.golos(11, .heavy)).tracking(0.8)
-                                .foregroundStyle(Color.sanInkSoft)
-                                .padding(.top, 2)
+                        // Блюда без раздела при других разделах подписаны —
+                        // иначе они выглядели продолжением соседнего.
+                        if !group.section.isEmpty || groups.count > 1 {
+                            sectionHeader(group.section)
                         }
-                        ForEach(group.items) { item in itemRow(item, venueID: v.id) }
-                    }
-                }
-                if v.items.contains(where: { $0.imageURL.isEmpty }) {
-                    Text("Нажмите на блюдо, чтобы добавить фото или поправить цену.")
-                        .font(.golos(12)).foregroundStyle(Color.sanInkSoft)
-                }
-            }
-        }
-    }
-
-    private func itemRow(_ item: VenueItem, venueID: String) -> some View {
-        HStack(spacing: 10) {
-            Button { activeSheet = .editItem(item) } label: {
-                HStack(spacing: 10) {
-                    ItemThumb(item: item, size: 40)
-                        .overlay(alignment: .bottomTrailing) {
-                            if item.imageURL.isEmpty {
-                                Image(systemName: "camera.fill")
-                                    .font(.system(size: 9, weight: .bold)).foregroundStyle(.white)
-                                    .padding(4).background(Color.sanAccent, in: Circle())
-                                    .offset(x: 4, y: 4)
+                        VStack(spacing: 0) {
+                            ForEach(Array(group.items.enumerated()), id: \.element.id) { index, item in
+                                if index > 0 { SanHairline(leading: 64) }
+                                itemRow(item)
                             }
                         }
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(item.name).font(.golos(14.5, .semibold)).foregroundStyle(Color.sanInk)
-                            .lineLimit(1)
-                        Text(item.details.isEmpty ? item.kindTitle : item.details)
-                            .font(.golos(11.5)).foregroundStyle(Color.sanInkSoft)
-                            .lineLimit(1)
-                    }
-                    Spacer(minLength: 4)
-                    if let price = item.price {
-                        Text("\(price) сом")
-                            .font(.golos(13.5, .bold)).foregroundStyle(Color.sanInk)
-                            .monospacedDigit()
+                        .sanGroupCard()
                     }
                 }
-                .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            Button(role: .destructive) {
-                itemPendingDelete = item
-            } label: { Image(systemName: "trash").foregroundStyle(.red) }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Удалить")
+            .padding(.horizontal, 16)
+            footnote("Нажмите на блюдо, чтобы добавить фото или поправить цену. Удержите — удалить.")
         }
-        .padding(10)
-        .background(Color.sanSurfaceMuted, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
-    /// Вход в разбор меню из файла — там же, где хозяин думает о меню.
-    private func menuImportRow(_ v: HostVenueDTO) -> some View {
-        Button { activeSheet = .menuImport } label: {
-            HStack(spacing: 12) {
-                Image(systemName: "doc.text.magnifyingglass")
-                    .font(.system(size: 17, weight: .semibold))
+    /// Заголовок раздела с «+»: блюдо добавляется сразу в этот раздел.
+    private func sectionHeader(_ section: String) -> some View {
+        HStack(spacing: 8) {
+            Text(section.isEmpty ? LS("Без раздела") : section)
+                .textCase(.uppercase)
+                .font(.golos(11, .heavy)).tracking(0.8)
+                .foregroundStyle(Color.sanInkSoft)
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            Button { activeSheet = .addItem(section: section) } label: {
+                Label("Добавить", systemImage: "plus")
+                    .font(.golos(12.5, .semibold))
                     .foregroundStyle(Color.sanAccentText)
-                    .frame(width: 38, height: 38)
-                    .background(Color.sanAccent.opacity(0.12),
-                                in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Меню из файла")
-                        .font(.golos(14.5, .semibold)).foregroundStyle(Color.sanInk)
-                    Text(v.items.isEmpty
-                         ? LS("PDF, Excel или CSV — блюда, цены и описания заполнятся сами")
-                         : LS("Обновить цены и добавить новые блюда из файла"))
-                        .font(.golos(12)).foregroundStyle(Color.sanInkSoft)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .multilineTextAlignment(.leading)
+                    .frame(minHeight: 30)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(section.isEmpty ? Text("Добавить блюдо") : Text("Добавить блюдо в «\(section)»"))
+        }
+        .padding(.horizontal, 4)
+    }
+
+    /// Удаление — в меню по удержанию, а не корзиной в строке: корзина стояла
+    /// вплотную к строке, и промах пальцем стирал блюдо вместе с отзывами.
+    private func itemRow(_ item: VenueItem) -> some View {
+        Button { activeSheet = .editItem(item) } label: {
+            HStack(spacing: 12) {
+                ItemThumb(item: item, size: 40)
+                    .overlay(alignment: .bottomTrailing) {
+                        if item.imageURL.isEmpty {
+                            Image(systemName: "camera.fill")
+                                .font(.system(size: 9, weight: .bold)).foregroundStyle(.white)
+                                .padding(4).background(Color.sanAccent, in: Circle())
+                                .offset(x: 4, y: 4)
+                        }
+                    }
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(item.name).font(.golos(14.5, .semibold)).foregroundStyle(Color.sanInk)
+                        .lineLimit(1)
+                    Text(item.details.isEmpty ? item.kindTitle : item.details)
+                        .font(.golos(11.5)).foregroundStyle(Color.sanInkSoft)
+                        .lineLimit(1)
                 }
                 Spacer(minLength: 4)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Color(hex: 0x9A9188))
+                if let price = item.price {
+                    Text("\(price) сом")
+                        .font(.golos(13.5, .bold)).foregroundStyle(Color.sanInk)
+                        .monospacedDigit()
+                }
             }
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.sanSurfaceMuted, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .padding(.horizontal, 12).padding(.vertical, 10)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            Button { activeSheet = .editItem(item) } label: { Label("Изменить", systemImage: "pencil") }
+            Button(role: .destructive) { itemPendingDelete = item } label: {
+                Label("Удалить", systemImage: "trash")
+            }
+        }
     }
+
+    // MARK: Купоны за бонусы
 
     /// Купоны, которые гость покупает за бонусы.
     ///
     /// Отдельно от акций намеренно: акция — объявление и ничего не стоит,
     /// купон — товар, у него цена, остаток и расход для заведения. Держать их
     /// в одном списке значило бы снова смешать рекламу и обязательство.
-    private func couponsSection(_ v: HostVenueDTO) -> some View {
+    @ViewBuilder
+    private func couponsTab(_ v: HostVenueDTO) -> some View {
         let offers = host.state.couponOffers(forVenue: v.id)
-        return sectionCard("Купоны за бонусы", icon: "ticket.fill") {
-                // Объяснение, откуда у гостя бонусы, раньше жило только в
-                // пустом состоянии — заведение с одним купоном его больше
-                // никогда не видело. А это вопрос про деньги: платят не
-                // покупками у вас, а валютой, заработанной в приложении.
-                SanInfoDot(
-                    title: "Чем платит гость",
-                    text: "Бонусы — валюта приложения: гость копит их в играх и за время в приложении, а не покупками у вас.\n\nПоэтому цену купона стоит ставить как за подарок постоянному гостю, а не как за товар: выпуск ограничен вами, и больше выпущенного не купят.")
-            Spacer(minLength: 8)
-            addButton { activeSheet = .addCoupon }
-        } content: {
-            if offers.isEmpty {
-                Text("Выпустите купон — гость купит его за бонусы, которые заработал в приложении, и придёт к вам.")
-                    .font(.golos(13)).foregroundStyle(Color.sanInkSoft)
-                    .fixedSize(horizontal: false, vertical: true)
-            } else {
-                VStack(spacing: 8) {
-                    ForEach(offers) { offer in
-                        Menu {
-                            Button("Изменить") { activeSheet = .editCoupon(offer) }
-                            Button(offer.isPaused ? "Вернуть в продажу" : "Снять с продажи") {
-                                host.send(.toggleCouponPause(id: offer.id))
-                            }
-                            Button("Удалить", role: .destructive) {
-                                host.send(.deleteCouponOffer(id: offer.id))
-                            }
-                        } label: { couponRow(offer) }
-                    }
+        HStack(spacing: 10) {
+            Button { activeSheet = .addCoupon } label: { primaryAction("Новый купон") }
+                .buttonStyle(.sanPress(0.97))
+            // Откуда у гостя бонусы — вопрос про деньги, поэтому объяснение
+            // доступно всегда, а не только в пустом состоянии.
+            SanInfoDot(
+                title: "Чем платит гость",
+                text: "Бонусы — валюта приложения: гость копит их в играх и за время в приложении, а не покупками у вас.\n\nПоэтому цену купона стоит ставить как за подарок постоянному гостю, а не как за товар: выпуск ограничен вами, и больше выпущенного не купят.")
+        }
+        .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 14)
+
+        if offers.isEmpty {
+            emptyState(icon: "ticket", title: "Купонов пока нет",
+                       text: "Выпустите купон — гость купит его за бонусы, которые заработал в приложении, и придёт к вам.")
+        } else {
+            VStack(spacing: 8) {
+                ForEach(offers) { offer in
+                    Menu {
+                        Button("Изменить") { activeSheet = .editCoupon(offer) }
+                        Button(offer.isPaused ? "Вернуть в продажу" : "Снять с продажи") {
+                            host.send(.toggleCouponPause(id: offer.id))
+                        }
+                        Button("Удалить", role: .destructive) {
+                            host.send(.deleteCouponOffer(id: offer.id))
+                        }
+                    } label: { couponRow(offer) }
                 }
             }
+            .padding(.horizontal, 16)
+            footnote("Нажмите на купон — изменить, снять с продажи или удалить.")
         }
     }
 
@@ -1164,9 +1103,9 @@ struct HostVenueDetailView: View {
             Spacer(minLength: 4)
             couponStatusChip(offer)
         }
-        .padding(10)
+        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.sanSurfaceMuted, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .sanCard(padding: 0)
     }
 
     private func couponSubtitle(_ offer: CouponOffer) -> String {
@@ -1202,95 +1141,6 @@ struct HostVenueDetailView: View {
             .background(color.opacity(0.12), in: Capsule())
             .fixedSize()
     }
-
-    // MARK: Карта лояльности (обзор для бизнеса)
-
-    private func loyaltySection(_ v: HostVenueDTO) -> some View {
-        sectionCard("Карта лояльности", icon: "creditcard.fill") {
-            Spacer(minLength: 8)
-            Text(v.loyaltyEnabled ? "Включена" : "Выключена")
-                .font(.golos(12, .bold))
-                .foregroundStyle(v.loyaltyEnabled ? Color.sanOpen : Color.sanInkSoft)
-        } content: {
-            if v.loyaltyEnabled {
-                // Карт может быть несколько («Кофе», «Пицца») — по строке на каждую.
-                VStack(alignment: .leading, spacing: 8) {
-                    ForEach(v.stampCards) { StampCardSummaryRow(card: $0) }
-                }
-                Text(v.stampCards.count > 1
-                     ? "Гость показывает карту на кассе, сотрудник сканирует и выбирает, какой карте засчитать штамп."
-                     : "Гость показывает карту на кассе, сотрудник сканирует — +1 штамп. На \(v.loyaltyGoal)-м штампе гость получает «\(v.loyaltyReward)».")
-                    .font(.golos(12.5)).foregroundStyle(Color.sanInkSoft)
-                    .fixedSize(horizontal: false, vertical: true)
-            } else {
-                Text("Включите программу лояльности, чтобы гости возвращались: копили штампы за визиты и получали награду.")
-                    .font(.golos(12.5)).foregroundStyle(Color.sanInkSoft)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Button { activeSheet = .stampCard } label: {
-                Label(v.loyaltyEnabled ? "Настроить" : "Включить",
-                      systemImage: v.loyaltyEnabled ? "slider.horizontal.3" : "plus.circle")
-                    .font(.golos(13.5, .semibold))
-            }
-            .buttonStyle(.bordered).tint(.sanAccent)
-        }
-    }
-
-    // MARK: Каркас секции
-
-    /// Каждая секция — отдельная карточка, как «Карта лояльности»: заголовок
-    /// с иконкой, действие справа, пояснение и содержимое на одной подложке.
-    /// Раньше «Меню», «Предложения» и «Купоны» шли голым текстом по фону и
-    /// сливались в одну ленту — было не видно, где кончается одна и
-    /// начинается другая.
-    private func sectionCard<Trailing: View, Content: View>(
-        _ title: LocalizedStringKey, icon: String, subtitle: LocalizedStringKey? = nil,
-        @ViewBuilder trailing: () -> Trailing,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 8) {
-                    Image(systemName: icon)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Color.sanAccentText)
-                        .frame(width: 28, height: 28)
-                        .background(Color.sanAccent.opacity(0.12),
-                                    in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-                    Text(title)
-                        .font(.golos(17, .bold)).foregroundStyle(Color.sanInk)
-                        .lineLimit(1)
-                    trailing()
-                }
-                if let subtitle {
-                    Text(subtitle)
-                        .font(.golos(12.5)).foregroundStyle(Color.sanInkSoft)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            content()
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .sanCard(padding: 0)
-    }
-
-    /// Круглый «+» вместо «+ Добавить»: подпись съедала строку заголовка,
-    /// и «Купоны за бонусы» обрезались до «Купоны за бо…».
-    private func addButton(_ action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: "plus")
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(Color.sanAccentText)
-                .frame(width: 34, height: 34)
-                .background(Color.sanAccent.opacity(0.12), in: Circle())
-                .frame(width: 44, height: 44)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Добавить")
-        .padding(.vertical, -5)
-    }
 }
 
 /// Маршрут к продвижению конкретного заведения.
@@ -1298,17 +1148,13 @@ struct HostPromoteTarget: Hashable { let venueID: String }
 
 /// Единый источник модальных листов на детальном экране заведения.
 private enum HostVenueSheet: Identifiable {
-    case editVenue
-    /// Только карта штампов. Кнопка на карточке лояльности раньше открывала
-    /// общую форму заведения, и настройку карты приходилось искать среди
-    /// часов работы и соцсетей.
-    case stampCard
     /// «Предложение дня» (бывший «Специал дня») — строка в шапке. Раньше редактор стоял отдельной
     /// секцией и занимал полэкрана ради одной строки.
     case todaySpecial
     case addDeal
     case editDeal(HostDealDTO)
-    case addItem
+    /// Новое блюдо; раздел — если «+» нажат у раздела меню.
+    case addItem(section: String)
     /// Меню из файла (PDF/Excel/CSV): разбор, проверка, сохранение (`HostMenuImportView`).
     case menuImport
     /// Правка блюда и его фото.
@@ -1318,12 +1164,10 @@ private enum HostVenueSheet: Identifiable {
 
     var id: String {
         switch self {
-        case .editVenue: return "editVenue"
-        case .stampCard: return "stampCard"
         case .todaySpecial: return "todaySpecial"
         case .addDeal: return "addDeal"
         case .editDeal(let d): return "editDeal_\(d.id)"
-        case .addItem: return "addItem"
+        case .addItem(let section): return "addItem_\(section)"
         case .menuImport: return "menuImport"
         case .editItem(let item): return "editItem_\(item.id)"
         case .addCoupon: return "addCoupon"
@@ -1389,113 +1233,73 @@ private struct HostTodaySpecialSheet: View {
     }
 }
 
-// MARK: - Карта штампов (лист с карточки заведения)
-
-/// Настройка карты штампов — и больше ничего. Сохраняет через ту же
-/// `saveVenue`, что и вкладка «Лояльность»: форма собирается из DTO целиком
-/// (`HostForms.fields(from:)`), меняются только три поля карты, и остальные
-/// данные заведения не затираются.
-struct HostStampCardFormView: View {
-    let venue: HostVenueDTO
-    @EnvironmentObject private var host: HostStore
-    @Environment(\.dismiss) private var dismiss
-
-    @State private var draft: StampCardsDraft
-
-    init(venue: HostVenueDTO) {
-        self.venue = venue
-        var d = StampCardsDraft(venue)
-        if d.first.reward.isEmpty { d.first.reward = LS("Награда за лояльность") }
-        _draft = State(initialValue: d)
-    }
-
-    private var isDirty: Bool { draft != StampCardsDraft(venue) }
-    private var canSave: Bool { isDirty && draft.problem == nil }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            SanFormHeader(title: "Карта лояльности") { dismiss() }
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    StampCardsEditor(draft: $draft)
-                    // Механика лояльности у заведения одна (`LoyaltyKind`):
-                    // при включённых баллах сервер штампы не начисляет.
-                    if draft.enabled && venue.pointsEnabled {
-                        SanNoteCard(text: "У заведения включены баллы САН — пока они включены, штампы не начисляются. Механика лояльности одна: либо баллы, либо штампы.")
-                    }
-                }
-                .padding(.horizontal, SanMetrics.screenPadding)
-                .padding(.top, 8).padding(.bottom, 24)
-            }
-            .scrollDismissesKeyboard(.interactively)
-            SanStickyFooter {
-                Button("Сохранить") { save() }
-                    .buttonStyle(SanPrimaryButton())
-                    .disabled(!canSave)
-                    .opacity(canSave ? 1 : 0.6)
-                if let problem = draft.problem {
-                    Text(problem)
-                        .font(.golos(11.5, .semibold)).foregroundStyle(Color(hex: 0xC24A12))
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-        }
-        .sanScreenBackground()
-    }
-
-    private func save() {
-        SanHaptics.save()
-        var fields = HostForms.fields(from: venue)
-        draft.apply(to: &fields, keepingReward: venue.loyaltyReward)
-        host.send(.saveVenue(existing: venue, fields: fields))
-        dismiss()
-    }
-}
-
 // MARK: - Форма объекта (блюдо/услуга)
 
+/// Новое блюдо вручную — те же поля, что у правки (`HostItemEditView`):
+/// фото, название, цена, раздел меню, описание. Раньше здесь были только
+/// название, эмодзи и тип, и раздел появлялся у блюда лишь после импорта
+/// файла — вручную добавленное падало в меню гостя без раздела.
 struct HostItemFormView: View {
     let venueID: String
+    /// Раздел, из которого нажали «+» (пусто — из общей кнопки «Блюдо»).
+    var presetSection: String = ""
     @EnvironmentObject private var host: HostStore
     @Environment(\.dismiss) private var dismiss
 
     @State private var name = ""
-    @State private var emoji = "🍽"
+    @State private var section = ""
+    @State private var priceText = ""
+    @State private var details = ""
     @State private var kind = "food"
     @State private var imageURL = ""
 
+    private var canSave: Bool { !name.trimmingCharacters(in: .whitespaces).isEmpty }
+
     var body: some View {
-        NavigationStack {
-            Form {
-                Section("Объект для отзывов") {
-                    TextField("Название (напр. Лагман)", text: $name)
-                    TextField("Эмодзи (если без фото)", text: $emoji)
+        VStack(spacing: 0) {
+            SanFormHeader(title: "Новое блюдо") { dismiss() }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    DishFields(name: $name, section: $section, priceText: $priceText, details: $details,
+                               sections: MenuImport.sections(host.state.venue(id: venueID)?.items ?? []))
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Фото")
+                            .textCase(.uppercase)
+                            .font(.golos(11, .heavy)).tracking(0.9)
+                            .foregroundStyle(Color(hex: 0x9A9188))
+                        ImagePickerField(imageURL: $imageURL)
+                    }
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .sanGroupCard(radius: SanRadius.card)
+                    // Тип нужен не только кафе: у салона в «Меню» — услуги.
                     Picker("Тип", selection: $kind) {
                         Text("Блюдо").tag("food")
                         Text("Услуга").tag("service")
-                        Text("Объект").tag("other")
+                        Text("Другое").tag("other")
                     }
+                    .pickerStyle(.segmented)
                 }
-                Section("Фото объекта") {
-                    ImagePickerField(imageURL: $imageURL)
-                }
+                .padding(.horizontal, SanMetrics.screenPadding)
+                .padding(.top, 8).padding(.bottom, 20)
             }
-            .sanFormBackground()
-            .navigationTitle("Новый объект")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Отмена") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Добавить") {
-                        host.send(.addItem(venueID: venueID, name: name, emoji: emoji, kind: kind,
-                                           imageURL: imageURL.trimmingCharacters(in: .whitespaces)))
-                        dismiss()
-                    }
-                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+            .scrollDismissesKeyboard(.interactively)
+            SanStickyFooter {
+                Button("Добавить") {
+                    SanHaptics.save()
+                    let item = VenueItem(id: "", name: name, emoji: "🍽", kind: kind, imageURL: imageURL,
+                                         price: MenuImport.validPrice(Int(priceText.filter(\.isNumber))),
+                                         details: details, section: section)
+                    host.send(.addItem(venueID: venueID, item: item))
+                    dismiss()
                 }
+                .buttonStyle(SanPrimaryButton())
+                .disabled(!canSave)
+                .opacity(canSave ? 1 : 0.6)
             }
         }
+        .sanScreenBackground()
+        .onAppear { if section.isEmpty { section = presetSection } }
     }
 }
 
@@ -1503,6 +1307,11 @@ struct HostItemFormView: View {
 
 struct HostVenueFormView: View {
     let existing: HostVenueDTO?
+    /// Какую часть данных показывать (строка «Данных заведения»); `nil` —
+    /// форму целиком, для нового заведения. Скрытые части остаются в
+    /// состоянии формы и уходят в `save()` как были — правка часов не
+    /// затирает адреса.
+    var part: HostVenueFormPart? = nil
     @EnvironmentObject private var host: HostStore
     @ObservedObject private var catStore = CategoryStore.shared
     @Environment(\.dismiss) private var dismiss
@@ -1537,8 +1346,9 @@ struct HostVenueFormView: View {
     /// там ещё нет `@State`-значений.
     @State private var initialFields: HostForms.VenueFields?
 
-    init(existing: HostVenueDTO?) {
+    init(existing: HostVenueDTO?, part: HostVenueFormPart? = nil) {
         self.existing = existing
+        self.part = part
         _name = State(initialValue: existing?.name ?? "")
         _category = State(initialValue: existing?.category ?? .cafe)
         _district = State(initialValue: existing?.district ?? "")
@@ -1566,29 +1376,26 @@ struct HostVenueFormView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                SanFormHeader(title: existing == nil ? "Новое заведение" : "Изменить заведение") {
+                SanFormHeader(title: formTitle) {
                     if isDirty { confirmingDiscard = true } else { dismiss() }
                 }
             Form {
+                if shows(.basics) {
                 Section("Основное") {
-
                     TextField("Название", text: $name)
                     Picker("Категория", selection: $category) {
                         ForEach(catStore.categories) { Text($0.locKey).tag($0) }
                     }
                     TextField("Эмодзи", text: $emoji)
                     TextField("Район", text: $district)
-                    TextField("Телефон", text: $phone).keyboardType(.phonePad)
                 }
                 Section("Фото заведения") {
                     ImagePickerField(imageURL: $imageURL)
                 }
-                Section("Прайс-лист / каталог (PDF)") {
-                    PDFPickerField(urlString: $pdfMenuURL)
-                    Text("Список блюд или услуг. Гости откроют его на странице заведения.")
-                        .font(.caption2).foregroundStyle(.secondary)
                 }
-                Section("Соцсети") {
+                if shows(.contacts) {
+                Section("Контакты") {
+                    TextField("Телефон", text: $phone).keyboardType(.phonePad)
                     HStack(spacing: 12) {
                         brandTile("whatsapp")
                         TextField("WhatsApp (номер, напр. 996700123456)", text: $whatsapp)
@@ -1605,15 +1412,18 @@ struct HostVenueFormView: View {
                             .autocapitalization(.none)
                     }
                 }
-                Section {
-                    Toggle("Принимать купоны", isOn: $couponsEnabled.animation())
-                } header: {
-                    Text("Купоны")
-                } footer: {
-                    Text(couponsEnabled
-                         ? "Гости смогут получать и гасить купоны на ваши акции. Рекомендуем оставить включённым — купоны заметно повышают посещаемость."
-                         : "⚠️ Купоны выключены — гости не увидят кнопку получения купона на ваших акциях. Рекомендуем включить: это привлекает больше гостей.")
                 }
+                if shows(.priceList) {
+                Section("Прайс-лист / каталог (PDF)") {
+                    PDFPickerField(urlString: $pdfMenuURL)
+                    Text("Список блюд или услуг. Гости откроют его на странице заведения.")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+                }
+                // «Принимать купоны» убран из формы: акции больше не выдают
+                // купон (купон — товар, `couponOffers`), и переключатель
+                // обещал то, чего нет. Поле остаётся в состоянии формы и
+                // сохраняется как было.
                 // Карта штампов здесь больше не правится: у неё свой лист
                 // («Карта лояльности» на карточке заведения) и вкладка
                 // «Лояльность». Поля остаются в состоянии формы и уходят в
@@ -1622,6 +1432,7 @@ struct HostVenueFormView: View {
                 // Все адреса одним списком: «главного» больше нет (см.
                 // `VenueLocations`). Первый хранится в полях заведения,
                 // остальные — в `branches`; для хозяина это просто «Адреса».
+                if shows(.addresses) {
                 Section {
                     ForEach(addressRows) { row in
                         Button { editingAddress = row.edit } label: {
@@ -1657,6 +1468,8 @@ struct HostVenueFormView: View {
                 } footer: {
                     Text("Гости видят все адреса списком. Акцию можно сделать только для некоторых адресов — это выбирается в самой акции.")
                 }
+                }
+                if shows(.hours) {
                 Section("Часы работы") {
                     ForEach(0..<7, id: \.self) { i in
                         VStack(spacing: 6) {
@@ -1683,6 +1496,7 @@ struct HostVenueFormView: View {
                         weekHours = Array(repeating: mon, count: 7)
                     }
                     .font(.caption)
+                }
                 }
             }
             .scrollContentBackground(.hidden)
@@ -1741,6 +1555,13 @@ struct HostVenueFormView: View {
         } message: {
             Text("Если закрыть без сохранения, правки пропадут.")
         }
+    }
+
+    private func shows(_ p: HostVenueFormPart) -> Bool { part == nil || part == p }
+
+    private var formTitle: LocalizedStringKey {
+        if existing == nil { return "Новое заведение" }
+        return part?.title ?? "Изменить заведение"
     }
 
     /// Что правит лист адреса: первый адрес (поля заведения), дополнительный

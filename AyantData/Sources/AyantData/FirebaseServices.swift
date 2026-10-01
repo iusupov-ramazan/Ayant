@@ -702,6 +702,13 @@ public final class FirebaseCouponService: CouponService {
         return snap.documents.compactMap { CouponOffer(firestore: $0.data(), id: $0.documentID) }
     }
 
+    public func fetchApprovedCouponOffers() async throws -> [CouponOffer] {
+        let snap = try await db.collection(FS.Collection.couponOffers)
+            .whereField(FS.CouponOfferDoc.status, isEqualTo: ModerationStatus.approved.rawValue)
+            .getDocuments()
+        return snap.documents.compactMap { CouponOffer(firestore: $0.data(), id: $0.documentID) }
+    }
+
     public func fetchGlobalRewards() async throws -> [Reward] {
         let snap = try await db.collection(FS.Collection.config)
             .document(FS.Document.globalRewards).getDocument()
@@ -737,6 +744,21 @@ public final class FirebaseCouponService: CouponService {
         let snap = try await db.collection(FS.Collection.coupons)
             .whereField(FS.CouponDoc.userID, isEqualTo: userID).getDocuments()
         return snap.documents.map { Coupon(firestore: $0.data(), id: $0.documentID) }
+    }
+
+    public func coupons(userID: String) -> AsyncStream<[Coupon]> {
+        AsyncStream { continuation in
+            guard !userID.isEmpty else { continuation.finish(); return }
+            let registration = db.collection(FS.Collection.coupons)
+                .whereField(FS.CouponDoc.userID, isEqualTo: userID)
+                .addSnapshotListener { snapshot, _ in
+                    // Ошибка (сеть, правила) — молчим: на экране остаётся
+                    // последнее известное состояние, листенер оживёт сам.
+                    guard let snapshot else { return }
+                    continuation.yield(snapshot.documents.map { Coupon(firestore: $0.data(), id: $0.documentID) })
+                }
+            continuation.onTermination = { _ in registration.remove() }
+        }
     }
 
     /// Карты штампов живут в двух коллекциях: первая карта заведения — в
