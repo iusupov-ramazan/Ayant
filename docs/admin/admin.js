@@ -359,9 +359,12 @@ const geocodeBranch = async () => {
   }
 };
 
-// ── Загрузка фото в Cloudinary (unsigned) ───────────────────────────────────
-const CLOUDINARY_CLOUD = 'dsb14gwxw';
-const CLOUDINARY_PRESET = 'Ayta_ios';
+// ── Загрузка фото в Cloudinary (подписанная) ─────────────────────────────────
+// Пресет `Ayant_ios` переведён в Signed: неподписанная загрузка с публичным
+// именем пресета позволяла кому угодно лить файлы на наш счёт. Подпись выдаёт
+// Cloud Function `signCloudinaryUpload` только вошедшему пользователю; секрет
+// Cloudinary живёт на сервере (Secret Manager), в браузер не попадает.
+const SIGN_UPLOAD_URL = 'https://us-central1-san-25d32.cloudfunctions.net/signCloudinaryUpload';
 const uploadImage = async (input, targetId) => {
   const file = input.files && input.files[0];
   if (!file) return;
@@ -369,10 +372,26 @@ const uploadImage = async (input, targetId) => {
   if (file.size > 5 * 1024 * 1024) { toast('Файл больше 5 МБ — выберите меньше', 'error'); input.value=''; return; }
   toast('Загрузка фото…');
   try {
+    const idToken = auth.currentUser ? await auth.currentUser.getIdToken() : '';
+    if (!idToken) { toast('Войдите заново, чтобы загрузить фото', 'error'); input.value = ''; return; }
+    const signRes = await fetch(SIGN_UPLOAD_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
+      body: JSON.stringify({ folder: 'ayant/images', resourceType: 'image' }),
+    });
+    const sign = await signRes.json().catch(() => ({}));
+    if (!signRes.ok || !sign.signature) {
+      toast('Ошибка подписи загрузки: ' + String(sign.error || signRes.status), 'error');   // toast — textContent
+      input.value = '';
+      return;
+    }
     const form = new FormData();
     form.append('file', file);
-    form.append('upload_preset', CLOUDINARY_PRESET);
-    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`,
+    form.append('api_key', sign.apiKey);
+    form.append('timestamp', String(sign.timestamp));
+    form.append('signature', sign.signature);
+    form.append('folder', sign.folder);
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${encodeURIComponent(sign.cloudName)}/image/upload`,
       { method: 'POST', body: form });
     const json = await res.json();
     if (json.secure_url) {

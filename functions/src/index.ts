@@ -2388,7 +2388,7 @@ const IG_RETURN_URL = process.env.INSTAGRAM_RETURN_URL || "san://ig/connected";
 const IG_SCOPES = "instagram_business_basic";
 /** Тот же аккаунт Cloudinary, что и у iOS-приложения и админ-панели. */
 const CLOUDINARY_CLOUD = process.env.CLOUDINARY_CLOUD_NAME || process.env.CLOUDINARY_CLOUD || "dsb14gwxw";
-const CLOUDINARY_PRESET = process.env.CLOUDINARY_PRESET || "Ayta_ios";
+const CLOUDINARY_PRESET = process.env.CLOUDINARY_PRESET || "Ayant_ios";
 /**
  * Подписанные загрузки (аудит запуска 2026-10-01). Неподписанный пресет
  * Cloudinary — публичный: любой, кто вытащил его имя из приложения, льёт

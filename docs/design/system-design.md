@@ -217,7 +217,7 @@ Map search uses the same index with a geo filter; the Maps SDK key issue is orth
 This is the largest *new* build, and the one the current code has least of.
 
 #### Problems today
-- Two upload paths (Firebase Storage from apps; **unsigned** Cloudinary preset from the admin panel — anyone who reads `docs/admin/index.html` can upload to your Cloudinary account, since `upload_preset: 'Ayta_ios'` and cloud name are in client source).
+- Two upload paths (Firebase Storage from apps; Cloudinary from the admin panel). *Updated 2026-10-02:* the preset `Ayant_ios` is Signed and all uploads (iOS, admin panel, Instagram import) are signed by the `signCloudinaryUpload` function — the old unsigned path is closed.
 - No derivatives: the original 4 MB phone photo is what a user on 3G downloads.
 - No video support at all (`FileUploadService` hardcodes `jpg`/`pdf`).
 - URLs are stored as raw strings (`imageURL`, `imageURLs`) — no way to change format or CDN later without a data migration.

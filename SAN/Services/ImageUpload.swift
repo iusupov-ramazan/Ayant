@@ -14,7 +14,7 @@ import AyantData
 /// отключат в Cloudinary, останется только подписанный путь.
 enum ImageUploader {
     static let cloudName = "dsb14gwxw"
-    static let uploadPreset = "Ayta_ios"
+    static let uploadPreset = "Ayant_ios"
     /// Папки, о которых знает `signCloudinaryUpload` (список — на сервере).
     static let imageFolder = "ayant/images"
     static let documentFolder = "ayant/documents"
