@@ -95,7 +95,7 @@ public enum PointsMath {
         let cooldown = effectiveCooldownMinutes(cooldownMinutes)
         guard cooldown > 0, let last = lastEarnAt else { return 0 }
         let left = Double(cooldown) * 60 - now.timeIntervalSince(last)
-        return left > 0 ? Int(left.rounded(.up)) : 0
+        return left > 0 ? clampedInt(left.rounded(.up)) : 0
     }
 
     // MARK: - Списание
@@ -135,7 +135,48 @@ public enum PointsMath {
     public static func somOff(reward: PointsReward, cost: Int) -> Int? {
         guard reward.type == "money" else { return nil }
         let ratio = (reward.ratio.isFinite && reward.ratio > 0) ? reward.ratio : 1
-        return Int((Double(cost) * ratio).rounded())
+        return clampedInt((Double(cost) * ratio).rounded())
+    }
+
+    /// То же, но с серверной страховкой курса (`effectiveMoneyRatio` в
+    /// `functions/src/index.ts`): так гость видит ровно ту скидку, что даст сервер.
+    public static func somOff(reward: PointsReward, cost: Int,
+                              pointsMode: String, cashbackPercent: Double) -> Int? {
+        guard reward.type == "money" else { return nil }
+        let ratio = effectiveRatio(reward.ratio, pointsMode: pointsMode, cashbackPercent: cashbackPercent)
+        return clampedInt((Double(cost) * ratio).rounded())
+    }
+
+    /// `Int(_: Double)` падает на бесконечности, NaN и значениях за пределами
+    /// `Int`. Курс и цена приходят из документа заведения (админка, Android),
+    /// так что «1e300 сомов за балл» — данные, а не невозможность: экран
+    /// должен показать большое число, а не уронить приложение.
+    static func clampedInt(_ x: Double) -> Int {
+        guard x.isFinite else { return x.isNaN ? 0 : (x > 0 ? Int.max : Int.min) }
+        if x >= Double(Int.max) { return Int.max }
+        if x <= Double(Int.min) { return Int.min }
+        return Int(x)
+    }
+
+    /// Курс денежной награды (сомов за балл) после страховки.
+    ///
+    /// Потолок кэшбэка 20% иначе обходился курсом: «20% баллами + 1 балл =
+    /// 5 сом» — это скидка 100%. В режиме cashback эффективная скидка —
+    /// процент × курс, поэтому курс не выше `maxCashbackPercent / процент` (и
+    /// не ниже 1). В flat/bands курс — лишь масштаб числа баллов за визит,
+    /// которое заведение и так задаёт, и не режется.
+    public static func effectiveRatio(_ ratio: Double, pointsMode: String, cashbackPercent: Double) -> Double {
+        let r = (ratio.isFinite && ratio > 0) ? ratio : 1
+        guard pointsMode == "cashback" else { return r }
+        let pct = min(max(cashbackPercent.isFinite ? cashbackPercent : 0, 0), maxCashbackPercent)
+        guard pct > 0 else { return r }
+        return min(r, maxMoneyRatio(cashbackPercent: pct))
+    }
+
+    /// Самый щедрый курс, при котором кэшбэк не превышает потолок.
+    public static func maxMoneyRatio(cashbackPercent: Double) -> Double {
+        guard cashbackPercent > 0 else { return .infinity }
+        return max(1, maxCashbackPercent / cashbackPercent)
     }
 }
 

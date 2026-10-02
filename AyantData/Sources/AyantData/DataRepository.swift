@@ -116,7 +116,7 @@ public final class MockCouponService: CouponService {
     }
     public func redeemVenuePoints(venueID: String, userID: String, rewardId: String,
                            pointsToSpend: Int, idToken: String,
-                           idempotencyKey: String) async throws -> RedeemOutcome {
+                           idempotencyKey: String, nonce: String?) async throws -> RedeemOutcome {
         RedeemOutcome(ok: true, redeemed: pointsToSpend > 0 ? pointsToSpend : 100, balance: 0,
                       rewardTitle: "Демо-награда", somOff: nil, errorCode: nil)
     }

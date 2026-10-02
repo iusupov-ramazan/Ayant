@@ -1,7 +1,9 @@
 import SwiftUI
 import UIKit
 import FirebaseCore
+import FirebaseCrashlytics
 import FirebaseMessaging
+import AyantData
 #if canImport(GoogleSignIn)
 import GoogleSignIn
 import AyantFeatures
@@ -19,8 +21,23 @@ struct SANApp: App {
         URLCache.shared = URLCache(memoryCapacity: 64 * 1024 * 1024,
                                    diskCapacity: 256 * 1024 * 1024)
         if AppConfig.useFirebase {
+            // App Check — до configure(): провайдер выбирается при старте SDK.
+            AyantAppCheck.install()
             FirebaseApp.configure()
+            #if DEBUG
+            // Падения при разработке не должны размывать crash-free rate
+            // релиза: отчёты шлёт только релизная сборка.
+            Crashlytics.crashlytics().setCrashlyticsCollectionEnabled(false)
+            #else
+            // Флаг сохраняется на устройстве: отладочная сборка, однажды
+            // поставленная на этот же телефон, оставляла `false` и релизу —
+            // падения из TestFlight молча не доходили. Включаем явно.
+            Crashlytics.crashlytics().setCrashlyticsCollectionEnabled(true)
+            #endif
         }
+        // Выключатели функций — из кэша до первого экрана; дальше обновляются
+        // на лету (`RemoteSettingsEffects`).
+        ReleaseFlags.apply(AyantStores.remoteConfig.current())
     }
 
     @StateObject private var store = AyantStores.app()
@@ -32,6 +49,7 @@ struct SANApp: App {
     @StateObject private var themeStore = AyantStores.theme()
     @StateObject private var location = LocationManager()
     @StateObject private var hostStore = AyantStores.host()
+    @StateObject private var remoteSettings = AyantStores.remoteSettings()
     private let pushService = AppConfig.makePushService()
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("san.language") private var appLanguage = "ru"   // ru | en | ky
@@ -68,6 +86,12 @@ struct SANApp: App {
             .animation(.smooth(duration: 0.35), value: session.user?.id)
             .animation(.smooth(duration: 0.35), value: session.isGuest)
             .overlay(alignment: .top) { AppToast() }
+            .modifier(RemoteSettingsEffects(remote: remoteSettings, bonus: bonus,
+                                            onBonusWalletFlagChange: {
+                                                startBonusIfAllowed()
+                                                refreshBonusReminder()
+                                            },
+                                            onReminderInputsChange: { refreshBonusReminder() }))
             .environmentObject(store)
             .environmentObject(session)
             .environmentObject(bonus)
@@ -120,9 +144,19 @@ struct SANApp: App {
                 switch phase {
                 case .active:
                     location.refresh()
+                    Task { await remoteSettings.refresh() }
                     store.setCurrentUser(id: session.user?.id, name: session.user?.name, isGuest: session.isGuest)
-                    startBonusIfAllowed()
+                    // Полночь по Бишкеку могла пройти в фоне — снимаем вчерашние
+                    // «лимит на сегодня» сразу, а не с первой наградой.
+                    bonus.refreshDay()
+                    startBonusIfAllowed(sceneActive: true)
                     refreshBonusReminder()
+                    // Счётчик на иконке — прочитано, раз приложение открыто.
+                    MarketingPush.clearBadge()
+                    // Разрешение могли сменить в Настройках iOS — сверяем топики.
+                    Task { await MarketingPush.sync(push: pushService, city: store.selectedCitySlug) }
+                    // Подтверждение почты могло случиться в почтовом клиенте.
+                    session.refreshEmailVerification()
                 default:
                     bonus.pause()
                 }
@@ -134,6 +168,9 @@ struct SANApp: App {
                     store.claimReferralBonuses(bonus: bonus)
                     store.claimPendingGift(into: coupons)
                     registerPushToken()      // токен пишем уже под авторизацией
+                    // Выход отписал топики (`willSignOut`) — после входа в той
+                    // же сессии подписываем снова, если есть согласие.
+                    Task { await MarketingPush.sync(push: pushService, city: store.selectedCitySlug) }
                     startBonusIfAllowed()
                     hostStore.send(.configure(ownerID: session.user?.id))
                     Task { hostStore.send(.sync) }
@@ -158,6 +195,20 @@ struct SANApp: App {
                 // до перезапуска).
                 hostStore.send(.configure(ownerID: new))
                 hostStore.send(.sync)
+                // Кошелёк нового uid: без этого бонус-движок оставался
+                // выключенным до следующего возврата в приложение.
+                startBonusIfAllowed()
+                refreshBonusReminder()
+                // Токен устройства — под новым uid, иначе адресные пуши уходят
+                // прошлому аккаунту.
+                registerPushToken()
+            }
+            // Гость ЗАРЕГИСТРИРОВАЛСЯ (uid тот же, isGuest сменился): ни один
+            // обработчик выше не срабатывал, и бонусы не копились до перезапуска.
+            .onChange(of: session.isGuest) { _, _ in
+                startBonusIfAllowed()
+                refreshBonusReminder()
+                if session.isSignedIn { registerPushToken() }
             }
             // Штампы пришли листенером: если карта заполнилась, сервер выдал
             // купон-награду — подтягиваем купоны сразу, не дожидаясь запуска.
@@ -169,12 +220,17 @@ struct SANApp: App {
             .onChange(of: bonus.reachedGoalToday) { _, _ in refreshBonusReminder() }
             .task {
                 AnalyticsLog.log(.appOpen)
-                await CategoryStore.shared.load()   // гибкие категории из бэкенда
+                // Гибкие категории из бэкенда — параллельно с каталогом, не перед
+                // ним: раньше лента ждала лишний сетевой круг на холодном старте.
+                Task { await CategoryStore.shared.load() }
                 hostStore.bind(store)
                 // Отписка от push должна успеть ДО закрытия сессии — правила
                 // `userTokens` требуют авторизации, поэтому это хук в сторе,
                 // а не код в `onChange(isSignedIn)` (тот срабатывает уже после).
                 session.willSignOut = { [pushService, store] in
+                    // Правка сохранённых за последние 0,8 с иначе не дошла бы
+                    // до аккаунта: запись библиотеки отложенная.
+                    await store.profile.flushLibrary()
                     await pushService.unregisterDevice(
                         topics: ["all_users", "city_\(store.selectedCitySlug)"])
                 }
@@ -190,9 +246,9 @@ struct SANApp: App {
                 // Регистрация для remote-уведомлений → APNs-токен уходит в FCM
                 // (нужно для доставки топик-сообщений). Идемпотентно.
                 UIApplication.shared.registerForRemoteNotifications()
-                // Подписка на топики FCM — чтобы получать рекламные push-кампании.
-                pushService.subscribe(topic: "all_users")
-                pushService.subscribe(topic: "city_\(store.selectedCitySlug)")
+                // Рекламные топики FCM — только с согласия (4.5.4): разрешение
+                // системы + настройка «Новости и акции заведений».
+                await MarketingPush.sync(push: pushService, city: store.selectedCitySlug)
                 if session.isSignedIn { registerPushToken() }
             }
         }
@@ -208,6 +264,9 @@ struct SANApp: App {
     /// сохранённые места.
     private func signOutCleanup() {
         bonus.pause()
+        // Напоминание про бонусы принадлежало вышедшему: следующему (или
+        // экрану входа) оно ни к чему.
+        NotificationManager.cancelReminder()
         // Кэш заведений владельца из памяти (данные остаются в Firestore под
         // ownerID и вернутся при следующем входе).
         hostStore.send(.configure(ownerID: nil))
@@ -215,17 +274,22 @@ struct SANApp: App {
         store.resetForNewUser()
     }
 
-    /// Локальное напоминание «+50 бонусов за 30 минут» — про глобальный кошелёк,
-    /// который в этой сборке скрыт (`ReleaseFlags.globalBonusWallet`): пуш вёл
-    /// бы в никуда. Пока флаг выключен — напоминание снято.
+    /// Локальное напоминание про бонусы за активное время — раз в день, днём.
+    /// Числа в тексте — из действующего курса (Remote Config), а не литерал:
+    /// раньше пуш обещал «+50 бонусов», когда цикл приносил 1. Пока
+    /// глобальный кошелёк скрыт (`ReleaseFlags.globalBonusWallet`), пуш вёл бы
+    /// в никуда — напоминание снято.
     private func refreshBonusReminder() {
-        if ReleaseFlags.globalBonusWallet {
+        // Гостю и вышедшему бонусы недоступны, при выключенном начислении за
+        // время напоминать не о чем.
+        if ReleaseFlags.globalBonusWallet, session.isSignedIn, !session.isGuest, !bonus.timeEarningPaused {
             NotificationManager.refresh(
                 reachedGoalToday: bonus.reachedGoalToday,
                 title: LS("Бонусы ждут 🎁"),
-                body: LS("Залипни в Ayant на 30 активных минут и забери +50 бонусов"))
+                body: LF("Загляните в Ayant — за %lld активных минут +%lld бонус", bonus.goalSeconds / 60, bonus.rewardPerGoal),
+                now: bonus.now)
         } else {
-            NotificationManager.disable()
+            NotificationManager.cancelReminder()
         }
     }
 
@@ -234,15 +298,22 @@ struct SANApp: App {
     /// Гостю бонусы недоступны целиком: экран «Бонусы», игры и обмен наград ему
     /// закрыты, — значит и копиться им не должно. Раньше таймер активности тикал
     /// и гостю: он «зарабатывал» в запись, которая исчезает вместе с выходом.
-    private func startBonusIfAllowed() {
+    /// `sceneActive` — вызов из перехода в `.active` (фаза в этот момент уже
+    /// известна). Таймер активного времени запускается только на переднем
+    /// плане: включённое удалённо начисление за время иначе тикало бы в фоне.
+    private func startBonusIfAllowed(sceneActive: Bool = false) {
         guard session.isSignedIn, !session.isGuest else { bonus.pause(); return }
-        // Серверный кошелёк: подключаем (один раз на пользователя) и досылаем
-        // начисления, которые не ушли из-за сети. В мок-режиме — ничего.
+        // Кошелёк выключен (сборкой или удалённо) — ни таймера, ни кошелька:
+        // выключатель должен останавливать начисление, а не только прятать экран.
+        guard ReleaseFlags.globalBonusWallet else { bonus.pause(); return }
+        // Серверный кошелёк: подключаем (один раз на пользователя; там же
+        // единственный за сессию `bonusWalletSync`) и досылаем начисления,
+        // которые не ушли из-за сети. В мок-режиме — ничего.
         if let id = session.user?.id {
             bonus.attach(userID: id)
             bonus.retryPending()
         }
-        bonus.start()
+        if sceneActive || scenePhase == .active { bonus.start() }
     }
 
     /// Стирает кошельки, которые лежат на УСТРОЙСТВЕ, а не в аккаунте:
@@ -389,3 +460,56 @@ struct SignedInRootView: View {
 
 // Пользовательская навигация переехала в `GuestShell.swift`:
 // Главная · Поиск · [QR] · Кошелёк · Профиль — своя панель вкладок с FAB.
+
+/// Всё, что делают удалённые настройки на корне приложения. Отдельным
+/// модификатором: в `SANApp.body` компилятор уже не успевает вывести типы.
+private struct RemoteSettingsEffects: ViewModifier {
+    @ObservedObject var remote: RemoteSettingsStore
+    let bonus: BonusEngine
+    /// Кошелёк включили/выключили удалённо: остановить или запустить движок и
+    /// пересчитать напоминание — решает корень, у него есть сессия.
+    let onBonusWalletFlagChange: () -> Void
+    /// Сменился курс времени (цикл, награда) — текст напоминания называет эти
+    /// числа, его надо пересобрать.
+    let onReminderInputsChange: () -> Void
+
+    func body(content: Content) -> some View {
+        content
+            // Экран обновления — поверх всего, включая вход: старую сборку
+            // закрываем и для тех, кто ещё не вошёл.
+            .overlay {
+                if remote.updateRequired {
+                    AppUpdateRequiredView(updateURL: remote.latest.updateURL)
+                        .transition(.opacity)
+                }
+            }
+            .animation(.smooth(duration: 0.3), value: remote.updateRequired)
+            .task {
+                apply(remote.latest)
+                await remote.refresh()
+            }
+            // Публикации в консоли — в реальном времени, пока приложение открыто.
+            .task { await remote.listen() }
+            // Всё применяется сразу: выключатели функций, начисление за игры,
+            // дневные лимиты.
+            .onChange(of: remote.latest) { _, settings in apply(settings) }
+    }
+
+    private func apply(_ settings: RemoteSettings) {
+        let walletWas = ReleaseFlags.globalBonusWallet
+        let timeWas = bonus.timeEarningPaused
+        let goalWas = bonus.goalSeconds
+        let rewardWas = bonus.rewardPerGoal
+        ReleaseFlags.apply(settings)
+        bonus.setBonusPaused(settings.bonusPaused)
+        bonus.setBonusDailyCaps(settings.bonusDailyCaps)
+        bonus.setGameRates(settings.gameRates)
+        bonus.setTimeEarningPaused(settings.timeEarningPaused)
+        if ReleaseFlags.globalBonusWallet != walletWas || bonus.timeEarningPaused != timeWas {
+            if !ReleaseFlags.globalBonusWallet { bonus.pause() }
+            onBonusWalletFlagChange()
+        } else if bonus.goalSeconds != goalWas || bonus.rewardPerGoal != rewardWas {
+            onReminderInputsChange()
+        }
+    }
+}

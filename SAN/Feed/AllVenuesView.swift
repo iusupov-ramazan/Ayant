@@ -221,7 +221,31 @@ struct AllVenuesView: View {
 
     @ViewBuilder
     private var content: some View {
-        let list = results
+        // Каталог ещё не пришёл / не загрузился — не «пусто»: раньше первый
+        // запуск и обрыв сети показывали «Нет заведений в категории «»».
+        if feedStore.isLoading {
+            ProgressView()
+                .frame(maxWidth: .infinity)
+                .padding(.top, 60)
+        } else if feedStore.loadFailed {
+            VStack(spacing: 12) {
+                ContentUnavailableView {
+                    Label("Не удалось загрузить заведения", systemImage: "wifi.exclamationmark")
+                } description: {
+                    Text(feedStore.loadError ?? LS("Проверьте интернет и попробуйте ещё раз."))
+                }
+                Button("Повторить") { Task { await store.load() } }
+                    .buttonStyle(.bordered)
+                    .tint(.sanAccent)
+            }
+            .padding(.top, 40)
+        } else {
+            list(results)
+        }
+    }
+
+    @ViewBuilder
+    private func list(_ list: [Venue]) -> some View {
         if list.isEmpty {
             emptyState
         } else {
@@ -255,15 +279,21 @@ struct AllVenuesView: View {
                 Button("Очистить поиск") { query = "" }
                     .buttonStyle(.bordered)
                     .tint(.sanAccent)
-            } else {
+            } else if let category {
                 ContentUnavailableView {
                     Label("Нет заведений в категории", systemImage: "storefront")
                 } description: {
-                    Text("В категории «\(category?.rawValue ?? "")» в городе \(store.selectedCity.name) пока нет заведений.")
+                    Text("В категории «\(LS(category.rawValue))» в городе \(LS(store.selectedCity.name)) пока нет заведений.")
                 }
-                Button("Сбросить фильтр") { category = nil }
+                Button("Сбросить фильтр") { self.category = nil }
                     .buttonStyle(.bordered)
                     .tint(.sanAccent)
+            } else {
+                ContentUnavailableView {
+                    Label("Пока нет заведений в \(LS(store.selectedCity.name))", systemImage: "storefront")
+                } description: {
+                    Text("Знаешь хорошее место? Помоги нам — добавь заведение.")
+                }
             }
         }
         .padding(.top, 40)

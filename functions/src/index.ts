@@ -16,7 +16,7 @@ import { onRequest } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret } from "firebase-functions/params";
 import { initializeApp } from "firebase-admin/app";
-import { getFirestore, FieldValue, DocumentReference } from "firebase-admin/firestore";
+import { getFirestore, FieldValue, DocumentReference, AggregateField, FieldPath } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
 import { getAuth } from "firebase-admin/auth";
 import * as fs from "fs";
@@ -59,7 +59,14 @@ setGlobalOptions({ region: REGION });
 const MONEY_PATH_OPTS = {
   cors: true,
   concurrency: 80,
+  // Потолок стоимости (аудит запуска 2026-10-01): бот или петля в клиенте не
+  // должны раздувать счёт без предела. 20 × 80 = 1600 одновременных запросов —
+  // на порядок выше ожидаемой нагрузки 10k пользователей.
+  maxInstances: 20,
 } as const;
+
+/** Обычные HTTPS-функции (не денежный путь): тот же потолок стоимости. */
+const HTTP_OPTS = { cors: true, maxInstances: 20 } as const;
 
 initializeApp();
 const db = getFirestore();
@@ -74,17 +81,32 @@ function capFromEnv(raw: string | undefined, fallback: number): number {
   const n = Number(raw);
   return Number.isFinite(n) ? n : fallback;
 }
+/**
+ * Число из env, прижатое к разумным границам. Опечатка в `functions/.env`
+ * («BONUS_DAILY_EARN_CAP=20000», лишний ноль) не должна превращать потолок в
+ * его отсутствие: значение вне [min, max] прижимается, мусор — дефолт.
+ */
+export function clampedCapFromEnv(raw: string | undefined, fallback: number, min: number, max: number): number {
+  const n = capFromEnv(raw, fallback);
+  return Math.min(Math.max(Math.floor(n), min), max);
+}
 const DAILY_CAP = capFromEnv(process.env.PUSH_DAILY_CAP, 1);
 const WEEKLY_CAP = capFromEnv(process.env.PUSH_WEEKLY_CAP, 3);
 
-// Награды за рефералку (бонусы).
-const REFERRAL_REWARD = 100;
+// Награды за рефералку (бонусы). env REFERRAL_REWARD / REFERRAL_WELCOME,
+// не больше 1000: награда за приглашение — тоже деньги заведений.
+const REFERRAL_REWARD = clampedCapFromEnv(process.env.REFERRAL_REWARD, 100, 0, 1000);
 // Приветственный бонус тому, кого пригласили.
-const REFERRAL_WELCOME = 100;
+const REFERRAL_WELCOME = clampedCapFromEnv(process.env.REFERRAL_WELCOME, 100, 0, 1000);
 // Анти-фарм: потолок реферальных наград на одного пригласившего. Без него можно
 // нафармить бонусы, создав N аккаунтов, каждый из которых указывает твой userID
 // пригласившим (Sybil). Настраивается через env REFERRAL_MAX_REWARDS.
-const REFERRAL_MAX_REWARDS = capFromEnv(process.env.REFERRAL_MAX_REWARDS, 20);
+// Прижат к [0, 200]: опечатка в env не отключает анти-Sybil потолок.
+const REFERRAL_MAX_REWARDS = clampedCapFromEnv(process.env.REFERRAL_MAX_REWARDS, 20, 0, 200);
+// Приглашённым считается только НОВЫЙ аккаунт: иначе любой старый аккаунт можно
+// задним числом «пригласить». 30 дней, а не сутки: гость может неделями ходить
+// анонимно и войти позже — привязка входа сохраняет дату создания аккаунта.
+const REFERRAL_MAX_INVITEE_AGE_MS = 30 * 24 * 3600 * 1000;
 
 // ── Баллы САН (per-venue ledger, System 1) ──────────────────────────────────
 // 1 балл = 1 сом при погашении. Гардрейлы (даже при self-serve конфиге хоста):
@@ -334,15 +356,38 @@ function newCouponCode(): string {
 
 // Рассылка идёт только после одобрения админом (status: "approved") и один раз
 // (флаг delivered). Хост создаёт кампанию как "pending" → админ одобряет в панели.
-export const sendPushCampaign = onDocumentWritten("pushCampaigns/{id}", async (event) => {
+//
+// Рассылка по всем токенам города — долгая: таймаут 540 с и 512 МБ. Перед
+// отправкой кампания атомарно переводится в "sending": повторная доставка
+// события (триггеры — «хотя бы один раз») или ретрай после падения
+// посередине больше не разошлют её второй раз. Застрявшую в "sending"
+// кампанию админ видит в панели и решает сам.
+export const sendPushCampaign = onDocumentWritten(
+  { document: "pushCampaigns/{id}", timeoutSeconds: 540, memory: "512MiB" },
+  async (event) => {
   const snap = event.data && event.data.after;
   if (!snap || !snap.exists) return;
 
-  const c = (snap.data() || {}) as PushCampaignDoc;
-  if (c.status !== "approved" || c.delivered) return;
+  const pre = (snap.data() || {}) as PushCampaignDoc;
+  if (pre.status !== "approved" || pre.delivered) return;
+
+  // Захват кампании: только один запуск переводит approved → sending.
+  let claimed = false;
+  let c: PushCampaignDoc = pre;
+  await db.runTransaction(async (tx) => {
+    const cur = await tx.get(snap.ref);
+    const d = (cur.data() || {}) as PushCampaignDoc;
+    if (!cur.exists || d.status !== "approved" || d.delivered) return;
+    tx.set(snap.ref, { status: "sending", sendingAt: new Date() }, { merge: true });
+    c = d;
+    claimed = true;
+  });
+  if (!claimed) return;
 
   const now = Date.now();
   const city = c.city || "";
+  const headline = clipPush(c.headline || "САН", PUSH_TITLE_MAX);
+  const bodyText = clipPush(c.body || "", PUSH_BODY_MAX);
 
   // Токены целевого города (или все, если город не указан).
   let q: FirebaseFirestore.Query = db.collection("userTokens");
@@ -350,20 +395,25 @@ export const sendPushCampaign = onDocumentWritten("pushCampaigns/{id}", async (e
   const tokensSnap = await q.get();
 
   // Отбираем токены, не превысившие лимит, и готовим обновления истории.
+  // История читается пачками getAll (≤500) — раньше по одному чтению на токен
+  // последовательно, и на 10k токенов функция не укладывалась в таймаут.
   const eligible: string[] = [];
   const logUpdates: { ref: DocumentReference; sends: number[] }[] = [];
-  for (const tdoc of tokensSnap.docs) {
-    const token = tdoc.id;
-    const logRef = db.collection("pushLog").doc(token);
-    const logSnap = await logRef.get();
-    let sends: number[] =
-      logSnap.exists && Array.isArray(logSnap.data()!.sends) ? logSnap.data()!.sends : [];
-    sends = sends.filter((t) => now - t < 7 * DAY_MS); // только за последнюю неделю
-    const dayCount = sends.filter((t) => now - t < DAY_MS).length;
-    if (dayCount < DAILY_CAP && sends.length < WEEKLY_CAP) {
-      eligible.push(token);
-      logUpdates.push({ ref: logRef, sends: sends.concat(now) });
-    }
+  const tokenIDs = tokensSnap.docs.map((d) => d.id).filter((t) => t.length > 0);
+  for (let i = 0; i < tokenIDs.length; i += 500) {
+    const chunk = tokenIDs.slice(i, i + 500);
+    const refs = chunk.map((t) => db.collection("pushLog").doc(t));
+    const logs = await db.getAll(...refs);
+    logs.forEach((logSnap, idx) => {
+      const raw = logSnap.exists ? (logSnap.data() || {}).sends : null;
+      let sends: number[] = Array.isArray(raw) ? raw : [];
+      sends = sends.filter((t) => now - t < 7 * DAY_MS); // только за последнюю неделю
+      const dayCount = sends.filter((t) => now - t < DAY_MS).length;
+      if (dayCount < DAILY_CAP && sends.length < WEEKLY_CAP) {
+        eligible.push(chunk[idx]);
+        logUpdates.push({ ref: refs[idx], sends: sends.concat(now) });
+      }
+    });
   }
 
   if (eligible.length === 0) {
@@ -374,7 +424,7 @@ export const sendPushCampaign = onDocumentWritten("pushCampaigns/{id}", async (e
     try {
       await getMessaging().send({
         topic,
-        notification: { title: c.headline || "САН", body: c.body || "" },
+        notification: { title: headline, body: bodyText },
         data: {
           type: c.dealID ? "deal" : "ad",
           venueID: String(c.venueID || ""),
@@ -395,7 +445,7 @@ export const sendPushCampaign = onDocumentWritten("pushCampaigns/{id}", async (e
   }
 
   const base = {
-    notification: { title: c.headline || "САН", body: c.body || "" },
+    notification: { title: headline, body: bodyText },
     data: {
       type: c.dealID ? "deal" : "ad",
       venueID: String(c.venueID || ""),
@@ -408,6 +458,7 @@ export const sendPushCampaign = onDocumentWritten("pushCampaigns/{id}", async (e
 
   // Рассылка чанками по 500 (лимит multicast).
   let success = 0;
+  const stale: DocumentReference[] = [];
   for (let i = 0; i < eligible.length; i += 500) {
     const chunk = eligible.slice(i, i + 500);
     const res = await getMessaging().sendEachForMulticast({ ...base, tokens: chunk });
@@ -415,10 +466,13 @@ export const sendPushCampaign = onDocumentWritten("pushCampaigns/{id}", async (e
     res.responses.forEach((r, idx) => {
       if (!r.success && r.error &&
           r.error.code === "messaging/registration-token-not-registered") {
-        db.collection("userTokens").doc(chunk[idx]).delete().catch(() => {});
+        stale.push(db.collection("userTokens").doc(chunk[idx]));
       }
     });
   }
+  // Протухшие токены — дожидаемся удаления (раньше fire-and-forget обрывался
+  // вместе с функцией, и мёртвые токены копились).
+  await deleteInChunks(stale).catch((e) => console.warn("stale token cleanup failed", e));
 
   // Сохраняем историю отправок (чанками по 450 — лимит batch).
   for (let i = 0; i < logUpdates.length; i += 450) {
@@ -435,6 +489,43 @@ export const sendPushCampaign = onDocumentWritten("pushCampaigns/{id}", async (e
  * 2) Новое предложение → push подписчикам заведения (topic venue_<id>).
  *    Приложение подписывает устройство на topic при сохранении заведения.
  * ─────────────────────────────────────────────────────────────────────────── */
+/** Не больше одного пуша «новая акция» на заведение за это окно. */
+export const NEW_DEAL_PUSH_WINDOW_MS = DAY_MS;
+/** Пушей владельцу о новых отзывах на одно заведение в сутки. */
+export const REVIEW_PUSH_DAILY_CAP = 10;
+const PUSH_TITLE_MAX = 60;
+const PUSH_BODY_MAX = 140;
+
+/** Обрезка текста пуша по кодовым точкам (эмодзи не режется пополам). */
+function clipPush(s: unknown, n: number): string {
+  const cps = Array.from(String(s || "").replace(/\s+/g, " ").trim());
+  return cps.length > n ? cps.slice(0, n - 1).join("") + "…" : cps.join("");
+}
+
+/**
+ * Атомарно «занимает» окно пуша по ключу в `pushThrottle/{id}` (только сервер).
+ * Возвращает false, если окно ещё не прошло: тогда пуш не шлём. Раньше
+ * каждая созданная акция (а создать её мог любой вошедший — правила не
+ * проверяли владение заведением) уходила пушем всем подписчикам заведения.
+ */
+async function claimPushSlot(id: string, windowMs: number, nowMs: number, maxPerWindow = 1): Promise<boolean> {
+  const ref = db.collection("pushThrottle").doc(id);
+  let ok = false;
+  await db.runTransaction(async (tx) => {
+    const cur = (await tx.get(ref)).data() || {};
+    const since = toMillis(cur.windowStart);
+    const inWindow = since > 0 && nowMs - since < windowMs;
+    const count = inWindow ? intOf(cur.count) : 0;
+    if (count >= maxPerWindow) { ok = false; return; }
+    tx.set(ref, {
+      windowStart: inWindow ? cur.windowStart : new Date(nowMs),
+      count: count + 1, lastPushAt: new Date(nowMs),
+    }, { merge: true });
+    ok = true;
+  });
+  return ok;
+}
+
 export const notifyOnNewDeal = onDocumentCreated("deals/{id}", async (event) => {
   const snap = event.data;
   if (!snap) return;
@@ -443,20 +534,39 @@ export const notifyOnNewDeal = onDocumentCreated("deals/{id}", async (event) => 
   const venueID = String(deal.venueID || "");
   if (!venueID) return;
 
-  // Имя заведения для текста уведомления.
-  let venueName = "заведение";
-  try {
-    const vdoc = await db.collection("venues").doc(venueID).get();
-    if (vdoc.exists && vdoc.data()!.name) venueName = vdoc.data()!.name;
-  } catch (_) {}
+  // Пуш уходит только по настоящей акции настоящего заведения: заведение есть,
+  // одобрено (нет поля = одобрено, старые записи сида), и акцию создал его
+  // владелец. Правила теперь требуют того же, а здесь — на случай записи в
+  // обход (админ-скрипт, старые правила).
+  const vdoc = await db.collection("venues").doc(venueID).get();
+  if (!vdoc.exists) return;
+  const venue = (vdoc.data() || {}) as VenueDoc;
+  const venueOwner = String(venue.ownerID || "");
+  if (!venueOwner || String(deal.ownerID || "") !== venueOwner) {
+    console.log(`🔕 new-deal push skipped: owner mismatch deal=${event.params.id}`);
+    return;
+  }
+  if (String(venue.status || "approved") !== "approved") return;
+  if (venue.isPaused === true) return;
 
+  // Не больше одного пуша на заведение в сутки: иначе пачка акций подряд —
+  // это пачка пушей всем подписчикам.
+  if (!(await claimPushSlot(`deal_${venueID}`, NEW_DEAL_PUSH_WINDOW_MS, Date.now()))) {
+    console.log(`🔕 new-deal push throttled: venue=${venueID}`);
+    return;
+  }
+
+  const venueName = String(venue.name || "заведение");
   const typeLabel =
     ({ discount: "Скидка", promo: "Акция", novelty: "Новинка", announcement: "Объявление" } as Record<string, string>)[deal.type] ||
     "Новинка";
 
   await getMessaging().send({
     topic: `venue_${venueID}`,
-    notification: { title: `${typeLabel} · ${venueName}`, body: deal.title || "Новое предложение" },
+    notification: {
+      title: clipPush(`${typeLabel} · ${venueName}`, PUSH_TITLE_MAX),
+      body: clipPush(deal.title || "Новое предложение", PUSH_BODY_MAX),
+    },
     data: { type: "deal", dealID: event.params.id, venueID },
     apns: { payload: { aps: { sound: "default", badge: 1 } } },
     android: { notification: { sound: "default" }, priority: "high" },
@@ -483,6 +593,13 @@ export const notifyHostOnReview = onDocumentCreated("reviews/{id}", async (event
   const ownerID = String(venue.ownerID || "");
   if (!ownerID || ownerID === String(review.authorID || "")) return;
 
+  // Не больше REVIEW_PUSH_DAILY_CAP пушей о новых отзывах на заведение в сутки:
+  // волна отзывов (или накрутка) не должна превращаться в волну уведомлений.
+  if (!(await claimPushSlot(`review_${venueID}`, DAY_MS, Date.now(), REVIEW_PUSH_DAILY_CAP))) {
+    console.log(`🔕 review push throttled: venue=${venueID}`);
+    return;
+  }
+
   const tokensSnap = await db.collection("userTokens").where("uid", "==", ownerID).get();
   const tokens = tokensSnap.docs.map((d) => d.id).filter((t) => t.length > 0);
   if (tokens.length === 0) { console.log(`🔕 review push: no tokens for owner ${ownerID}`); return; }
@@ -495,7 +612,7 @@ export const notifyHostOnReview = onDocumentCreated("reviews/{id}", async (event
 
   const res = await getMessaging().sendEachForMulticast({
     tokens,
-    notification: { title: `Новый отзыв · ${String(venue.name || "заведение")}`, body },
+    notification: { title: clipPush(`Новый отзыв · ${String(venue.name || "заведение")}`, PUSH_TITLE_MAX), body: clipPush(body, PUSH_BODY_MAX) },
     data: { type: "review", reviewID: event.params.id, venueID },
     apns: { payload: { aps: { sound: "default", badge: 1 } } },
     android: { notification: { sound: "default" }, priority: "high" },
@@ -551,6 +668,15 @@ export const countRedemption = onDocumentCreated("redemptions/{id}", async (even
   const r = snap.data() || {};
   const venueID = String(r.venueID || "");
   if (!venueID) return;
+  // Те же условия, что в правилах: настоящая акция этого заведения. Правила
+  // отсекают запись раньше, здесь — на случай документа, записанного в обход
+  // (старые правила, админ-скрипт).
+  const dealID = String(r.dealID || "");
+  const deal = dealID ? await db.collection("deals").doc(dealID).get() : null;
+  if (!deal || !deal.exists || String((deal.data() || {}).venueID || "") !== venueID) {
+    await snap.ref.set({ status: "rejected", countedAt: new Date() }, { merge: true });
+    return;
+  }
 
   const day = dayKey();
   await db.collection("analytics").doc(venueID)
@@ -568,20 +694,46 @@ export const countRedemption = onDocumentCreated("redemptions/{id}", async (even
  *     удаляем событие-триггер (документы не копятся). Метрика вне белого списка
  *     (в т.ч. "redemptions") игнорируется — счётчики нельзя подделать.
  * ─────────────────────────────────────────────────────────────────────────── */
+//
+// Дневной документ заведения — горячая точка (лимит ~1 запись/с на документ):
+// популярное заведение с рекламой ловит десятки событий в секунду. Пока
+// шардирования нет (его читают iOS, Android и админ-панель — см. claude-notes),
+// инкремент повторяется с экспоненциальной паузой, а событие удаляется в
+// finally — даже при провале счётчика документы не копятся.
 export const countAnalyticsEvent = onDocumentCreated("analyticsEvents/{id}", async (event) => {
   const snap = event.data;
   if (!snap) return;
-  const e = snap.data() || {};
-  const venueID = String(e.venueID || "");
-  const metric = String(e.metric || "");
-  if (venueID && ANALYTICS_METRICS.includes(metric)) {
-    const day = dayKey();
-    await db.collection("analytics").doc(venueID)
-      .collection("days").doc(day)
-      .set({ [metric]: FieldValue.increment(1), date: day }, { merge: true });
+  try {
+    const e = snap.data() || {};
+    const venueID = String(e.venueID || "");
+    const metric = String(e.metric || "");
+    if (venueID && venueID.length <= 128 && !venueID.includes("/") && ANALYTICS_METRICS.includes(metric)) {
+      const day = dayKey();
+      const ref = db.collection("analytics").doc(venueID).collection("days").doc(day);
+      await withRetry(() => ref.set({ [metric]: FieldValue.increment(1), date: day }, { merge: true }),
+        ANALYTICS_RETRIES);
+    }
+  } catch (err) {
+    console.warn(`⚠️ analytics event dropped: ${event.params.id}`, err);
+  } finally {
+    await snap.ref.delete().catch(() => {}); // событие обработано — чистим
   }
-  await snap.ref.delete().catch(() => {}); // событие обработано — чистим
 });
+
+const ANALYTICS_RETRIES = 4;
+
+/** Повтор с экспоненциальной паузой (50, 100, 200 мс…) для конфликтов записи. */
+export async function withRetry<T>(fn: () => Promise<T>, attempts: number, baseMs = 50): Promise<T> {
+  let last: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try { return await fn(); }
+    catch (e) {
+      last = e;
+      if (i < attempts - 1) await new Promise((r) => setTimeout(r, baseMs * 2 ** i + Math.random() * baseMs));
+    }
+  }
+  throw last;
+}
 
 /* ───────────────────────────────────────────────────────────────────────────
  * 3в) Отзыв → денормализованный агрегат рейтинга на документе заведения.
@@ -608,34 +760,34 @@ export const countAnalyticsEvent = onDocumentCreated("analyticsEvents/{id}", asy
  *     показывает именно его (как и до этой правки).
  * ─────────────────────────────────────────────────────────────────────────── */
 
-/** Защита от неограниченного чтения, если у заведения аномально много отзывов. */
-const MAX_REVIEWS_PER_RECOUNT = 3000;
-
+/**
+ * Пересчёт агрегатами Firestore (`count()` по каждой звезде) вместо чтения
+ * всех отзывов: раньше каждая запись отзыва читала до 3000 документов, а
+ * агрегат стоит одно чтение на 1000 записей индекса. Свойства те же —
+ * идемпотентно, мусорная оценка (вне 1…5) не учитывается, — но без потолка
+ * «3000 отзывов». Оценки целые (правила требуют int 1…5), поэтому сумма —
+ * Σ звезда × количество. Запрос равенства по двум полям обслуживается
+ * слиянием одиночных индексов, составной индекс не нужен.
+ */
 export async function recomputeVenueRating(venueID: string): Promise<void> {
   if (!venueID) return;
-
-  const snap = await db.collection("reviews")
-    .where("venueID", "==", venueID)
-    .limit(MAX_REVIEWS_PER_RECOUNT)
-    .get();
-
-  if (snap.size >= MAX_REVIEWS_PER_RECOUNT) {
-    console.warn(`ALERT review_recount_truncated venue=${venueID} cap=${MAX_REVIEWS_PER_RECOUNT}`);
-  }
 
   // Гистограмма 1★…5★ — её читает карточка заведения, чтобы не тянуть отзывы
   // ради одной полоски. Ключи 1…5 присутствуют всегда, включая нули.
   const histogram: Record<string, number> = { "1": 0, "2": 0, "3": 0, "4": 0, "5": 0 };
+  const counts = await Promise.all([1, 2, 3, 4, 5].map(async (star) => {
+    const agg = await db.collection("reviews")
+      .where("venueID", "==", venueID).where("rating", "==", star)
+      .count().get();
+    return Number(agg.data().count) || 0;
+  }));
   let sum = 0;
   let count = 0;
-  for (const doc of snap.docs) {
-    const r = Number((doc.data() || {}).rating);
-    if (!Number.isFinite(r) || r < 1 || r > 5) continue;   // мусорная оценка не портит агрегат
-    const star = String(Math.round(r));
-    histogram[star] = (histogram[star] || 0) + 1;
-    sum += r;
-    count += 1;
-  }
+  counts.forEach((n, i) => {
+    histogram[String(i + 1)] = n;
+    sum += (i + 1) * n;
+    count += n;
+  });
 
   // Ни одного валидного отзыва — seed на документе не трогаем.
   if (count === 0) return;
@@ -676,50 +828,121 @@ export const aggregateReviewRating = onDocumentWritten("reviews/{id}", async (ev
  *    которые приложение «забирает» при следующем запуске.
  *    (Приглашённый получает приветственный бонус на своём устройстве сразу.)
  * ─────────────────────────────────────────────────────────────────────────── */
+/**
+ * Настоящий ли это человек для рефералки: аккаунт есть и вход не анонимный.
+ * Анонимный вход доступен любому скрипту (ключ веб-API публичный) — по той же
+ * причине кошелёк отклоняет анонимные токены (`walletUser`).
+ */
+async function referralAccount(uid: string): Promise<{ createdMs: number; emailUnverified: boolean } | null> {
+  try {
+    const user = await getAuth().getUser(uid);
+    const providers = (user.providerData || []);
+    if (providers.length === 0) return null;                   // анонимный
+    const created = Date.parse(String(user.metadata && user.metadata.creationTime));
+    const createdMs = Number.isFinite(created) ? created : 0;
+    // Только почта+пароль и почта не подтверждена (Apple/Google подтверждены
+    // провайдером) — и аккаунт новее BONUS_VERIFY_CUTOFF.
+    const passwordOnly = providers.every((p: any) => String(p && p.providerId) === "password");
+    const emailUnverified = passwordOnly && user.emailVerified !== true && createdMs >= BONUS_VERIFY_CUTOFF_MS;
+    return { createdMs, emailUnverified };
+  } catch { return null; }                                     // аккаунта нет
+}
+
 export const rewardReferral = onDocumentCreated("referrals/{inviteeID}", async (event) => {
   const snap = event.data;
   if (!snap) return;
-  const data = snap.data() || {};
+  await processReferral(snap.ref, event.params.inviteeID, snap.data() || {});
+});
+
+/**
+ * Награда за реферал. Зовётся триггером на создание `referrals/{invitee}` и —
+ * для приглашённого с неподтверждённой почтой — ещё раз из bonusWalletSync,
+ * когда он подтвердил почту (`pendingVerification`): реферал создаётся сразу
+ * при регистрации, раньше подтверждения, и отклонять его навсегда нельзя.
+ */
+async function processReferral(ref: DocumentReference, inviteeID: string, data: Record<string, any>): Promise<void> {
+  const snap = { ref };
   const referrerID = String(data.referrerID || "");
-  const inviteeID = event.params.inviteeID;
   if (!referrerID || referrerID === inviteeID) return;
   if (data.rewarded) return;                                 // идемпотентность
 
-  // Анти-фарм: не выдаём больше REFERRAL_MAX_REWARDS наград одному пригласившему.
-  // Один where по userID (без составного индекса — как в клиентском claimBonusGrants),
-  // reason считаем в коде. Реферал всё равно помечаем rewarded, чтобы не переобрабатывать.
-  const priorSnap = await db.collection("bonusGrants").where("userID", "==", referrerID).get();
-  const priorReferrals = priorSnap.docs.filter((d) => (d.data() || {}).reason === "referral").length;
-  if (priorReferrals >= REFERRAL_MAX_REWARDS) {
-    await snap.ref.set({ rewarded: true, rewardedAt: new Date(), capped: true }, { merge: true });
-    console.log(`🚫 referral cap (${REFERRAL_MAX_REWARDS}) reached for ${referrerID} — no grant`);
+  // Анти-фарм (аудит 2026-10-01): раньше награду приносил любой аккаунт, в том
+  // числе анонимный, созданный скриптом за один вызов, — 100 бонусов
+  // пригласившему и 100 «приглашённому» за каждую запись referrals.
+  const invitee = await referralAccount(inviteeID);
+  const referrer = await referralAccount(referrerID);
+  const reject = !invitee ? "invitee_anonymous"
+    : !referrer ? "referrer_invalid"
+    : Date.now() - invitee.createdMs > REFERRAL_MAX_INVITEE_AGE_MS ? "invitee_not_new"
+    : "";
+  if (reject) {
+    await snap.ref.set({ rewarded: true, rewardedAt: new Date(), rejected: reject }, { merge: true });
+    console.log(`🚫 referral ${inviteeID} → ${referrerID} rejected: ${reject}`);
+    return;
+  }
+  // Почта не подтверждена (аккаунт с почтой и паролем после
+  // BONUS_VERIFY_CUTOFF): регистрации без подтверждения — дешёвая ферма
+  // рефералов. Не отклоняем, а откладываем: bonusWalletSync приглашённого
+  // доведёт реферал, когда почта подтверждена.
+  if (invitee!.emailUnverified) {
+    await snap.ref.set({ pendingVerification: true }, { merge: true });
+    console.log(`⏳ referral ${inviteeID} → ${referrerID} waits for email verification`);
     return;
   }
 
-  await db.collection("bonusGrants").add({
-    userID: referrerID,
-    amount: REFERRAL_REWARD,
-    reason: "referral",
-    inviteeID,
-    claimed: false,
-    createdAt: new Date(),
+  // Потолок — счётчиком в транзакции. Раньше он был запросом и `add` без
+  // транзакции: сотня рефералов разом запускала сотню триггеров, каждый видел
+  // «меньше 20», и потолок не держал. Счётчик впервые заводится из уже
+  // выданных грантов — старые награды тоже считаются к лимиту.
+  const counterRef = db.collection("referralCounts").doc(referrerID);
+  const priorQuery = db.collection("bonusGrants").where("userID", "==", referrerID);
+  let outcome = "done" as "granted" | "capped" | "done";
+  await db.runTransaction(async (tx) => {
+    const cur = await tx.get(snap.ref);
+    if (!cur.exists || (cur.data() || {}).rewarded) { outcome = "done"; return; }
+    const counter = await tx.get(counterRef);
+    let count: number;
+    if (counter.exists) {
+      count = intOf((counter.data() || {}).rewarded);
+    } else {
+      const prior = await tx.get(priorQuery);
+      count = prior.docs.filter((d: any) => (d.data() || {}).reason === "referral").length;
+    }
+    const now = new Date();
+    if (count >= REFERRAL_MAX_REWARDS) {
+      tx.set(counterRef, { rewarded: count, updatedAt: now }, { merge: true });
+      tx.set(snap.ref, { rewarded: true, rewardedAt: now, capped: true }, { merge: true });
+      outcome = "capped";
+      return;
+    }
+    tx.set(counterRef, { rewarded: count + 1, updatedAt: now }, { merge: true });
+    tx.set(db.collection("bonusGrants").doc(`referral_${inviteeID}`), {
+      userID: referrerID,
+      amount: REFERRAL_REWARD,
+      reason: "referral",
+      inviteeID,
+      claimed: false,
+      createdAt: now,
+    });
+    // Приветственный бонус приглашённому — тоже грантом: с серверным кошельком
+    // клиент больше не начисляет его сам (это было бы число на телефоне).
+    // Документ с фиксированным id — повторный запуск триггера его не удвоит.
+    // Под потолком пригласившего не выдаётся: иначе фарм аккаунтами (Sybil)
+    // приносил бы по 100 бонусов за каждый новый аккаунт.
+    tx.set(db.collection("bonusGrants").doc(`welcome_${inviteeID}`), {
+      userID: inviteeID,
+      amount: REFERRAL_WELCOME,
+      reason: "welcome",
+      referrerID,
+      claimed: false,
+      createdAt: now,
+    });
+    tx.set(snap.ref, { rewarded: true, rewardedAt: now, pendingVerification: false }, { merge: true });
+    outcome = "granted";
   });
-  // Приветственный бонус приглашённому — тоже грантом: с серверным кошельком
-  // клиент больше не начисляет его сам (это было бы число на телефоне).
-  // Документ с фиксированным id — повторный запуск триггера его не удвоит.
-  // Под потолком пригласившего не выдаётся: иначе фарм аккаунтами (Sybil)
-  // приносил бы по 100 бонусов за каждый новый аккаунт.
-  await db.collection("bonusGrants").doc(`welcome_${inviteeID}`).set({
-    userID: inviteeID,
-    amount: REFERRAL_WELCOME,
-    reason: "welcome",
-    referrerID,
-    claimed: false,
-    createdAt: new Date(),
-  });
-  await snap.ref.set({ rewarded: true, rewardedAt: new Date() }, { merge: true });
-  console.log(`🎁 referral reward queued for ${referrerID} (invited ${inviteeID})`);
-});
+  if (outcome === "capped") console.log(`🚫 referral cap (${REFERRAL_MAX_REWARDS}) reached for ${referrerID} — no grant`);
+  if (outcome === "granted") console.log(`🎁 referral reward queued for ${referrerID} (invited ${inviteeID})`);
+}
 
 /* ───────────────────────────────────────────────────────────────────────────
  * 5) Карта лояльности → .pkpass для Apple Wallet.
@@ -869,7 +1092,7 @@ function addHeaderStrip(pass: any, opts: StripOpts): void {
   } catch (e: any) { console.error("strip render failed:", e.message); }
 }
 
-export const generateLoyaltyPass = onRequest({ cors: true }, async (req, res) => {
+export const generateLoyaltyPass = onRequest(HTTP_OPTS, async (req, res) => {
   try {
     const venue = String(req.query.venue || "");
     const userID = String(req.query.user || "");
@@ -953,6 +1176,95 @@ export const generateLoyaltyPass = onRequest({ cors: true }, async (req, res) =>
  *    помечает used, начисляет 1 штамп в карту лояльности гостя, на goal-м —
  *    выдаёт купон-награду. Всё серверно (admin SDK) — анти-чит.
  * ─────────────────────────────────────────────────────────────────────────── */
+/**
+ * Курс денежной награды (сомов за балл) с серверной страховкой.
+ *
+ * Потолок кэшбэка 20% обходился курсом: «20% баллами + 1 балл = 5 сом» — это
+ * скидка 100%. В режиме cashback эффективная скидка — процент × курс, поэтому
+ * курс режется до `MAX_CASHBACK_PERCENT / процент` (но не ниже 1 — проект
+ * задуман как «1 балл = 1 сом»). В flat/bands курс — лишь масштаб того, что
+ * заведение и так могло задать числом баллов за визит, и не режется.
+ * Зеркало — `PointsMath.effectiveRatio` на клиентах (общий фикстур).
+ */
+function effectiveMoneyRatio(venue: VenueDoc, reward: PointsReward): number {
+  const ratio = Number(reward.ratio) > 0 ? Number(reward.ratio) : 1;
+  if (String(venue.pointsMode || "flat") !== "cashback") return ratio;
+  const pct = Math.min(Math.max(Number(venue.cashbackPercent) || 0, 0), MAX_CASHBACK_PERCENT);
+  if (pct <= 0) return ratio;
+  return Math.min(ratio, Math.max(1, MAX_CASHBACK_PERCENT / pct));
+}
+
+/** Короткий код чека погашения: 4 цифры, читается вслух у кассы. */
+function newReceiptCode(): string {
+  return String(crypto.randomInt(0, 10000)).padStart(4, "0");
+}
+
+/**
+ * Ответ на повтор скана — из записи ключа (`scanKeys/{key}`), без начисления.
+ * Ищется ДО переписывания QR и проверок конфига (loyalty_off, points_off,
+ * missing_amount, card_not_found…): ретрай после того, как заведение
+ * переключило механику или выключило карту, обязан получить исходный ответ —
+ * штамп/баллы уже начислены. Ключ ищется в обоих местах, где его мог оставить
+ * первый скан: под картой штампов и под картой баллов этого гостя здесь.
+ */
+async function earlyScanReplay(
+  rawCode: string, venueID: string, venue: VenueDoc, key: string, cardID: string,
+  goal: number, venueName: string,
+): Promise<{ status: number; body: Record<string, unknown> } | null> {
+  const parts = rawCode.split(":");
+  const qrUser = String(parts[1] || "");
+  if (!qrUser) return null;
+  if (rawCode.startsWith("AYANT-CARD:")) {
+    if (String(parts[2] || "") !== venueID) return null;
+  } else if (!rawCode.startsWith("AYANT-PTS:")) {
+    return null;
+  }
+  const cardCode = `AYANT-CARD:${qrUser}:${venueID}`;
+  const ptsCode = `AYANT-PTS:${qrUser}`;
+
+  const stampKey = await db.collection("loyaltyCards")
+    .doc(stampCardDocID(qrUser, venueID, DEFAULT_STAMP_CARD_ID)).collection("scanKeys").doc(key).get();
+  if (stampKey.exists) {
+    const p = stampKey.data() || {};
+    if (String(p.code || "") !== cardCode || String(p.cardID || DEFAULT_STAMP_CARD_ID) !== cardID) {
+      return { status: 409, body: { error: "key_reused" } };
+    }
+    return { status: 200, body: stampReplayBody(p, venue, cardID, goal) };
+  }
+  const ptsKey = await db.collection("venuePoints").doc(`${qrUser}_${venueID}`)
+    .collection("scanKeys").doc(key).get();
+  if (ptsKey.exists) {
+    const p = ptsKey.data() || {};
+    if (String(p.code || "") !== ptsCode) return { status: 409, body: { error: "key_reused" } };
+    return { status: 200, body: pointsReplayBody(p, venueName) };
+  }
+  return null;
+}
+
+function stampReplayBody(p: any, venue: VenueDoc, cardID: string, goal: number): Record<string, unknown> {
+  const fallback = activeStampCards(venue).find((c) => c.id === cardID);
+  const rGoal = parseInt(String(p.goal), 10) || (fallback ? fallback.goal : goal);
+  const rReward = String(p.reward || (fallback ? fallback.reward : ""));
+  return {
+    ok: true, loyalty: true,
+    title: p.rewardIssued ? "Карта заполнена!" : "Штамп начислен",
+    stamps: parseInt(String(p.stamps), 10) || 0, goal: rGoal,
+    rewardIssued: p.rewardIssued === true,
+    rewardTitle: p.rewardIssued === true ? rReward : "",
+    cardID, cardTitle: String(p.cardTitle ?? (fallback ? fallback.title : "")),
+    replayed: true,
+  };
+}
+
+function pointsReplayBody(p: any, venueName: string): Record<string, unknown> {
+  return {
+    ok: true, points: true,
+    awarded: parseInt(String(p.awarded), 10) || 0,
+    balance: parseInt(String(p.balance), 10) || 0,
+    venueName, replayed: true,
+  };
+}
+
 export const scanCoupon = onRequest(MONEY_PATH_OPTS, async (req, res) => {
   try {
     if (req.method !== "POST") { res.status(405).json({ error: "method_not_allowed" }); return; }
@@ -966,7 +1278,7 @@ export const scanCoupon = onRequest(MONEY_PATH_OPTS, async (req, res) => {
     try { uid = (await getAuth().verifyIdToken(idToken)).uid; }
     catch (e) { res.status(401).json({ error: "bad_token" }); return; }
 
-    const code = String((req.body && req.body.code) || "").trim();
+    let code = String((req.body && req.body.code) || "").trim();
     const venueID = String((req.body && req.body.venueID) || "").trim();
     if (!code || !venueID) { res.status(400).json({ error: "missing_params" }); return; }
 
@@ -986,6 +1298,30 @@ export const scanCoupon = onRequest(MONEY_PATH_OPTS, async (req, res) => {
     // Ветка A берёт цель и награду у выбранной карты (`activeStampCards`).
     const goal = Math.max(parseInt(String(venue.loyaltyGoal), 10) || 6, 2);
     const venueName = String(venue.name || "Заведение");
+
+    // Повтор скана — до переписывания QR и проверок конфига (см. earlyScanReplay).
+    if (idempotencyKey) {
+      const requestedCard = String((req.body && req.body.cardID) || "").trim() || DEFAULT_STAMP_CARD_ID;
+      const replay = await earlyScanReplay(code, venueID, venue, idempotencyKey, requestedCard, goal, venueName);
+      if (replay) { res.status(replay.status).json(replay.body); return; }
+    }
+
+    // Один QR гостя на все заведения (аудит 2026-10-01). Раньше у гостя было
+    // два кода: «Мой QR» (AYANT-PTS) для баллов и QR карты (AYANT-CARD) для
+    // штампов, и показать «не тот» значило получить отказ у кассы. Механика у
+    // заведения одна (баллы ИЛИ штампы, приоритет у баллов), поэтому сервер
+    // сам направляет любой из двух кодов туда, где у этого заведения лояльность.
+    // Переписанный код детерминирован — ключ идемпотентности сверяется с ним же.
+    {
+      const qrUser = String(code.split(":")[1] || "");
+      if (qrUser && code.startsWith("AYANT-PTS:")
+          && venue.pointsEnabled !== true && venue.loyaltyEnabled === true) {
+        code = `AYANT-CARD:${qrUser}:${venueID}`;
+      } else if (qrUser && code.startsWith("AYANT-CARD:") && venue.pointsEnabled === true
+          && String(code.split(":")[2] || "") === venueID) {
+        code = `AYANT-PTS:${qrUser}`;
+      }
+    }
 
     // ── Ветка A: КАРТА ЛОЯЛЬНОСТИ (QR = AYANT-CARD:userID:venueID) → +1 штамп.
     //    Никак не связано с акциями/купонами — карта у заведения, у гостя.
@@ -1026,18 +1362,7 @@ export const scanCoupon = onRequest(MONEY_PATH_OPTS, async (req, res) => {
           if (String(p.code || "") !== code || priorCard !== cardID) {
             res.status(409).json({ error: "key_reused" }); return;
           }
-          const fallback = activeStampCards(venue).find((c) => c.id === cardID);
-          const rGoal = parseInt(String(p.goal), 10) || (fallback ? fallback.goal : goal);
-          const rReward = String(p.reward || (fallback ? fallback.reward : ""));
-          res.status(200).json({
-            ok: true, loyalty: true,
-            title: p.rewardIssued ? "Карта заполнена!" : "Штамп начислен",
-            stamps: parseInt(String(p.stamps), 10) || 0, goal: rGoal,
-            rewardIssued: p.rewardIssued === true,
-            rewardTitle: p.rewardIssued === true ? rReward : "",
-            cardID, cardTitle: String(p.cardTitle ?? (fallback ? fallback.title : "")),
-            replayed: true,
-          });
+          res.status(200).json(stampReplayBody(p, venue, cardID, goal));
           return;
         }
       }
@@ -1156,12 +1481,7 @@ export const scanCoupon = onRequest(MONEY_PATH_OPTS, async (req, res) => {
         if (prior.exists) {
           const p = prior.data() || {};
           if (String(p.code || "") !== code) { res.status(409).json({ error: "key_reused" }); return; }
-          res.status(200).json({
-            ok: true, points: true,
-            awarded: parseInt(String(p.awarded), 10) || 0,
-            balance: parseInt(String(p.balance), 10) || 0,
-            venueName, replayed: true,
-          });
+          res.status(200).json(pointsReplayBody(p, venueName));
           return;
         }
       }
@@ -1209,12 +1529,28 @@ export const scanCoupon = onRequest(MONEY_PATH_OPTS, async (req, res) => {
     }
 
     // ── Ветка B: КУПОН акции → только погашение (штамп НЕ начисляется).
-    const q = await db.collection("coupons").where("code", "==", code).limit(1).get();
-    if (q.empty) { res.status(404).json({ error: "coupon_not_found" }); return; }
+    // Сначала — купон ЭТОГО заведения с таким кодом. Поиск по одному коду
+    // находил первый попавшийся документ, и клиент мог подложить свой
+    // непривязанный купон (`venueID == ''` — их правила ещё разрешают) с
+    // чужим кодом: настоящий купон гостя тогда отвечал бы `wrong_venue`.
+    let q = await db.collection("coupons")
+      .where("code", "==", code).where("venueID", "==", venueID).limit(1).get();
+    if (q.empty) {
+      // Купона этого заведения нет — второй запрос только ради понятного
+      // ответа сотруднику: «для другого заведения» или «не найден».
+      const any = await db.collection("coupons").where("code", "==", code).limit(1).get();
+      if (any.empty) { res.status(404).json({ error: "coupon_not_found" }); return; }
+      res.status(409).json({ error: "wrong_venue" }); return;
+    }
     const couponRef = q.docs[0].ref;
     const coupon = (q.docs[0].data() || {}) as CouponDoc;
-    if (String(coupon.venueID || "") !== venueID) { res.status(409).json({ error: "wrong_venue" }); return; }
     if (coupon.used === true) { res.status(409).json({ error: "already_used", title: coupon.title || "" }); return; }
+    // «Действует до» — срок купона, а не только продажи: раньше проданный купон
+    // не сгорал никогда, и обязательство заведения не кончалось.
+    const couponExpires = toMillis(coupon.expiresAt);
+    if (couponExpires > 0 && couponExpires < Date.now()) {
+      res.status(409).json({ error: "coupon_expired", title: coupon.title || "" }); return;
+    }
 
     await db.runTransaction(async (tx) => {
       const cSnap = await tx.get(couponRef);
@@ -1250,7 +1586,7 @@ export const scanCoupon = onRequest(MONEY_PATH_OPTS, async (req, res) => {
 
 /* ───────────────────────────────────────────────────────────────────────────
  * 6b) Списание баллов САН (System 1) → погашение награды из каталога заведения.
- *     POST /redeemVenuePoints  body: { venueID, userID?, rewardId, pointsToSpend? }
+ *     POST /redeemVenuePoints  body: { venueID, userID?, rewardId, pointsToSpend?, idempotencyKey?, nonce? }
  *     Header: Authorization: Bearer <Firebase ID token>
  *
  *     Кто инициирует зависит от venue.redeemMode:
@@ -1259,6 +1595,117 @@ export const scanCoupon = onRequest(MONEY_PATH_OPTS, async (req, res) => {
  *     Владелец может гасить всегда (это его деньги). Награда — item (фикс. cost)
  *     или money (списываем pointsToSpend ≥ cost=minRedeem). Атомарно, анти-чит.
  * ─────────────────────────────────────────────────────────────────────────── */
+/** Nonce QR списания — как `RedeemQR.isValidNonce` на клиенте. */
+const REDEEM_NONCE_RE = /^[A-Za-z0-9_-]{12,64}$/;
+
+/* ── Токен списания (QR `AYANT-RDT:<token>`) ───────────────────────────────
+ * Раньше QR списания нёс uid гостя (`AYANT-RDM:<uid>:<reward>:…`): кто знал
+ * чужой uid (а он стоит и в QR начисления), мог сгенерировать QR и списать
+ * чужие баллы у любой стойки, где у него есть сотрудник-сообщник. Теперь гость
+ * просит у сервера одноразовый токен на конкретную награду и заведение;
+ * QR несёт только его. Токен живёт 3 минуты, гасится один раз, и угадать
+ * его (120 бит) нельзя.
+ *
+ * Старые сборки гостя по-прежнему показывают uid-QR. Путь для них остаётся,
+ * пока env REDEEM_REQUIRE_TOKEN не "true": переключить, когда сборка с
+ * токенами разойдётся (см. claude-notes / деплой). */
+export const REDEEM_TOKEN_TTL_MS = 3 * 60 * 1000;
+const REDEEM_TOKEN_RE = /^[A-Za-z0-9_-]{20,64}$/;
+
+function redeemRequiresToken(): boolean {
+  return String(process.env.REDEEM_REQUIRE_TOKEN || "false").toLowerCase() === "true";
+}
+
+/** 24 случайных байта → 32 символа base64url (192 бита). */
+function newRedeemToken(): string {
+  return crypto.randomBytes(24).toString("base64url");
+}
+
+/**
+ * Стоимость награды в баллах по серверному конфигу — общая для превью
+ * (`issueRedeemToken`) и списания (`redeemVenuePoints`). Ошибка — объект
+ * с кодом ответа: item без цены, money ниже минимума, нет награды.
+ */
+function rewardCost(venue: VenueDoc, rewardId: string, pointsToSpend: number):
+  { ok: true; reward: PointsReward; cost: number; type: string; ratio: number }
+  | { ok: false; status: number; body: Record<string, unknown> } {
+  const rewards: PointsReward[] = Array.isArray(venue.pointsRewards) ? venue.pointsRewards : [];
+  const reward = rewards.find((r) => String(r.id) === rewardId);
+  if (!reward || reward.active === false) return { ok: false, status: 404, body: { error: "reward_not_found" } };
+  const type = String(reward.type || "item");
+  const ratio = effectiveMoneyRatio(venue, reward);
+  if (type === "money") {
+    const minRedeem = Math.max(parseInt(String(reward.cost), 10) || 1, 1);
+    if (pointsToSpend < minRedeem) return { ok: false, status: 400, body: { error: "below_min", minRedeem } };
+    return { ok: true, reward, cost: pointsToSpend, type, ratio };
+  }
+  const cost = Math.max(parseInt(String(reward.cost), 10) || 0, 0);
+  if (cost <= 0) return { ok: false, status: 409, body: { error: "bad_reward" } };
+  return { ok: true, reward, cost, type, ratio };
+}
+
+/**
+ * Пользователь из Bearer-токена: метод → App Check → токен → не анонимный.
+ * null — ответ клиенту уже отправлен. Общий вход для новых функций
+ * (issueRedeemToken, signCloudinaryUpload).
+ */
+async function requireRealUser(req: any, res: any, label: string): Promise<string | null> {
+  if (req.method !== "POST") { res.status(405).json({ error: "method_not_allowed" }); return null; }
+  if (!(await checkAppCheck(req, label))) { res.status(401).json({ error: "app_check_failed" }); return null; }
+  const authz = String(req.get("Authorization") || "");
+  const idToken = authz.startsWith("Bearer ") ? authz.slice(7) : "";
+  if (!idToken) { res.status(401).json({ error: "no_token" }); return null; }
+  let decoded: any;
+  try { decoded = await getAuth().verifyIdToken(idToken); }
+  catch { res.status(401).json({ error: "bad_token" }); return null; }
+  if (decoded && decoded.firebase && decoded.firebase.sign_in_provider === "anonymous") {
+    res.status(403).json({ error: "anonymous_not_allowed" }); return null;
+  }
+  return String(decoded.uid);
+}
+
+/* POST /issueRedeemToken  body: { venueID, rewardId, pointsToSpend? }
+ * → { token, expiresAt (мс), ttlSec, cost }. Баланс проверяется для превью
+ * (честный отказ «не хватает» сразу у гостя); списание всё равно проверяет
+ * его заново в транзакции. */
+export const issueRedeemToken = onRequest(MONEY_PATH_OPTS, async (req, res) => {
+  try {
+    const uid = await requireRealUser(req, res, "issueRedeemToken");
+    if (!uid) return;
+    const venueID = String((req.body && req.body.venueID) || "").trim();
+    const rewardId = String((req.body && req.body.rewardId) || "").trim();
+    const pointsToSpend = Math.max(0, parseInt(String(req.body && req.body.pointsToSpend), 10) || 0);
+    if (!venueID || !rewardId) { res.status(400).json({ error: "missing_params" }); return; }
+
+    const venueSnap = await db.collection("venues").doc(venueID).get();
+    if (!venueSnap.exists) { res.status(404).json({ error: "venue_not_found" }); return; }
+    const venue = (venueSnap.data() || {}) as VenueDoc;
+    if (venue.pointsEnabled !== true) { res.status(409).json({ error: "points_off" }); return; }
+    const priced = rewardCost(venue, rewardId, pointsToSpend);
+    if (!priced.ok) { res.status(priced.status).json(priced.body); return; }
+
+    const card = (await db.collection("venuePoints").doc(`${uid}_${venueID}`).get()).data() || {};
+    if (intOf(card.balance) < priced.cost) { res.status(409).json({ error: "insufficient" }); return; }
+
+    const token = newRedeemToken();
+    const nowMs = Date.now();
+    const expiresAt = nowMs + REDEEM_TOKEN_TTL_MS;
+    await db.collection("redeemTokens").doc(token).set({
+      uid, venueID, rewardId,
+      points: priced.type === "money" ? priced.cost : 0,
+      cost: priced.cost,
+      used: false,
+      createdAt: new Date(nowMs),
+      // Поле для TTL-политики Firestore (удаление протухших токенов).
+      expiresAt: new Date(expiresAt),
+    });
+    res.status(200).json({ ok: true, token, expiresAt, ttlSec: Math.round(REDEEM_TOKEN_TTL_MS / 1000), cost: priced.cost });
+  } catch (e) {
+    console.error("issueRedeemToken error:", e);
+    res.status(500).json({ error: "issue_failed" });
+  }
+});
+
 export const redeemVenuePoints = onRequest(MONEY_PATH_OPTS, async (req, res) => {
   try {
     if (req.method !== "POST") { res.status(405).json({ error: "method_not_allowed" }); return; }
@@ -1272,10 +1719,11 @@ export const redeemVenuePoints = onRequest(MONEY_PATH_OPTS, async (req, res) => 
     catch (e) { res.status(401).json({ error: "bad_token" }); return; }
 
     const venueID = String((req.body && req.body.venueID) || "").trim();
-    const rewardId = String((req.body && req.body.rewardId) || "").trim();
+    const redeemToken = String((req.body && req.body.token) || "").trim();
+    let rewardId = String((req.body && req.body.rewardId) || "").trim();
     const userID = String((req.body && req.body.userID) || "").trim();
-    const pointsToSpend = Math.max(0, parseInt(String(req.body && req.body.pointsToSpend), 10) || 0);
-    if (!venueID || !rewardId) { res.status(400).json({ error: "missing_params" }); return; }
+    let pointsToSpend = Math.max(0, parseInt(String(req.body && req.body.pointsToSpend), 10) || 0);
+    if (!venueID || (!rewardId && !redeemToken)) { res.status(400).json({ error: "missing_params" }); return; }
 
     const venueSnap = await db.collection("venues").doc(venueID).get();
     if (!venueSnap.exists) { res.status(404).json({ error: "venue_not_found" }); return; }
@@ -1283,31 +1731,41 @@ export const redeemVenuePoints = onRequest(MONEY_PATH_OPTS, async (req, res) => 
     const redeemMode = String(venue.redeemMode || "staffScan");
     const isOwner = String(venue.ownerID || "") === uid;
 
+    // Токен из QR гостя (`AYANT-RDT:<token>`): чья карта, какая награда и
+    // сколько баллов — только из серверной записи токена, не из запроса.
+    const tokenRef = redeemToken ? db.collection("redeemTokens").doc(redeemToken) : null;
+    if (redeemToken) {
+      if (!isOwner) { res.status(403).json({ error: "not_owner" }); return; }
+      if (!REDEEM_TOKEN_RE.test(redeemToken)) { res.status(404).json({ error: "token_not_found" }); return; }
+    }
+    let tokenUser = "";
+    if (tokenRef) {
+      const t = await tokenRef.get();
+      if (!t.exists) { res.status(404).json({ error: "token_not_found" }); return; }
+      const td = t.data() || {};
+      // Токен другого заведения: QR показали не у той стойки. Не гасим и не
+      // раскрываем, чей он.
+      if (String(td.venueID || "") !== venueID) { res.status(409).json({ error: "wrong_venue" }); return; }
+      tokenUser = String(td.uid || "");
+      rewardId = String(td.rewardId || "");
+      pointsToSpend = Math.max(0, intOf(td.points));
+      if (!tokenUser || !rewardId) { res.status(404).json({ error: "token_not_found" }); return; }
+    }
+
     // Определяем, чья это карта, и кто вправе гасить.
     let cardUser: string;
-    if (isOwner) {
+    if (tokenRef) {
+      cardUser = tokenUser;                       // владелец гасит по токену гостя
+    } else if (isOwner) {
+      // Старый QR с uid гостя. После выхода сборки с токенами — выключить
+      // (REDEEM_REQUIRE_TOKEN=true): uid в QR позволяет списать чужие баллы.
+      if (redeemRequiresToken()) { res.status(400).json({ error: "token_required" }); return; }
       cardUser = userID;                          // владелец гасит по QR гостя
       if (!cardUser) { res.status(400).json({ error: "missing_user" }); return; }
     } else if (redeemMode === "customerInitiated") {
       cardUser = uid;                             // гость гасит сам
     } else {
       res.status(403).json({ error: "redeem_not_allowed" }); return;
-    }
-
-    const rewards: PointsReward[] = Array.isArray(venue.pointsRewards) ? venue.pointsRewards : [];
-    const reward = rewards.find((r) => String(r.id) === rewardId);
-    if (!reward || reward.active === false) { res.status(404).json({ error: "reward_not_found" }); return; }
-
-    const type = String(reward.type || "item");
-    const ratio = Number(reward.ratio) > 0 ? Number(reward.ratio) : 1;
-    let cost: number;
-    if (type === "money") {
-      const minRedeem = Math.max(parseInt(String(reward.cost), 10) || 1, 1);
-      if (pointsToSpend < minRedeem) { res.status(400).json({ error: "below_min", minRedeem }); return; }
-      cost = pointsToSpend;
-    } else {
-      cost = Math.max(parseInt(String(reward.cost), 10) || 0, 0);
-      if (cost <= 0) { res.status(409).json({ error: "bad_reward" }); return; }
     }
 
     const cardRef = db.collection("venuePoints").doc(`${cardUser}_${venueID}`);
@@ -1317,8 +1775,51 @@ export const redeemVenuePoints = onRequest(MONEY_PATH_OPTS, async (req, res) => 
     // кнопке). Первый запрос списывает и запоминает результат под этим ключом;
     // все следующие с тем же ключом возвращают тот же ответ, НЕ списывая снова.
     // Ключ живёт под картой гостя, поэтому чужим ключом воспользоваться нельзя.
-    const idempotencyKey = String((req.body && req.body.idempotencyKey) || "").trim().slice(0, 128);
+    // Токен (`rdm_<token>`) и nonce старого QR (`rdm_<nonce>`) задают ключ
+    // сами, а не сканер: сканер мог выдать новый ключ на каждый скан, и один
+    // и тот же QR гасился дважды (второй сотрудник, повторный тап, скриншот).
+    // Теперь любой повтор того же QR — воспроизведение первого списания.
+    const rawNonce = String((req.body && req.body.nonce) || "").trim();
+    const nonce = isOwner && !tokenRef && REDEEM_NONCE_RE.test(rawNonce) ? rawNonce : "";
+    const idempotencyKey = tokenRef
+      ? `rdm_${redeemToken}`
+      : nonce
+        ? `rdm_${nonce}`
+        : String((req.body && req.body.idempotencyKey) || "").trim().slice(0, 128);
     const keyRef = idempotencyKey ? cardRef.collection("redeemKeys").doc(idempotencyKey) : null;
+
+    // Повтор отдаётся ДО поиска награды и до проверки срока токена — как в
+    // ветке A скана: если заведение за это время выключило или переоценило
+    // награду или токен истёк, ретрай всё равно должен получить исходный
+    // ответ, ведь баллы уже списаны.
+    if (keyRef) {
+      const prior = await keyRef.get();
+      if (prior.exists) {
+        const p = prior.data() || {};
+        if (String(p.rewardId || "") !== rewardId) { res.status(409).json({ error: "key_reused" }); return; }
+        res.status(200).json({
+          ok: true, redeemed: intOf(p.redeemed), balance: intOf(p.balance),
+          rewardTitle: String(p.rewardTitle || ""),
+          somOff: p.somOff === undefined ? null : p.somOff,
+          receiptCode: String(p.receiptCode || ""), redeemedAt: toMillis(p.at),
+          replayed: true,
+        });
+        return;
+      }
+    }
+
+    const priced = rewardCost(venue, rewardId, pointsToSpend);
+    if (!priced.ok) { res.status(priced.status).json(priced.body); return; }
+    const { reward, type, ratio } = priced;
+    let cost = priced.cost;
+
+    const somOff = type === "money" ? Math.round(cost * ratio) : null;
+    const rewardTitle = String(reward.title || "");
+    // Код чека: гость показывает экран «погашено» с этим кодом и временем, и
+    // сотрудник отличает свежее погашение от старого скриншота. Код же лежит
+    // в ledger — его видно в истории карты.
+    let receiptCode = newReceiptCode();
+    let redeemedAt = Date.now();
 
     let balance = 0;
     let replayed = false;
@@ -1331,47 +1832,75 @@ export const redeemVenuePoints = onRequest(MONEY_PATH_OPTS, async (req, res) => 
         if (String(prior.rewardId || "") !== rewardId) throw new Error("key_reused");
         balance = parseInt(String(prior.balance), 10) || 0;
         cost = parseInt(String(prior.redeemed), 10) || 0;
+        receiptCode = String(prior.receiptCode || "");
+        redeemedAt = toMillis(prior.at);
         replayed = true;
         return;
       }
 
+      // Токен — одноразовый и короткоживущий; проверяется В транзакции, чтобы
+      // два сотрудника с одним QR не погасили его оба.
+      const tokSnap = tokenRef ? await tx.get(tokenRef) : null;
       const cur = (await tx.get(cardRef)).data() || {};
+      if (tokSnap) {
+        const td = tokSnap.data() || {};
+        if (!tokSnap.exists) throw new Error("token_not_found");
+        if (td.used === true) throw new Error("token_used");
+        if (toMillis(td.expiresAt) < redeemedAt) throw new Error("token_expired");
+      }
       const bal = parseInt(String(cur.balance), 10) || 0;
       if (bal < cost) throw new Error("insufficient");
       balance = bal - cost;
+      if (tokenRef) tx.set(tokenRef, { used: true, usedAt: new Date(redeemedAt), usedBy: uid }, { merge: true });
       tx.set(cardRef, {
         balance,
         lifetimeRedeemed: (parseInt(String(cur.lifetimeRedeemed), 10) || 0) + cost,
         lastActivityAt: new Date(), updatedAt: new Date(),
       }, { merge: true });
+      const at = new Date(redeemedAt);
       tx.set(cardRef.collection("ledger").doc(), {
-        type: "redeem", points: -cost, rewardId, byVenue: isOwner, at: new Date(),
+        type: "redeem", points: -cost, rewardId, byVenue: isOwner, receiptCode, at,
       });
-      if (keyRef) tx.set(keyRef, { rewardId, redeemed: cost, balance, at: new Date() });
+      if (keyRef) tx.set(keyRef, { rewardId, redeemed: cost, balance, rewardTitle, somOff, receiptCode, at });
     });
 
     if (!replayed) await bumpAnalytics(venueID, { pointsRedeemed: cost, rewardsIssued: 1 });
     res.status(200).json({
       ok: true, redeemed: cost, balance,
-      rewardTitle: String(reward.title || ""),
-      somOff: type === "money" ? Math.round(cost * ratio) : null,
+      rewardTitle,
+      somOff,
+      receiptCode, redeemedAt,
       // true — запрос уже выполнялся ранее с этим же ключом, баллы НЕ списаны повторно.
       replayed,
     });
   } catch (e: any) {
-    if (String(e.message) === "insufficient") { res.status(409).json({ error: "insufficient" }); return; }
-    if (String(e.message) === "key_reused") { res.status(409).json({ error: "key_reused" }); return; }
+    const m = String(e.message);
+    if (m === "insufficient" || m === "key_reused" || m === "token_used" || m === "token_expired") {
+      res.status(409).json({ error: m }); return;
+    }
+    if (m === "token_not_found") { res.status(404).json({ error: m }); return; }
     console.error("redeemVenuePoints error:", e);
     res.status(500).json({ error: "redeem_failed" });
   }
 });
+
+/**
+ * Ночные проходы читают ВСЕ карты и их ledger по очереди. С таймаутом по
+ * умолчанию (60 с у v2) они начали бы молча обрываться, как только данных
+ * станет побольше, — и сверка, призванная ловить потерю денег, перестала бы
+ * работать незаметно. 540 с — максимум для расписания; когда и его станет
+ * мало, проход нужно будет делить на страницы.
+ */
+const NIGHTLY_JOB = { schedule: "every 24 hours", timeoutSeconds: 540, memory: "512MiB" as const };
+/** Страница ночных сверок (карты баллов, кошельки). */
+const RECONCILE_PAGE = 300;
 
 /* ───────────────────────────────────────────────────────────────────────────
  * 6c) Сгорание баллов САН по неактивности (System 1). Ежедневно.
  *     Обнуляет баланс карт, где lastActivityAt старше venue.pointsExpiryMonths,
  *     и пишет строку ledger type:"expire". Порог берётся из конфига заведения.
  * ─────────────────────────────────────────────────────────────────────────── */
-export const expireVenuePoints = onSchedule("every 24 hours", async () => {
+export const expireVenuePoints = onSchedule(NIGHTLY_JOB, async () => {
   const nowMs = Date.now();
   const venueMonths = new Map<string, number>();       // кэш порога по заведению
   const snap = await db.collection("venuePoints").where("balance", ">", 0).get();
@@ -1396,16 +1925,23 @@ export const expireVenuePoints = onSchedule("every 24 hours", async () => {
     if (lastMs === 0) continue;
     if (nowMs - lastMs < months * 30 * DAY_MS) continue;   // месяц ≈ 30 дней
 
+    let didExpire = false;
     await db.runTransaction(async (tx) => {
       const cur = (await tx.get(doc.ref)).data() || {};
       const b = parseInt(String(cur.balance), 10) || 0;
       if (b <= 0) return;
+      // Порог перепроверяется по свежему документу: гость мог получить баллы
+      // между запросом и транзакцией, и тогда сгорели бы только что
+      // начисленные — порог, решённый по старому снимку, уже неверен.
+      const freshLast = toMillis(cur.lastActivityAt);
+      if (freshLast === 0 || nowMs - freshLast < months! * 30 * DAY_MS) return;
+      didExpire = true;
       tx.set(doc.ref, { balance: 0, updatedAt: new Date() }, { merge: true });
       tx.set(doc.ref.collection("ledger").doc(), {
         type: "expire", points: -b, byVenue: false, at: new Date(),
       });
     });
-    expired++;
+    if (didExpire) expired++;
   }
 
   console.log(`⌛ venuePoints expired: ${expired}`);
@@ -1422,7 +1958,7 @@ export const expireVenuePoints = onSchedule("every 24 hours", async () => {
  * ─────────────────────────────────────────────────────────────────────────── */
 const EXPIRY_WARN_DAYS = 7;
 
-export const warnExpiringPoints = onSchedule("every 24 hours", async () => {
+export const warnExpiringPoints = onSchedule(NIGHTLY_JOB, async () => {
   const nowMs = Date.now();
   const venueCache = new Map<string, { months: number; name: string }>();
   const snap = await db.collection("venuePoints").where("balance", ">", 0).get();
@@ -1477,7 +2013,7 @@ export const warnExpiringPoints = onSchedule("every 24 hours", async () => {
  * 7) Купон в Apple Wallet (.pkpass со сканируемым QR = code).
  *    GET /generateCouponPass?code=<code>&title=<title>&venue=<venueName>
  * ─────────────────────────────────────────────────────────────────────────── */
-export const generateCouponPass = onRequest({ cors: true }, async (req, res) => {
+export const generateCouponPass = onRequest(HTTP_OPTS, async (req, res) => {
   try {
     const code = String(req.query.code || "");
     const title = String(req.query.title || "Купон");
@@ -1557,8 +2093,26 @@ const HEARTBEAT_STALE_HOURS = 26;
 /** Не заваливаем алертами: в один прогон пишем не больше стольких расхождений. */
 const MAX_ALERTS_PER_RUN = 50;
 
-type AlertKind = "balance_mismatch" | "job_stale" | "issuance_spike"
+type AlertKind = "balance_mismatch" | "job_stale" | "issuance_spike" | "issuance_new_venue"
   | "wallet_mismatch" | "wallet_cap_hit";
+
+/** Заведение без недельной истории, начислившее за сутки больше этого. Спайк
+ *  по среднему на нём не срабатывает (среднего нет), а новое заведение с
+ *  «0 мин кулдауна» и щедрым кэшбэком — ровно тот случай, который нужно
+ *  увидеть в первый же день. */
+const NEW_VENUE_DAILY_ISSUANCE_ALERT = 5000;
+
+/** Проверка пульса другой ночной задачи. Сверки проверяют друг друга и
+ *  сгорание: задача, которая молча перестала запускаться, иначе не видна. */
+async function checkHeartbeat(beat: Record<string, unknown>, job: string, nowMs: number): Promise<void> {
+  const last = toMillis(beat[job]);
+  if (last !== 0 && nowMs - last <= HEARTBEAT_STALE_HOURS * 60 * 60 * 1000) return;
+  await raiseAlert("job_stale", {
+    job,
+    lastRunAt: last ? new Date(last).toISOString() : null,
+    staleHours: last ? Math.round((nowMs - last) / 3600000) : null,
+  });
+}
 
 async function raiseAlert(kind: AlertKind, detail: Record<string, unknown>): Promise<void> {
   console.error(`ALERT ${kind}`, JSON.stringify(detail));
@@ -1567,68 +2121,87 @@ async function raiseAlert(kind: AlertKind, detail: Record<string, unknown>): Pro
   }).catch((e) => console.error("alert write failed:", e));
 }
 
-export const reconcileVenuePoints = onSchedule("every 24 hours", async () => {
+export const reconcileVenuePoints = onSchedule(NIGHTLY_JOB, async () => {
   const nowMs = Date.now();
   const DAY = 24 * 60 * 60 * 1000;
 
-  // ── 2. Пульс задачи сгорания ───────────────────────────────────────────────
+  // ── 2. Пульс задачи сгорания и сверки кошельков бонусов ───────────────────
   const beat = (await db.collection("ops").doc("heartbeats").get()).data() || {};
-  const lastExpire = toMillis(beat.expireVenuePoints);
-  if (lastExpire === 0 || nowMs - lastExpire > HEARTBEAT_STALE_HOURS * 60 * 60 * 1000) {
-    await raiseAlert("job_stale", {
-      job: "expireVenuePoints",
-      lastRunAt: lastExpire ? new Date(lastExpire).toISOString() : null,
-      staleHours: lastExpire ? Math.round((nowMs - lastExpire) / 3600000) : null,
-    });
-  }
+  await checkHeartbeat(beat, "expireVenuePoints", nowMs);
+  await checkHeartbeat(beat, "reconcileBonusWallets", nowMs);
 
   // ── 1 + 3. Сверка балансов и эмиссия по заведениям ────────────────────────
-  const cards = await db.collection("venuePoints").get();
+  // Карты — постранично, сумма ledger — агрегатом sum() (одно чтение на 1000
+  // записей вместо чтения каждой). Начисления за 8 дней читаются только у
+  // карт с недавним начислением (lastEarnAt) и только за это окно.
   /** venueID → { today, prior7 } — начислено за сутки и за предыдущие 7 дней. */
   const issuance = new Map<string, { today: number; prior7: number }>();
   let checked = 0, mismatches = 0;
+  const windowStart = nowMs - 8 * DAY;
 
-  for (const card of cards.docs) {
-    const data = card.data() || {};
-    const balance = parseInt(String(data.balance), 10) || 0;
-    const venueID = String(data.venueID || "");
+  let cursor: FirebaseFirestore.QueryDocumentSnapshot | null = null;
+  for (;;) {
+    let page = db.collection("venuePoints").orderBy(FieldPath.documentId()).limit(RECONCILE_PAGE);
+    if (cursor) page = page.startAfter(cursor);
+    const cards = await page.get();
+    if (cards.empty) break;
+    for (const card of cards.docs) {
+      const data = card.data() || {};
+      const balance = parseInt(String(data.balance), 10) || 0;
+      const venueID = String(data.venueID || "");
 
-    const ledger = await card.ref.collection("ledger").get();
-    let sum = 0;
-    for (const entry of ledger.docs) {
-      const e = entry.data() || {};
-      const points = parseInt(String(e.points), 10) || 0;
-      sum += points;
+      const agg = await card.ref.collection("ledger")
+        .aggregate({ sum: AggregateField.sum("points"), n: AggregateField.count() }).get();
+      const sum = Number(agg.data().sum) || 0;
+      const entries = Number(agg.data().n) || 0;
 
-      if (String(e.type) === "earn" && venueID) {
-        const at = toMillis(e.at);
-        if (at === 0) continue;
-        const age = nowMs - at;
-        const bucket = issuance.get(venueID) || { today: 0, prior7: 0 };
-        if (age <= DAY) bucket.today += points;
-        else if (age <= 8 * DAY) bucket.prior7 += points;
-        issuance.set(venueID, bucket);
+      const lastEarn = toMillis(data.lastEarnAt);
+      if (venueID && (lastEarn === 0 || lastEarn >= windowStart)) {
+        const recent = await card.ref.collection("ledger").where("at", ">=", new Date(windowStart)).get();
+        for (const entry of recent.docs) {
+          const e = entry.data() || {};
+          if (String(e.type) !== "earn") continue;
+          const at = toMillis(e.at);
+          if (at === 0) continue;
+          const points = parseInt(String(e.points), 10) || 0;
+          const age = nowMs - at;
+          const bucket = issuance.get(venueID) || { today: 0, prior7: 0 };
+          if (age <= DAY) bucket.today += points;
+          else if (age <= 8 * DAY) bucket.prior7 += points;
+          issuance.set(venueID, bucket);
+        }
+      }
+
+      checked++;
+      // Пустой ledger при нулевом балансе — нормальная новая карта, не расхождение.
+      if (sum !== balance && !(entries === 0 && balance === 0)) {
+        mismatches++;
+        if (mismatches <= MAX_ALERTS_PER_RUN) {
+          await raiseAlert("balance_mismatch", {
+            card: card.id, userID: String(data.userID || ""), venueID,
+            balance, ledgerSum: sum, delta: balance - sum, ledgerEntries: entries,
+          });
+        }
       }
     }
-
-    checked++;
-    // Пустой ledger при нулевом балансе — нормальная новая карта, не расхождение.
-    if (sum !== balance && !(ledger.empty && balance === 0)) {
-      mismatches++;
-      if (mismatches <= MAX_ALERTS_PER_RUN) {
-        await raiseAlert("balance_mismatch", {
-          card: card.id, userID: String(data.userID || ""), venueID,
-          balance, ledgerSum: sum, delta: balance - sum, ledgerEntries: ledger.size,
-        });
-      }
-    }
+    if (cards.size < RECONCILE_PAGE) break;
+    cursor = cards.docs[cards.docs.length - 1] as FirebaseFirestore.QueryDocumentSnapshot;
   }
 
   // ── 3. Аномальная эмиссия ─────────────────────────────────────────────────
   for (const [venueID, { today, prior7 }] of issuance) {
     const dailyMean = prior7 / 7;
-    // Заведению без истории порог не применяем — иначе первый же день даёт алерт.
-    if (dailyMean <= 0 || today <= dailyMean * ISSUANCE_SPIKE_FACTOR) continue;
+    // Заведению без истории множитель не применяем — иначе первый же день даёт
+    // алерт; вместо него — абсолютный порог.
+    if (dailyMean <= 0) {
+      if (today > NEW_VENUE_DAILY_ISSUANCE_ALERT) {
+        await raiseAlert("issuance_new_venue", {
+          venueID, issuedToday: today, threshold: NEW_VENUE_DAILY_ISSUANCE_ALERT,
+        });
+      }
+      continue;
+    }
+    if (today <= dailyMean * ISSUANCE_SPIKE_FACTOR) continue;
     await raiseAlert("issuance_spike", {
       venueID, issuedToday: today,
       trailingDailyMean: Math.round(dailyMean * 100) / 100,
@@ -1657,25 +2230,41 @@ export const reconcileVenuePoints = onSchedule("every 24 hours", async () => {
  * Порядок: сначала данные, потом сама запись Auth. Если упасть посередине,
  * пользователь сможет повторить вызов — все шаги идемпотентны.
  *
- * Владелец заведений НЕ удаляется автоматически: снос живого каталога в один
- * тап необратим и задевает чужие данные (отзывы гостей, их баллы). Такой
- * аккаунт получает 409 и инструкцию сначала передать заведения — это
- * осознанное ограничение, а не недоделка.
+ * Владелец заведений (аудит запуска 2026-10-01): раньше получал 409 и не мог
+ * удалить аккаунт сам — нарушение правил App Store (5.1.1(v)). Теперь его
+ * заведения СНИМАЮТСЯ С ПУБЛИКАЦИИ, а не удаляются: status "pending",
+ * isPaused, ownerDeleted — данные остаются (отзывы гостей, их баллы и штампы
+ * — чужие данные, сносить их одним тапом нельзя), и админ может передать
+ * заведение новому владельцу. Акции и купоны заведения удаляются: продавать и
+ * рекламировать от имени удалённого аккаунта некому.
  * ─────────────────────────────────────────────────────────────────────────── */
-export const deleteAccount = onRequest({ cors: true }, async (req, res) => {
+export const deleteAccount = onRequest(HTTP_OPTS, async (req, res) => {
   try {
     if (req.method !== "POST") { res.status(405).json({ error: "method_not_allowed" }); return; }
     const uid = await verifyBearer(req);
     if (!uid) { res.status(401).json({ error: "no_token" }); return; }
 
-    // 1) Владелец заведений — отказ с понятной причиной.
-    const owned = await db.collection("venues").where("ownerID", "==", uid).limit(1).get();
-    if (!owned.empty) {
-      res.status(409).json({
-        error: "owns_venues",
-        message: "Аккаунт управляет заведениями. Напишите в поддержку, чтобы передать их, — после этого удалим аккаунт.",
-      });
-      return;
+    // 1) Заведения владельца — снимаем с публикации, данные оставляем.
+    const owned = await db.collection("venues").where("ownerID", "==", uid).get();
+    const nowDate = new Date();
+    for (let i = 0; i < owned.docs.length; i += 400) {
+      const batch = db.batch();
+      for (const v of owned.docs.slice(i, i + 400)) {
+        batch.set(v.ref, {
+          status: "pending", isPaused: true, ownerDeleted: true, ownerDeletedAt: nowDate,
+        }, { merge: true });
+      }
+      await batch.commit();
+    }
+    // Акции и купоны заведений владельца — по ownerID и (на случай записей
+    // админа без ownerID) по venueID его заведений.
+    for (const name of ["deals", "couponOffers"]) {
+      const refs = new Map<string, DocumentReference>();
+      for (const d of (await db.collection(name).where("ownerID", "==", uid).get()).docs) refs.set(d.ref.path, d.ref);
+      for (const v of owned.docs) {
+        for (const d of (await db.collection(name).where("venueID", "==", v.id).get()).docs) refs.set(d.ref.path, d.ref);
+      }
+      await deleteInChunks([...refs.values()]);
     }
 
     // 2) Документы, чей id начинается с uid: `{uid}_{venueID}`.
@@ -1703,23 +2292,46 @@ export const deleteAccount = onRequest({ cors: true }, async (req, res) => {
       ["reviews", "authorID"],
       ["userTokens", "uid"],
       ["rankingEvents", "userID"],
+      ["reviewReports", "reporterID"],
+      ["pushCampaigns", "ownerID"],
+      ["igAccounts", "ownerID"],
+      ["igConnections", "ownerID"],
+      ["redeemTokens", "uid"],
     ];
     for (const [name, field] of byField) {
-      const snap = await db.collection(name).where(field, "==", uid).get();
-      await deleteInChunks(snap.docs.map((d) => d.ref));
+      try {
+        const snap = await db.collection(name).where(field, "==", uid).get();
+        await deleteInChunks(snap.docs.map((d) => d.ref));
+      } catch (e) {
+        // rankingEvents.userID намеренно не индексирован (firestore.indexes.json,
+        // fieldOverrides — экономия на записи телеметрии), и запрос по нему
+        // падает FAILED_PRECONDITION. Раньше это роняло ВСЁ удаление аккаунта
+        // в 500. Телеметрию пропускаем с алертом в логах; остальное — ошибка.
+        if (name !== "rankingEvents") throw e;
+        console.warn(`ALERT delete_account_ranking_events_skipped uid=${uid}`, e);
+      }
     }
+    // Незабранные подарки, купленные этим аккаунтом. Забранные — уже купон
+    // получателя (его данные), их не трогаем.
+    const gifts = await db.collection("giftCoupons").where("fromUserID", "==", uid).get();
+    await deleteInChunks(gifts.docs.filter((d) => (d.data() || {}).claimed !== true).map((d) => d.ref));
+    // analyticsEvents не хранят пользователя (и удаляются сразу после
+    // подсчёта) — чистить там нечего.
 
     // 4) Документы с uid в качестве id.
     await db.collection("referrals").doc(uid).delete().catch(() => undefined);
     await db.collection("hosts").doc(uid).delete().catch(() => undefined);
+    await db.collection("referralCounts").doc(uid).delete().catch(() => undefined);
+    // Сохранённые заведения, избранное и скрытые авторы (ProfileStore).
+    await db.collection("userLibraries").doc(uid).delete().catch(() => undefined);
     // Кошелёк бонусов вместе с ledger и ключами идемпотентности.
     try { await db.recursiveDelete(db.collection("bonusWallets").doc(uid)); } catch { /* кошелька нет */ }
 
     // 5) Сама запись Auth — последней: пока она есть, вызов можно повторить.
     await getAuth().deleteUser(uid);
 
-    console.log(`🗑 account deleted: ${uid}`);
-    res.json({ ok: true });
+    console.log(`🗑 account deleted: ${uid} (venues unpublished: ${owned.size})`);
+    res.json({ ok: true, venuesUnpublished: owned.size });
   } catch (e) {
     console.error("deleteAccount failed:", e);
     res.status(500).json({ error: "internal" });
@@ -1775,8 +2387,71 @@ const IG_REDIRECT_URI = process.env.INSTAGRAM_REDIRECT_URI
 const IG_RETURN_URL = process.env.INSTAGRAM_RETURN_URL || "san://ig/connected";
 const IG_SCOPES = "instagram_business_basic";
 /** Тот же аккаунт Cloudinary, что и у iOS-приложения и админ-панели. */
-const CLOUDINARY_CLOUD = process.env.CLOUDINARY_CLOUD || "dsb14gwxw";
+const CLOUDINARY_CLOUD = process.env.CLOUDINARY_CLOUD_NAME || process.env.CLOUDINARY_CLOUD || "dsb14gwxw";
 const CLOUDINARY_PRESET = process.env.CLOUDINARY_PRESET || "Ayta_ios";
+/**
+ * Подписанные загрузки (аудит запуска 2026-10-01). Неподписанный пресет
+ * Cloudinary — публичный: любой, кто вытащил его имя из приложения, льёт
+ * файлы на наш счёт. Подпись выдаёт сервер только настоящему пользователю.
+ * Секрет — в Secret Manager:
+ *   firebase functions:secrets:set CLOUDINARY_API_SECRET
+ * ключ — CLOUDINARY_API_KEY в functions/.env. Пока их нет — 503 not_configured,
+ * и клиент откатывается на неподписанный пресет.
+ */
+const CLOUDINARY_SECRET = defineSecret("CLOUDINARY_API_SECRET");
+/** Папки, куда клиент вправе грузить (iOS: фото и документы — меню/прайсы). */
+const CLOUDINARY_FOLDERS = new Set(["ayant/images", "ayant/documents"]);
+/** Типы загрузки: `image` → /image/upload, `auto` (PDF меню) → /auto/upload. */
+const CLOUDINARY_RESOURCE_TYPES = new Set(["image", "auto"]);
+
+/** Ключ и секрет, если подписанные загрузки настроены; иначе null. */
+function cloudinarySigning(): { apiKey: string; secret: string } | null {
+  const apiKey = String(process.env.CLOUDINARY_API_KEY || "").trim();
+  let secret = "";
+  try { secret = String(CLOUDINARY_SECRET.value() || "").trim(); } catch { secret = ""; }
+  return apiKey && secret ? { apiKey, secret } : null;
+}
+
+/**
+ * Подпись Cloudinary: SHA-1 от параметров (кроме file/cloud_name/
+ * resource_type/api_key), отсортированных по имени, `k=v` через `&`, плюс
+ * секрет. Экспортирована для теста.
+ */
+export function cloudinarySignature(params: Record<string, string | number>, secret: string): string {
+  const base = Object.keys(params).sort()
+    .filter((k) => params[k] !== "" && params[k] !== undefined)
+    .map((k) => `${k}=${params[k]}`).join("&");
+  return crypto.createHash("sha1").update(base + secret).digest("hex");
+}
+
+/* POST /signCloudinaryUpload  body: { folder, resourceType: "image" | "auto" }
+ * → { cloudName, apiKey, timestamp, signature, folder, resourceType }.
+ * Клиент шлёт в Cloudinary (`/v1_1/<cloud>/<resourceType>/upload`) ровно эти
+ * folder и timestamp + api_key и signature: подпись покрывает folder и
+ * timestamp (Cloudinary принимает её час). Папки — закрытый список. */
+export const signCloudinaryUpload = onRequest(
+  { ...HTTP_OPTS, secrets: [CLOUDINARY_SECRET] },
+  async (req, res) => {
+    try {
+      const uid = await requireRealUser(req, res, "signCloudinaryUpload");
+      if (!uid) return;
+      const folder = String((req.body && req.body.folder) || "").trim();
+      const resourceType = String((req.body && req.body.resourceType) || "image").trim();
+      if (!CLOUDINARY_FOLDERS.has(folder)) { res.status(400).json({ error: "bad_folder" }); return; }
+      if (!CLOUDINARY_RESOURCE_TYPES.has(resourceType)) { res.status(400).json({ error: "bad_resource_type" }); return; }
+      const signing = cloudinarySigning();
+      if (!signing) { res.status(503).json({ error: "not_configured" }); return; }
+      const timestamp = Math.floor(Date.now() / 1000);
+      const signature = cloudinarySignature({ folder, timestamp }, signing.secret);
+      res.status(200).json({
+        ok: true, cloudName: CLOUDINARY_CLOUD, apiKey: signing.apiKey,
+        timestamp, signature, folder, resourceType,
+      });
+    } catch (e) {
+      console.error("signCloudinaryUpload error:", e);
+      res.status(500).json({ error: "sign_failed" });
+    }
+  });
 /** Сколько постов отдаём за одну синхронизацию и сколько фото тянем из карусели. */
 const IG_MEDIA_LIMIT = 25;
 const IG_CAROUSEL_LIMIT = 5;
@@ -1785,7 +2460,7 @@ const IG_STATE_TTL_MS = 10 * 60 * 1000;
 /** За сколько до протухания обновляем токен. */
 const IG_REFRESH_WINDOW_MS = 10 * 24 * 60 * 60 * 1000;
 
-const igOptions = { cors: true, secrets: [IG_APP_SECRET] };
+const igOptions = { cors: true, secrets: [IG_APP_SECRET], maxInstances: 10 };
 
 function igDocID(ownerID: string, venueID: string): string { return `${ownerID}_${venueID}`; }
 
@@ -1867,11 +2542,23 @@ function igIsAuthError(payload: unknown): boolean {
  */
 async function rehostToCDN(remoteURL: string): Promise<string | null> {
   try {
-    const body = new URLSearchParams({
-      file: remoteURL,
-      upload_preset: CLOUDINARY_PRESET,
-      folder: "instagram",
-    });
+    // Подписанная загрузка, если настроена; иначе — прежний неподписанный пресет.
+    const signing = cloudinarySigning();
+    let body: URLSearchParams;
+    if (signing) {
+      const timestamp = Math.floor(Date.now() / 1000);
+      const signed = { folder: "instagram", timestamp };
+      body = new URLSearchParams({
+        file: remoteURL, folder: "instagram", timestamp: String(timestamp),
+        api_key: signing.apiKey, signature: cloudinarySignature(signed, signing.secret),
+      });
+    } else {
+      body = new URLSearchParams({
+        file: remoteURL,
+        upload_preset: CLOUDINARY_PRESET,
+        folder: "instagram",
+      });
+    }
     const r = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`,
       { method: "POST", body });
     const j = (await r.json()) as { secure_url?: string };
@@ -1966,7 +2653,7 @@ export const instagramAuthStart = onRequest(igOptions, async (req, res) => {
  * `state`: он и говорит, чьё это заведение.
  */
 export const instagramAuthCallback = onRequest(
-  { cors: false, secrets: [IG_APP_SECRET] },
+  { cors: false, secrets: [IG_APP_SECRET], maxInstances: 10 },
   async (req, res) => {
     const back = (status: string, venueID = "") =>
       res.redirect(302, `${IG_RETURN_URL}?status=${encodeURIComponent(status)}`
@@ -2078,7 +2765,7 @@ export const instagramMedia = onRequest(igOptions, async (req, res) => {
  * Саму акцию создаёт клиент обычным путём (`HostRepository.saveDeal`) — так
  * импорт не проходит мимо модерации и правил владения.
  */
-export const instagramImportMedia = onRequest(igOptions, async (req, res) => {
+export const instagramImportMedia = onRequest({ ...igOptions, secrets: [IG_APP_SECRET, CLOUDINARY_SECRET] }, async (req, res) => {
   try {
     const owner = await igRequireOwner(req, res, "instagramImportMedia");
     if (!owner) return;
@@ -2244,25 +2931,75 @@ export const instagramDataDeletion = onRequest(igOptions, async (req, res) => {
 // приносит десятки бонусов, не сотни.
 const BONUS_EARN_MAX_PER_CALL = 100;
 // Потолок в сутки на пользователя по всем источникам. Дневного лимита у игр
-// нет по решению владельца (2026-09-22) — но это лимит для ЧЕЛОВЕКА. При
-// GameEconomy.minutesPerBonus = 1 тысяча бонусов — это ~16 часов игры подряд:
-// человек в него не упрётся, а скрипт, дёргающий earnBonus, упрётся.
-const BONUS_DAILY_EARN_CAP = capFromEnv(process.env.BONUS_DAILY_EARN_CAP, 1000);
+// нет по решению владельца (2026-09-22) — но это лимит для ЧЕЛОВЕКА. Сервер не
+// видит игру, только сумму, поэтому этот потолок — всё, что отделяет скрипт с
+// настоящим аккаунтом от денег заведения. Было 1000 (~16 ч игры): по аудиту
+// 2026-10-01 это три купона в день с каждого аккаунта-фермы. 200 при
+// GameEconomy.minutesPerBonus = 1 — больше трёх часов игры: живой игрок не
+// упирается, ферма зарабатывает впятеро меньше.
+const BONUS_DAILY_EARN_CAP = clampedCapFromEnv(process.env.BONUS_DAILY_EARN_CAP, 200, 0, 2000);
 // Сколько баланса с устройства сервер принимает на веру при переносе. Число на
 // телефоне ничем не подтверждено — поправленное вручную «99999» не должно
 // стать настоящими деньгами.
-const BONUS_MIGRATION_CAP = capFromEnv(process.env.BONUS_MIGRATION_CAP, 1000);
+// Прижат к [0, 5000]: «BONUS_MIGRATION_CAP=100000» не должен стать переносом
+// без потолка.
+const BONUS_MIGRATION_CAP = clampedCapFromEnv(process.env.BONUS_MIGRATION_CAP, 1000, 0, 5000);
 // Перенос баланса устройства — только для аккаунтов, созданных ДО серверного
 // кошелька. Иначе каждый новый аккаунт приносил бы BONUS_MIGRATION_CAP бонусов
 // одним вызовом — фабрика бонусов из регистраций.
 const BONUS_MIGRATION_CUTOFF_MS = Date.parse(
   process.env.BONUS_MIGRATION_CUTOFF || "2026-10-01T00:00:00+06:00");
-// Источники начисления. «game:<id>» — любая мини-игра, «time» — активное время.
-const BONUS_EARN_SOURCE = /^(time|game(:[a-z0-9_]{1,24})?)$/;
+// Подтверждение почты для денег (аудит запуска 2026-10-01): аккаунт с почтой
+// и паролем, созданный после этой даты, без подтверждённой почты не получает и
+// не тратит бонусы (403 email_not_verified) и не приносит реферальную награду.
+// Регистрация на чужую/одноразовую почту — бесплатная ферма аккаунтов.
+// Apple/Google подтверждают почту сами. Старые аккаунты не трогаем.
+const BONUS_VERIFY_CUTOFF_MS = Date.parse(
+  process.env.BONUS_VERIFY_CUTOFF || "2026-10-02T00:00:00+06:00");
+// Источники начисления — закрытый список. Раньше принимался любой
+// «game:<id>», и потолок Diamond обходился сменой подписи: «game:diamond»
+// упёрся в 30 — шлём «game:snake» или «game:x». Новая игра = новая строка здесь
+// (иначе её начисления получат 400 bad_source, и клиент их выбросит).
+// «game» без id — очередь начислений старых сборок.
+const BONUS_EARN_SOURCES = new Set([
+  "time", "game", "game:snake", "game:tetris", "game:2048", "game:diamond",
+]);
 // Дневные потолки отдельных источников — зеркало клиентских правил, которым
-// сервер не может верить на слово. «Diamond» (бывшая «Три в ряд») бесконечна
-// и платит не больше GameEconomy.endlessDailyBonusCap в сутки.
-const BONUS_SOURCE_DAILY_CAPS: Record<string, number> = { "game:diamond": 30 };
+// сервер не может верить на слово. Общий BONUS_DAILY_EARN_CAP действует поверх
+// них: сумма источников его не превышает.
+//  • «time» — BonusEngine.rewardPerGoal (1) × dailyGoalCap (4): время в
+//    приложении приносит не больше 4 в сутки. Без этой строки «time» был
+//    самым дешёвым путём к общему потолку.
+//  • «game:diamond» (бывшая «Три в ряд») бесконечна и платит не больше
+//    GameEconomy.endlessDailyBonusCap в сутки.
+// Потолок «time» — env BONUS_TIME_DAILY_CAP: курс времени настраивается в
+// Remote Config (ios_bonus_time_reward × ios_bonus_time_goals_per_day), и
+// поднять его без этого env нельзя — сервер зачислит не больше.
+// Потолок Diamond — env BONUS_DIAMOND_DAILY_CAP (по умолчанию 30, как
+// GameEconomy.endlessDailyBonusCap и Remote Config ios_bonus_diamond_daily_cap).
+// Все env-потолки прижаты сверху: time ≤ 100, diamond ≤ 500.
+const BONUS_SOURCE_DAILY_CAPS: Record<string, number> = {
+  "time": clampedCapFromEnv(process.env.BONUS_TIME_DAILY_CAP, 4, 0, 100),
+  "game:diamond": clampedCapFromEnv(process.env.BONUS_DIAMOND_DAILY_CAP, 30, 0, 500),
+};
+
+/** Чей потолок урезал начисление `earnBonus`; `null` — не урезано. */
+type EarnCapReason = "daily" | "source" | "per_call" | null;
+
+/**
+ * Какой потолок оказался связывающим. При равенстве побеждает более строгий:
+ * общий дневной (сегодня не платит ничего) → источника → за вызов.
+ */
+export function earnCapReason(amount: number, granted: number, dailyLeft: number, sourceLeft: number): EarnCapReason {
+  if (granted >= amount) return null;
+  if (dailyLeft <= granted) return "daily";
+  if (sourceLeft <= granted) return "source";
+  return "per_call";
+}
+
+function earnCapReasonOf(raw: unknown): EarnCapReason {
+  return raw === "daily" || raw === "source" || raw === "per_call" ? raw : null;
+}
 
 /** Сутки кошелька — по Бишкеку: «сегодня» у гостя, а не у сервера в США. */
 function bishkekDayKey(ms: number): string {
@@ -2285,7 +3022,26 @@ async function walletUser(req: any, res: any, label: string): Promise<string | n
   if (decoded && decoded.firebase && decoded.firebase.sign_in_provider === "anonymous") {
     res.status(403).json({ error: "anonymous_not_allowed" }); return null;
   }
+  if (await emailNotVerified(decoded)) {
+    res.status(403).json({ error: "email_not_verified" }); return null;
+  }
   return String(decoded.uid);
+}
+
+/**
+ * Вход почтой и паролем, почта не подтверждена, аккаунт новее
+ * BONUS_VERIFY_CUTOFF. Флаг в ID-токене может отставать (подтвердил почту, а
+ * токен старый), поэтому при `false` перепроверяем по записи Auth.
+ */
+async function emailNotVerified(decoded: any): Promise<boolean> {
+  if (!decoded || !decoded.firebase || decoded.firebase.sign_in_provider !== "password") return false;
+  if (decoded.email_verified === true) return false;
+  try {
+    const user = await getAuth().getUser(String(decoded.uid));
+    if (user.emailVerified === true) return false;
+    const created = Date.parse(String(user.metadata && user.metadata.creationTime));
+    return !Number.isFinite(created) || created >= BONUS_VERIFY_CUTOFF_MS;
+  } catch { return true; }
 }
 
 /** Создан ли аккаунт до серверного кошелька (право на перенос баланса). */
@@ -2315,6 +3071,13 @@ export const bonusWalletSync = onRequest(MONEY_PATH_OPTS, async (req, res) => {
   try {
     const uid = await walletUser(req, res, "bonusWalletSync");
     if (!uid) return;
+    // Реферал, отложенный до подтверждения почты: сюда доходит только
+    // подтверждённый аккаунт (walletUser), значит, его пора довести.
+    try {
+      const refSnap = await db.collection("referrals").doc(uid).get();
+      const rd = refSnap.exists ? (refSnap.data() || {}) : null;
+      if (rd && rd.pendingVerification === true && !rd.rewarded) await processReferral(refSnap.ref, uid, rd);
+    } catch (e) { console.warn("pending referral failed", e); }
     const eligible = await createdBeforeWallet(uid);
     const localBalance = eligible ? Math.max(0, intOf(req.body && req.body.localBalance)) : 0;
     const walletRef = db.collection("bonusWallets").doc(uid);
@@ -2384,7 +3147,7 @@ export const earnBonus = onRequest(MONEY_PATH_OPTS, async (req, res) => {
     const key = walletKey(req);
     if (!key) { res.status(400).json({ error: "missing_key" }); return; }
     if (amount <= 0) { res.status(400).json({ error: "bad_amount" }); return; }
-    if (!BONUS_EARN_SOURCE.test(source)) { res.status(400).json({ error: "bad_source" }); return; }
+    if (!BONUS_EARN_SOURCES.has(source)) { res.status(400).json({ error: "bad_source" }); return; }
 
     const walletRef = db.collection("bonusWallets").doc(uid);
     const keyRef = walletRef.collection("earnKeys").doc(key);
@@ -2394,6 +3157,10 @@ export const earnBonus = onRequest(MONEY_PATH_OPTS, async (req, res) => {
     let granted = 0;
     let balance = 0;
     let replayed = false;
+    let capReason: EarnCapReason = null;
+    let dailyLeft = 0;
+    let sourceLeftAfter: number | null = null;
+    const sourceCap = BONUS_SOURCE_DAILY_CAPS[source];
     await db.runTransaction(async (tx) => {
       const prior = await tx.get(keyRef);
       const walletSnap = await tx.get(walletRef);
@@ -2401,7 +3168,15 @@ export const earnBonus = onRequest(MONEY_PATH_OPTS, async (req, res) => {
         const p = prior.data() || {};
         if (intOf(p.requested) !== amount || String(p.source || "") !== source) throw new Error("key_reused");
         granted = intOf(p.granted);
-        balance = intOf((walletSnap.data() || {}).balance);
+        const w = walletSnap.data() || {};
+        balance = intOf(w.balance);
+        // Причина — из записи ключа (её не пересчитать задним числом); остатки —
+        // текущие: клиенту важно, что можно заработать сейчас.
+        capReason = earnCapReasonOf(p.capReason);
+        const wSameDay = String(w.earnDay || "") === day;
+        dailyLeft = Math.max(0, BONUS_DAILY_EARN_CAP - (wSameDay ? intOf(w.earnedToday) : 0));
+        sourceLeftAfter = sourceCap === undefined ? null
+          : Math.max(0, sourceCap - (wSameDay && w.earnedBySource ? intOf(w.earnedBySource[source]) : 0));
         replayed = true;
         return;
       }
@@ -2412,10 +3187,12 @@ export const earnBonus = onRequest(MONEY_PATH_OPTS, async (req, res) => {
       const sameDay = String(cur.earnDay || "") === day;
       const earnedToday = sameDay ? intOf(cur.earnedToday) : 0;
       const bySource: Record<string, number> = sameDay && cur.earnedBySource ? { ...cur.earnedBySource } : {};
-      const sourceCap = BONUS_SOURCE_DAILY_CAPS[source];
       const sourceLeft = sourceCap === undefined ? Infinity : sourceCap - intOf(bySource[source]);
-      granted = Math.max(0, Math.min(amount, BONUS_EARN_MAX_PER_CALL,
-        BONUS_DAILY_EARN_CAP - earnedToday, sourceLeft));
+      const dailyLeftBefore = BONUS_DAILY_EARN_CAP - earnedToday;
+      granted = Math.max(0, Math.min(amount, BONUS_EARN_MAX_PER_CALL, dailyLeftBefore, sourceLeft));
+      capReason = earnCapReason(amount, granted, dailyLeftBefore, sourceLeft);
+      dailyLeft = Math.max(0, dailyLeftBefore - granted);
+      sourceLeftAfter = sourceCap === undefined ? null : Math.max(0, sourceLeft - granted);
       bySource[source] = intOf(bySource[source]) + granted;
       balance = intOf(cur.balance) + granted;
       const now = new Date(nowMs);
@@ -2430,10 +3207,13 @@ export const earnBonus = onRequest(MONEY_PATH_OPTS, async (req, res) => {
           type: "earn", amount: granted, requested: amount, source, at: now,
         });
       }
-      tx.set(keyRef, { requested: amount, source, granted, at: now });
+      tx.set(keyRef, { requested: amount, source, granted, capReason, at: now });
     });
     // `granted` может быть меньше запрошенного (потолок) — клиент показывает его.
-    res.status(200).json({ ok: true, granted, balance, replayed });
+    // `capReason` говорит, ЧЕЙ потолок урезал: общий («daily») — сегодня не
+    // платит ничто; источника («source») — только эта игра/время; «per_call» —
+    // не потолок дня, просто слишком крупный вызов. Клиент не гадает.
+    res.status(200).json({ ok: true, granted, balance, replayed, capReason, dailyLeft, sourceLeft: sourceLeftAfter });
   } catch (e: any) {
     const m = String(e.message);
     if (m === "key_reused" || m === "no_wallet") { res.status(409).json({ error: m }); return; }
@@ -2464,16 +3244,26 @@ export const buyCoupon = onRequest(MONEY_PATH_OPTS, async (req, res) => {
     const catalogRef = db.collection("config").doc("globalRewards");
     const nowMs = Date.now();
 
+    // Каталог наград и владелец заведения купона читаются ВНЕ транзакции
+    // (аудит запуска: горячая точка). Оба меняет только админ/владелец и
+    // редко; держать их в каждой транзакции покупки значит конфликтовать с
+    // любой правкой каталога. venueID купона правила менять не дают, а в
+    // транзакции он сверяется с прочитанным здесь.
+    const catalogPre = rewardID ? await catalogRef.get() : null;
+    const offerPre = offerRef ? await offerRef.get() : null;
+    const preVenueID = offerPre && offerPre.exists ? String((offerPre.data() || {}).venueID || "") : "";
+    const offerVenuePre = preVenueID ? await db.collection("venues").doc(preVenueID).get() : null;
+
     let out: Record<string, unknown> = {};
     await db.runTransaction(async (tx) => {
       // ВСЕ чтения — до записей.
       const prior = await tx.get(keyRef);
       const walletSnap = await tx.get(walletRef);
       const offerSnap = offerRef ? await tx.get(offerRef) : null;
-      const catalogSnap = rewardID ? await tx.get(catalogRef) : null;
-      // Заведение купона — тоже чтение, и тоже до записей.
-      const offerVenueID = offerSnap && offerSnap.exists ? String((offerSnap.data() || {}).venueID || "") : "";
-      const offerVenueSnap = offerVenueID ? await tx.get(db.collection("venues").doc(offerVenueID)) : null;
+      const catalogSnap = catalogPre;
+      const offerVenueSnap = offerVenuePre;
+      const buysRef = offerID ? walletRef.collection("offerBuys").doc(offerID) : null;
+      const buysSnap = buysRef ? await tx.get(buysRef) : null;
 
       if (prior.exists) {
         const p = prior.data() || {};
@@ -2489,6 +3279,7 @@ export const buyCoupon = onRequest(MONEY_PATH_OPTS, async (req, res) => {
       let title = "";
       let venueID = "";
       let venueName = "";
+      let couponExpiresAt: unknown = null;
       if (offerSnap) {
         if (!offerSnap.exists) throw new Error("not_found");
         const o = offerSnap.data() || {};
@@ -2499,15 +3290,23 @@ export const buyCoupon = onRequest(MONEY_PATH_OPTS, async (req, res) => {
         if (String(o.status || "") !== "approved" || o.isPaused === true) throw new Error("unavailable");
         if (expires > 0 && expires < nowMs) throw new Error("unavailable");
         if (stock !== null && sold >= stock) throw new Error("sold_out");
+        // Лимит в одни руки: без него один игрок (или скрипт) выкупал весь
+        // остаток. 0 / нет поля — без лимита (купоны до 2026-10-01).
+        const perGuest = intOf(o.perGuestLimit);
+        if (perGuest > 0 && intOf((buysSnap && buysSnap.data() || {}).count) >= perGuest) {
+          throw new Error("limit_reached");
+        }
         // Купон гасится у заведения из `venueID`. Если это заведение не
         // принадлежит владельцу купона, купон перенацелили на чужую стойку —
         // не продаём.
         const venueOwner = String(((offerVenueSnap && offerVenueSnap.data()) || {}).ownerID || "");
         if (!venueOwner || venueOwner !== String(o.ownerID || "")) throw new Error("unavailable");
+        if (String(o.venueID || "") !== preVenueID) throw new Error("unavailable");
         cost = intOf(o.cost);
         title = String(o.title || "");
         venueID = String(o.venueID || "");
         venueName = String(o.venueName || "");
+        if (expires > 0) couponExpiresAt = o.expiresAt;
       } else {
         const items: any[] = ((catalogSnap && catalogSnap.data()) || {}).items || [];
         const item = items.find((i) => String(i && i.id) === rewardID);
@@ -2530,6 +3329,9 @@ export const buyCoupon = onRequest(MONEY_PATH_OPTS, async (req, res) => {
         balance, lifetimeSpent: intOf(wallet.lifetimeSpent) + cost, updatedAt: now,
       }, { merge: true });
       if (offerRef) tx.set(offerRef, { soldCount: intOf((offerSnap!.data() || {}).soldCount) + 1 }, { merge: true });
+      if (buysRef) {
+        tx.set(buysRef, { count: intOf((buysSnap && buysSnap.data() || {}).count) + 1, updatedAt: now }, { merge: true });
+      }
 
       if (asGift) {
         // Подарок — документ giftCoupons, как раньше создавал клиент; забирает
@@ -2548,8 +3350,11 @@ export const buyCoupon = onRequest(MONEY_PATH_OPTS, async (req, res) => {
           kind: offerID ? "offer" : "reward", dealID: "",
           used: false, createdAt: now,
           source: offerID ? "couponOffer" : "globalReward", refID: offerID || rewardID,
+          ...(couponExpiresAt ? { expiresAt: couponExpiresAt } : {}),
         });
-        out = { ok: true, couponID: couponRef.id, code, title, venueID, venueName, cost, balance };
+        const expiresAtMs = couponExpiresAt ? toMillis(couponExpiresAt) : 0;
+        out = { ok: true, couponID: couponRef.id, code, title, venueID, venueName, cost, balance,
+          ...(expiresAtMs > 0 ? { expiresAt: expiresAtMs } : {}) };
       }
       tx.set(walletRef.collection("ledger").doc(), {
         type: "spend", amount: -cost, ref, at: now,
@@ -2561,7 +3366,7 @@ export const buyCoupon = onRequest(MONEY_PATH_OPTS, async (req, res) => {
   } catch (e: any) {
     const m = String(e.message);
     if (m === "not_found") { res.status(404).json({ error: m }); return; }
-    if (["insufficient", "sold_out", "unavailable", "key_reused", "no_wallet"].includes(m)) {
+    if (["insufficient", "sold_out", "unavailable", "key_reused", "no_wallet", "limit_reached"].includes(m)) {
       res.status(409).json({ error: m }); return;
     }
     console.error("buyCoupon error:", e);
@@ -2627,25 +3432,50 @@ export const claimGift = onRequest(MONEY_PATH_OPTS, async (req, res) => {
  * Проверить игру сервер не может, поэтому это единственный детектор фарма
  * «после факта»: баланс ≠ сумме ledger (деньги потеряны или напечатаны) и
  * аккаунты, упёршиеся в дневной потолок начисления. */
-export const reconcileBonusWallets = onSchedule("every 24 hours", async () => {
-  const today = bishkekDayKey(Date.now());
-  const wallets = await db.collection("bonusWallets").get();
+export const reconcileBonusWallets = onSchedule(NIGHTLY_JOB, async () => {
+  const nowMs = Date.now();
+  const today = bishkekDayKey(nowMs);
+  // Счётчик дня в кошельке один — за последний день начислений. Проход идёт
+  // в случайный час суток, и рано утром «сегодня» почти пусто: вчерашний
+  // фармер упёрся в потолок вчера. Поэтому смотрим оба дня.
+  const yesterday = bishkekDayKey(nowMs - 24 * 3600000);
+  const beat = (await db.collection("ops").doc("heartbeats").get()).data() || {};
+  await checkHeartbeat(beat, "reconcileVenuePoints", nowMs);
   let checked = 0, mismatches = 0, capped = 0;
-  for (const w of wallets.docs) {
-    const data = w.data() || {};
-    const balance = intOf(data.balance);
-    const ledger = await w.ref.collection("ledger").get();
-    let sum = 0;
-    for (const entry of ledger.docs) sum += intOf((entry.data() || {}).amount);
-    checked++;
-    if (sum !== balance) {
-      mismatches++;
-      await raiseAlert("wallet_mismatch", { userID: w.id, balance, ledgerSum: sum });
+  // Кошельки — постранично, сумма ledger — агрегатом sum() (см. reconcileVenuePoints).
+  let cursor: FirebaseFirestore.QueryDocumentSnapshot | null = null;
+  for (;;) {
+    let page = db.collection("bonusWallets").orderBy(FieldPath.documentId()).limit(RECONCILE_PAGE);
+    if (cursor) page = page.startAfter(cursor);
+    const wallets = await page.get();
+    if (wallets.empty) break;
+    for (const w of wallets.docs) {
+      const data = w.data() || {};
+      const balance = intOf(data.balance);
+      const agg = await w.ref.collection("ledger").aggregate({ sum: AggregateField.sum("amount") }).get();
+      const sum = Number(agg.data().sum) || 0;
+      checked++;
+      if (sum !== balance) {
+        mismatches++;
+        if (mismatches <= MAX_ALERTS_PER_RUN) {
+          await raiseAlert("wallet_mismatch", { userID: w.id, balance, ledgerSum: sum });
+        }
+      }
+      const earnDay = String(data.earnDay || "");
+      if ((earnDay === today || earnDay === yesterday) && intOf(data.earnedToday) >= BONUS_DAILY_EARN_CAP) {
+        capped++;
+        if (capped <= MAX_ALERTS_PER_RUN) {
+          await raiseAlert("wallet_cap_hit", { userID: w.id, day: earnDay, earnedToday: intOf(data.earnedToday) });
+        }
+      }
     }
-    if (String(data.earnDay || "") === today && intOf(data.earnedToday) >= BONUS_DAILY_EARN_CAP) {
-      capped++;
-      await raiseAlert("wallet_cap_hit", { userID: w.id, earnedToday: intOf(data.earnedToday) });
-    }
+    if (wallets.size < RECONCILE_PAGE) break;
+    cursor = wallets.docs[wallets.docs.length - 1] as FirebaseFirestore.QueryDocumentSnapshot;
+  }
+  if (mismatches > MAX_ALERTS_PER_RUN || capped > MAX_ALERTS_PER_RUN) {
+    console.error(`ALERT wallet_alert_flood mismatches=${mismatches} capped=${capped}, записано не больше ${MAX_ALERTS_PER_RUN} каждого`);
   }
   console.log(`🧾 wallets reconciled: ${checked}, mismatches: ${mismatches}, at cap: ${capped}`);
+  await db.collection("ops").doc("heartbeats")
+    .set({ reconcileBonusWallets: new Date(), walletMismatches: mismatches, walletsAtCap: capped }, { merge: true });
 });

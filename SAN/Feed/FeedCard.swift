@@ -51,7 +51,7 @@ private struct FeedPostAvatar: View {
                 Circle()
                     .fill(brush)
                     .overlay {
-                        if let imageURL, !imageURL.isEmpty, let url = URL(string: imageURL) {
+                        if let imageURL, !imageURL.isEmpty, let url = CloudinaryURL.sized(imageURL, points: 38) {
                             AsyncImage(url: url) { image in Color.clear.overlay { image.resizable().scaledToFill() } } placeholder: { Color.clear }
                                 .clipShape(Circle())
                         }
@@ -437,7 +437,7 @@ struct FeedDealCard: View {
                         if only.count == 1 {
                             Text("Только: \(only[0].address)")
                         } else {
-                            Text("Только \(only.count) \(Plural.ru(only.count, LS("адрес"), LS("адреса"), LS("адресов")))")
+                            Text("Только \(only.count) адресов")
                         }
                     }
                     .lineLimit(1)
@@ -466,7 +466,7 @@ struct FeedDealCard: View {
     private var meta: String? {
         var parts: [String] = []
         if let count = venue?.reviewCount, count > 0 {
-            parts.append("\(count) \(Self.reviewPlural(count))")
+            parts.append(LF("%lld отзывов", count))
         }
         if let start = deal.startDate {
             let f = RelativeDateTimeFormatter()
@@ -479,7 +479,6 @@ struct FeedDealCard: View {
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
-    private static func reviewPlural(_ n: Int) -> String { LPlural(n, "отзыв", "отзыва", "отзывов") }
 }
 
 
@@ -678,7 +677,9 @@ extension Venue {
         switch pointsMode {
         case "cashback":
             guard cashbackPercent > 0 else { return nil }
-            return LF("+%@%% САН", cashbackPercent.sanPercentText)
+            // «баллами», а не «САН»: без слова чип читался как скидка или
+            // как бонусы общего кошелька.
+            return LF("+%@%% баллами", cashbackPercent.sanPercentText)
         case "bands":
             return LS("Баллы САН")
         default:

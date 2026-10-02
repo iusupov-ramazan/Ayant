@@ -13,6 +13,10 @@ import Foundation
 /// Запись/чтение контента хоста в Firestore (заведения и предложения с владельцем).
 public protocol HostRepository {
     func saveVenue(_ dto: HostVenueDTO, ownerID: String) async throws
+    /// `allowCreate: false` — заведение сервер уже знает (`HostStore.knownVenueIDs`).
+    /// Если документа нет, его удалили (админ, другое устройство): реализация
+    /// бросает `AppError.notFound`, а не воскрешает заведение из устаревшей копии.
+    func saveVenue(_ dto: HostVenueDTO, ownerID: String, allowCreate: Bool) async throws
     func deleteVenue(id: String) async throws
     func saveDeal(_ dto: HostDealDTO, ownerID: String) async throws
     func deleteDeal(id: String) async throws
@@ -29,6 +33,13 @@ public protocol HostRepository {
     /// Cloud Function по триггеру создания документа.
     func queuePushCampaign(headline: String, body: String, city: String,
                            category: String?, venueID: String, dealID: String?, ownerID: String) async throws
+}
+
+public extension HostRepository {
+    /// Моки и фейки не различают создание и правку.
+    func saveVenue(_ dto: HostVenueDTO, ownerID: String, allowCreate: Bool) async throws {
+        try await saveVenue(dto, ownerID: ownerID)
+    }
 }
 
 /// Аналитика заведений: события пишутся в коллекцию `analytics/{venueID}/days/{date}`.
@@ -86,6 +97,8 @@ public struct ScanOutcome: Equatable {
     public var replayed: Bool = false
     /// Имя карты штампов, на которую лёг штамп (пусто — у безымянной первой).
     public var cardTitle: String = ""
+    /// Для `cooldown`: через сколько секунд гостю снова можно начислить.
+    public var retryAfterSec: Int? = nil
 
     public init(ok: Bool, title: String, loyalty: Bool, stamps: Int, goal: Int, rewardIssued: Bool, rewardTitle: String, errorCode: String?, points: Bool = false, awarded: Int = 0, balance: Int = 0, replayed: Bool = false, cardTitle: String = "") {
         self.cardTitle = cardTitle
@@ -114,8 +127,14 @@ public struct RedeemOutcome: Equatable {
     public let errorCode: String?     // nil при успехе; иначе "insufficient"/…
     /// true — запрос с этим idempotencyKey уже выполнялся, баллы НЕ списаны повторно.
     public var replayed: Bool = false
+    /// Код чека и момент списания (`receiptCode`/`redeemedAt` в ответе сервера).
+    public var receiptCode: String = ""
+    public var redeemedAt: Date? = nil
 
-    public init(ok: Bool, redeemed: Int, balance: Int, rewardTitle: String, somOff: Int?, errorCode: String?, replayed: Bool = false) {
+    public init(ok: Bool, redeemed: Int, balance: Int, rewardTitle: String, somOff: Int?, errorCode: String?,
+                replayed: Bool = false, receiptCode: String = "", redeemedAt: Date? = nil) {
+        self.receiptCode = receiptCode
+        self.redeemedAt = redeemedAt
         self.ok = ok
         self.redeemed = redeemed
         self.balance = balance
@@ -126,8 +145,33 @@ public struct RedeemOutcome: Equatable {
     }
 }
 
+/// Одноразовый токен списания баллов (ответ `issueRedeemToken`): QR гостя
+/// `AYANT-RDT:<token>` несёт только его — без uid (см. `RedeemQR`).
+public struct RedeemToken: Equatable, Sendable {
+    public let token: String
+    public let expiresAt: Date
+    /// Сколько баллов спишется (по серверному конфигу награды).
+    public let cost: Int
+    public init(token: String, expiresAt: Date, cost: Int) {
+        self.token = token
+        self.expiresAt = expiresAt
+        self.cost = cost
+    }
+}
+
 /// Бэкенд-трекинг купонов + карт лояльности (Firestore) и сканер заведения.
 public protocol CouponService {
+    /// Токен списания для QR гостя (Cloud Function `issueRedeemToken`).
+    /// Ошибки: `AppError.server(code:)` — отказ сервера (`insufficient`,
+    /// `reward_not_found`, `anonymous_not_allowed`, `not_deployed` — функции
+    /// ещё нет на сервере), `AppError.network` — нет связи.
+    func issueRedeemToken(venueID: String, rewardId: String, pointsToSpend: Int,
+                          idToken: String) async throws -> RedeemToken
+    /// Списание по токену из QR гостя (`AYANT-RDT:`) — гасит сотрудник.
+    /// Чья карта, какая награда и сколько баллов — сервер берёт из токена;
+    /// ключ идемпотентности — `rdm_<token>`, повторный скан воспроизводит
+    /// первое списание (`replayed`).
+    func redeemVenuePoints(venueID: String, token: String, idToken: String) async throws -> RedeemOutcome
     /// Пишет купон пользователя в Firestore (deal-купон создаёт клиент).
     func saveCoupon(_ coupon: Coupon, userID: String) async throws
     /// Каталог наград глобального кошелька (config/globalRewards).
@@ -153,6 +197,9 @@ public protocol CouponService {
     /// должен увидеть это сразу, без опроса. Реализация на Firestore держит
     /// snapshot-листенер; он снимается вместе с задачей-потребителем.
     func loyaltyCards(userID: String) -> AsyncStream<[LoyaltyCard]>
+    /// Тот же поток с пометкой «снимок из кэша» (см. `PointsRepository.liveCards`):
+    /// детектор штампа берёт точку отсчёта только с серверного снимка.
+    func liveLoyaltyCards(userID: String) -> AsyncStream<LiveSnapshot<[LoyaltyCard]>>
     /// Карты баллов САН пользователя (venuePoints/{userID}_{venueID}).
     func fetchVenuePoints(userID: String) async throws -> [VenuePointsCard]
     /// Сканирование заведением: погашение купона / штамп / начисление баллов САН.
@@ -167,9 +214,44 @@ public protocol CouponService {
     /// Списание баллов САН на награду (через Cloud Function redeemVenuePoints).
     /// `idempotencyKey` генерируется вызывающим ОДИН раз на попытку и повторяется
     /// при ретрае — сервер вернёт тот же результат вместо второго списания.
+    /// `nonce` — из QR гостя (`RedeemQR`): при скане сотрудником сервер
+    /// берёт ключом `rdm_<nonce>`, и повторный скан того же QR воспроизводит
+    /// первое списание. `nil` — старый QR без nonce или списание гостем.
     func redeemVenuePoints(venueID: String, userID: String, rewardId: String,
                            pointsToSpend: Int, idToken: String,
-                           idempotencyKey: String) async throws -> RedeemOutcome
+                           idempotencyKey: String, nonce: String?) async throws -> RedeemOutcome
+}
+
+public extension CouponService {
+    /// Мок-режим и тестовые фейки: токен локальный (сервера нет), чтобы экран
+    /// списания работал офлайн. Firebase-реализация переопределяет.
+    func issueRedeemToken(venueID: String, rewardId: String, pointsToSpend: Int,
+                          idToken: String) async throws -> RedeemToken {
+        let raw = (UUID().uuidString + UUID().uuidString).replacingOccurrences(of: "-", with: "")
+        return RedeemToken(token: String(raw.prefix(32)),
+                           expiresAt: SystemClock().now.addingTimeInterval(RedeemQR.tokenTTL),
+                           cost: pointsToSpend)
+    }
+
+    /// Мок-режим: списания по токену нет — честный отказ, а не тихий успех.
+    func redeemVenuePoints(venueID: String, token: String, idToken: String) async throws -> RedeemOutcome {
+        RedeemOutcome(ok: false, redeemed: 0, balance: 0, rewardTitle: "", somOff: nil,
+                      errorCode: "not_supported")
+    }
+
+    /// Источники без кэша (моки, фейки): каждый снимок — серверный.
+    func liveLoyaltyCards(userID: String) -> AsyncStream<LiveSnapshot<[LoyaltyCard]>> {
+        loyaltyCards(userID: userID).mapped { LiveSnapshot(value: $0, isFromCache: false) }
+    }
+
+    /// Прежняя сигнатура — без nonce (списание гостем, старые QR).
+    func redeemVenuePoints(venueID: String, userID: String, rewardId: String,
+                           pointsToSpend: Int, idToken: String,
+                           idempotencyKey: String) async throws -> RedeemOutcome {
+        try await redeemVenuePoints(venueID: venueID, userID: userID, rewardId: rewardId,
+                                    pointsToSpend: pointsToSpend, idToken: idToken,
+                                    idempotencyKey: idempotencyKey, nonce: nil)
+    }
 }
 
 /// Push-уведомления (новые акции рядом / у избранных мест).
@@ -230,16 +312,35 @@ public struct BonusPurchaseOutcome: Equatable, Sendable {
     }
 }
 
+/// Чей потолок урезал начисление `earnBonus` (поле ответа `capReason`).
+public enum BonusEarnCapReason: String, Equatable, Sendable {
+    /// Общий дневной потолок кошелька: сегодня не платит ни один источник.
+    case daily
+    /// Потолок этого источника (Diamond, время): остальные игры платят.
+    case source
+    /// Слишком крупный вызов — не потолок дня; остаток можно прислать снова.
+    case perCall = "per_call"
+}
+
 /// Ответ `earnBonus`. `granted` может быть меньше запрошенного — сервер
-/// держит потолки (за вызов и за сутки).
+/// держит потолки (за вызов и за сутки), а `capReason` говорит, какой именно:
+/// клиент больше не угадывает «общий или источника» по имени источника.
 public struct BonusEarnOutcome: Equatable, Sendable {
     public var ok: Bool
     public var granted: Int
     public var balance: Int
     public var errorCode: String?
+    /// `nil` — не урезано или сервер старый (поля нет).
+    public var capReason: BonusEarnCapReason?
+    /// Сколько ещё можно заработать сегодня по всем источникам; `nil` — сервер старый.
+    public var dailyLeft: Int?
+    /// Сколько ещё может принести этот источник; `nil` — у него нет своего потолка.
+    public var sourceLeft: Int?
 
-    public init(ok: Bool, granted: Int = 0, balance: Int = 0, errorCode: String? = nil) {
+    public init(ok: Bool, granted: Int = 0, balance: Int = 0, errorCode: String? = nil,
+                capReason: BonusEarnCapReason? = nil, dailyLeft: Int? = nil, sourceLeft: Int? = nil) {
         self.ok = ok; self.granted = granted; self.balance = balance; self.errorCode = errorCode
+        self.capReason = capReason; self.dailyLeft = dailyLeft; self.sourceLeft = sourceLeft
     }
 }
 
@@ -261,4 +362,57 @@ public protocol BonusWalletService {
     /// Забрать подарок по коду из ссылки: сервер создаёт купон заведения.
     /// Повтор тем же получателем возвращает тот же купон.
     func claimGift(code: String) async throws -> BonusPurchaseOutcome
+}
+
+// MARK: - Личная библиотека в аккаунте (`userLibraries/{uid}`)
+
+/// Сохранённые места, избранные акции, отметки «нравится» и скрытые авторы
+/// отзывов — то, что раньше жило только на устройстве и стиралось при выходе,
+/// хотя диалог выхода обещал «данные останутся в аккаунте».
+public struct UserLibrary: Equatable, Sendable {
+    public var savedVenueIDs: Set<String>
+    public var favoriteDealIDs: Set<String>
+    public var likedDealIDs: Set<String>
+    public var blockedAuthorIDs: Set<String>
+
+    /// Потолок длины каждого списка — тот же, что в `firestore.rules`.
+    public static let maxItems = 500
+
+    public init(savedVenueIDs: Set<String> = [], favoriteDealIDs: Set<String> = [],
+                likedDealIDs: Set<String> = [], blockedAuthorIDs: Set<String> = []) {
+        self.savedVenueIDs = savedVenueIDs; self.favoriteDealIDs = favoriteDealIDs
+        self.likedDealIDs = likedDealIDs; self.blockedAuthorIDs = blockedAuthorIDs
+    }
+
+    /// Объединение двух копий (вход на устройстве с несинхронизированными правками).
+    public func union(_ other: UserLibrary) -> UserLibrary {
+        UserLibrary(savedVenueIDs: savedVenueIDs.union(other.savedVenueIDs),
+                    favoriteDealIDs: favoriteDealIDs.union(other.favoriteDealIDs),
+                    likedDealIDs: likedDealIDs.union(other.likedDealIDs),
+                    blockedAuthorIDs: blockedAuthorIDs.union(other.blockedAuthorIDs))
+    }
+
+    /// Каждый список обрезан до `maxItems` (детерминированно — по сортировке),
+    /// иначе правила отвергли бы запись целиком.
+    public var capped: UserLibrary {
+        func cap(_ s: Set<String>) -> Set<String> {
+            s.count <= Self.maxItems ? s : Set(s.sorted().prefix(Self.maxItems))
+        }
+        return UserLibrary(savedVenueIDs: cap(savedVenueIDs), favoriteDealIDs: cap(favoriteDealIDs),
+                           likedDealIDs: cap(likedDealIDs), blockedAuthorIDs: cap(blockedAuthorIDs))
+    }
+}
+
+/// Жалобы на фото (`reviewReports`, reason "photo"). Реализует `FirebaseDataRepository`;
+/// без реализации (мок) жалоба не уходит никуда, как и жалоба на отзыв в моке.
+public protocol PhotoReporting {
+    func reportPhoto(_ report: PhotoReport) async throws
+}
+
+/// Синхронизация личной библиотеки с аккаунтом. Реализует `FirebaseDataRepository`;
+/// мок-репозиторий — нет, и тогда библиотека остаётся только на устройстве.
+public protocol UserLibrarySyncing {
+    /// nil — документа ещё нет.
+    func fetchUserLibrary(userID: String) async throws -> UserLibrary?
+    func saveUserLibrary(_ library: UserLibrary, userID: String) async throws
 }

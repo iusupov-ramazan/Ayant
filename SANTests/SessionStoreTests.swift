@@ -147,9 +147,10 @@ final class SessionStoreTests: XCTestCase {
         XCTAssertFalse(service.calls.contains("revoke"), "Почтовый аккаунт грант Apple не отзывает")
     }
 
-    /// Вход через Apple: перед удалением отзываем грант свежим кодом, и
-    /// именно в этом порядке (App Review 5.1.1(v)).
-    func testDeleteAppleAccountRevokesTokenBeforeDelete() async throws {
+    /// Вход через Apple: грант отзываем свежим кодом ТОЛЬКО после успешного
+    /// удаления на сервере (App Review 5.1.1(v)) — отказ сервера иначе оставлял
+    /// живой аккаунт без гранта Apple.
+    func testDeleteAppleAccountRevokesTokenAfterDelete() async throws {
         let service = FakeAuth()
         service.stored = SANUser(id: "a1", name: "Apple", email: nil, provider: .apple)
         let store = SessionStore(service: service)
@@ -159,28 +160,48 @@ final class SessionStoreTests: XCTestCase {
 
         try await waitUntil { !store.isSignedIn }
         XCTAssertEqual(service.revokedAppleCodes, ["c_abc"])
-        XCTAssertEqual(service.calls, ["revoke", "delete"])
+        XCTAssertEqual(service.calls, ["delete", "revoke"])
         XCTAssertTrue(service.deleted)
         XCTAssertFalse(store.isWorking)
     }
 
-    /// Не удалось отозвать грант — аккаунт НЕ удаляем: остался бы живой грант
-    /// в настройках iOS без аккаунта за ним. Пользователь остаётся в системе.
-    func testDeleteAppleAccountStopsWhenRevokeFails() async throws {
+    /// Сервер отказал — грант Apple НЕ трогаем: пользователь остаётся в
+    /// аккаунте и может войти в него снова тем же способом.
+    func testDeleteAppleAccountKeepsGrantWhenServerRefuses() async throws {
         let service = FakeAuth()
         service.stored = SANUser(id: "a1", name: "Apple", email: nil, provider: .apple)
-        service.revokeError = AuthError.network
+        service.deleteError = AuthError.requiresRecentLogin
         let store = SessionStore(service: service)
 
         var finished = false
         store.deleteAccount(appleAuthorizationCode: "c_abc") { _ in finished = true }
 
         try await waitUntil { finished }
-        XCTAssertEqual(service.calls, ["revoke"])
+        XCTAssertEqual(service.calls, ["delete"], "Без успеха на сервере отзыва нет")
         XCTAssertFalse(service.deleted)
         XCTAssertTrue(store.isSignedIn)
         XCTAssertFalse(store.isWorking)
-        XCTAssertEqual(store.errorMessage, AuthError.network.errorDescription)
+        XCTAssertEqual(store.errorMessage, AuthError.requiresRecentLogin.errorDescription)
+    }
+
+    /// Аккаунт уже удалён, а отзыв не удался — это всё равно успех: удаление
+    /// не откатить, грант можно снять в настройках Apple ID.
+    func testDeleteAppleAccountSucceedsWhenRevokeFailsAfterDelete() async throws {
+        let service = FakeAuth()
+        service.stored = SANUser(id: "a1", name: "Apple", email: nil, provider: .apple)
+        service.revokeError = AuthError.network
+        let store = SessionStore(service: service)
+
+        var finished = false
+        var result: String? = "не вызван"
+        store.deleteAccount(appleAuthorizationCode: "c_abc") { result = $0; finished = true }
+
+        try await waitUntil { finished }
+        XCTAssertEqual(service.calls, ["delete", "revoke"])
+        XCTAssertTrue(service.deleted)
+        XCTAssertFalse(store.isSignedIn)
+        XCTAssertNil(result)
+        XCTAssertNil(store.errorMessage)
     }
 
     /// Сервер отказал в удалении (например, аккаунт владеет заведениями):

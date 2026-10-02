@@ -145,6 +145,11 @@ struct WalletPointsCard: View {
 
     private var gradient: [Color] { venue?.gradientColors ?? [.sanAccent, Color(hex: Palette.orange)] }
 
+    /// Высота карты растёт с «Размером текста» (как у `WalletStampCard`, чтобы
+    /// карусель оставалась ровной) — фиксированные 198 pt обрезали текст на
+    /// крупных настройках.
+    @ScaledMetric(relativeTo: .body) private var scaledHeight: CGFloat = WalletStampCard.height
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .top) {
@@ -167,27 +172,33 @@ struct WalletPointsCard: View {
                 }
             }
 
-            Text("\(card.balance)")
+            // Подпись над числом, а не «баллов» под ним: голое «баллов» не
+            // согласуется с «1 / 3 / 21» и не переводится по числу.
+            Text("Баллы")
+                .font(.golos(12, .semibold)).foregroundStyle(.white.opacity(0.82))
+                .padding(.top, 16)
+            Text(verbatim: card.balance.sanThousands)
                 .font(.golos(46, .heavy)).tracking(-2.4)
                 .foregroundStyle(.white)
                 .contentTransition(.numericText())
                 .animation(.snappy, value: card.balance)
-                .padding(.top, 20)
-            Text("баллов")
-                .font(.golos(12, .semibold)).foregroundStyle(.white.opacity(0.82))
+                .minimumScaleFactor(0.6)
+                .lineLimit(1)
 
             SanProgressBar(fraction: progress, height: 6)
                 .padding(.top, 18)
 
-            Text(nextReward.map { "Ещё \($0.cost - card.balance) до «\($0.title)»" }
-                 ?? "Награды доступны")
+            // `String` из `map` в `Text` не локализовался — строим через каталог.
+            Text(verbatim: nextReward.map { LF("Ещё %lld до «%@»", $0.cost - card.balance, $0.title) }
+                 ?? LS("Награды доступны"))
                 .font(.golos(11.5, .semibold)).foregroundStyle(.white.opacity(0.9))
-                .lineLimit(1)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 9)
         }
         .padding(22)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(height: 198)
+        .frame(minHeight: WalletStampCard.cappedHeight(scaledHeight), alignment: .top)
         .background(LinearGradient(colors: gradient, startPoint: .topLeading, endPoint: .bottomTrailing),
                     in: RoundedRectangle(cornerRadius: 28, style: .continuous))
         .shadow(color: .black.opacity(isFront ? 0.20 : 0.12),
@@ -209,8 +220,13 @@ struct WalletStampCard: View {
     /// и она наезжала на то, что под каруселью.
     private var goal: Int { max(card.goal, 1) }
 
-    /// Та же высота, что у `WalletPointsCard`.
+    /// Та же высота, что у `WalletPointsCard` (при стандартном размере текста).
     static let height: CGFloat = 198
+    @ScaledMetric(relativeTo: .body) private var scaledHeight: CGFloat = WalletStampCard.height
+
+    /// Минимальная высота карты: растёт с Dynamic Type, но не бесконечно —
+    /// дальше карта просто вытягивается под содержимое.
+    static func cappedHeight(_ scaled: CGFloat) -> CGFloat { min(max(scaled, height), 340) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -224,17 +240,18 @@ struct WalletStampCard: View {
                         .font(.golos(12)).foregroundStyle(.white.opacity(0.82))
                 }
                 Spacer(minLength: 8)
-                Text("\(card.stamps) / \(goal)")
+                Text(verbatim: "\(card.stamps) / \(goal)")
                     .font(.golos(11.5, .heavy)).foregroundStyle(.white)
                     .padding(.horizontal, 11).padding(.vertical, 6)
                     .background(.white.opacity(0.2), in: Capsule())
                     .fixedSize()
+                    .accessibilityLabel(LF("%lld из %lld штампов", card.stamps, goal))
             }
 
-            HStack(spacing: goal > 8 ? 5 : 8) {
-                ForEach(0..<goal, id: \.self) { i in
-                    stamp(index: i, filled: i < card.stamps)
-                }
+            // Больше 12 штампов — перенос на следующую строку (цель первой
+            // карты сверху не ограничена), не больше `StampLayout.maxShown`.
+            StampRows(goal: goal, perRow: 12, spacing: goal > 8 ? 5 : 8) { i in
+                stamp(index: i, filled: i < card.stamps)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, 16)
@@ -248,7 +265,7 @@ struct WalletStampCard: View {
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(height: Self.height)
+        .frame(minHeight: Self.cappedHeight(scaledHeight))
         .background {
             let shape = RoundedRectangle(cornerRadius: SanRadius.hero, style: .continuous)
             shape.fill(LinearGradient.sanStampGradient)
@@ -270,8 +287,10 @@ struct WalletStampCard: View {
                     .font(.system(size: goal > 8 ? 9 : 11.5, weight: .heavy))
                     .foregroundStyle(.white)
             } else {
-                Text("\(index + 1)")
-                    .font(.golos(goal > 8 ? 9 : 11.5, .heavy))
+                // Внутри кружка ≤ 36 pt — размер фиксированный, иначе на
+                // крупном тексте цифра вылезает за кружок.
+                Text(verbatim: "\(index + 1)")
+                    .font(.golosFixed(goal > 8 ? 9 : 11.5, .heavy))
                     .foregroundStyle(.white.opacity(0.55))
             }
         }
@@ -285,12 +304,11 @@ struct WalletStampCard: View {
 
     private var stampHint: String {
         let left = max(0, goal - card.stamps)
-        // Коротко — карта фиксированной высоты, под подсказку две строки.
+        // Коротко — под подсказку две строки.
         if left == 0 { return LF("Круг собран — купон «%@» уже в «Мои купоны».", card.reward) }
-        return LF("Ещё %lld %@ — и «%@» в подарок.", left, Self.visits(left), card.reward)
+        return LF("Ещё %lld штампов — и «%@» в подарок.", left, card.reward)
     }
 
-    private static func visits(_ n: Int) -> String { LPlural(n, "визит", "визита", "визитов") }
 }
 
 // MARK: - Прогресс-бар

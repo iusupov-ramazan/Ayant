@@ -109,6 +109,8 @@ public protocol AuthService {
     /// звать именно этот метод, иначе пользователь исчезает только из интерфейса.
     /// Каскад по коллекциям делает Cloud Function `deleteAccount` (правила
     /// запрещают клиенту трогать чужие/денежные документы).
+    /// Локальную сессию реализация может оставить: после успеха вызывающий
+    /// (сначала отозвав грант Apple) сам зовёт `signOut()`.
     func deleteAccount() async throws
     /// Отзывает грант Sign in with Apple по свежему `authorizationCode`.
     ///
@@ -121,6 +123,41 @@ public protocol AuthService {
     /// повторно невозможно, а в Firebase Auth она копится мусором.
     /// Тихо удаляет её, если текущий пользователь анонимный.
     func discardGuestAccount() async
+
+    // MARK: Подтверждение почты
+    //
+    // Денежные функции (кошелёк бонусов, покупка купонов) отказывают почтовым
+    // аккаунтам без подтверждённого адреса, созданным после
+    // `EmailVerificationPolicy.requiredSince` (`403 email_not_verified`):
+    // иначе каждая выдуманная почта — новый кошелёк. Реализации по умолчанию
+    // (ниже) — «подтверждать нечего»: мок и тестовые двойники их не трогают.
+
+    /// Нужно ли текущему пользователю подтвердить почту, чтобы копить и тратить бонусы.
+    func needsEmailVerification() -> Bool
+    /// Отправить письмо со ссылкой подтверждения ещё раз.
+    func sendEmailVerification() async throws
+    /// Перечитать пользователя у провайдера и, если почта подтверждена,
+    /// обновить ID-токен — без этого сервер ещё час видит `email_verified: false`.
+    /// Возвращает, подтверждена ли почта теперь.
+    func reloadEmailVerification() async throws -> Bool
+}
+
+public extension AuthService {
+    func needsEmailVerification() -> Bool { false }
+    func sendEmailVerification() async throws {}
+    func reloadEmailVerification() async throws -> Bool { true }
+}
+
+/// С какого момента новым почтовым аккаунтам нужна подтверждённая почта.
+/// Зеркало серверного порога в `functions/src/index.ts` — менять вместе.
+public enum EmailVerificationPolicy {
+    /// 2026-10-02 00:00 по Бишкеку (UTC+6) = 2026-10-01T18:00:00Z.
+    public static let requiredSince = Date(timeIntervalSince1970: 1_790_877_600)
+
+    public static func isRequired(isPasswordAccount: Bool, isVerified: Bool, createdAt: Date?) -> Bool {
+        guard isPasswordAccount, !isVerified else { return false }
+        return (createdAt ?? .distantPast) >= requiredSince
+    }
 }
 
 /// Данные, полученные от Sign in with Apple.

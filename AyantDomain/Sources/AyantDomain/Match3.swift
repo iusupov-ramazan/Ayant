@@ -107,7 +107,9 @@ public enum Match3 {
         public var goal: Int { Match3.goal(forLevel: level) }
 
         /// Заработанные бонусы (до дневного потолка — его держит `BonusEngine`).
-        public var bonuses: Int { matches / Match3.matchesPerBonus }
+        public var bonuses: Int { bonuses(matchesPerBonus: Match3.matchesPerBonus) }
+        /// То же по курсу из Remote Config (`GameRates.matchesPerBonus`).
+        public func bonuses(matchesPerBonus: Int) -> Int { matches / max(1, matchesPerBonus) }
 
         /// Прогресс внутри уровня, 0…1. Очки копятся за партию, поэтому
         /// отсчёт идёт от цели предыдущего уровня, а не от нуля.

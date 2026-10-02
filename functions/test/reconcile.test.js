@@ -20,7 +20,10 @@ function harness() {
 
 /** Свежий пульс задачи сгорания — чтобы не ловить лишний job_stale. */
 function seedFreshHeartbeat(h) {
-  h.seed("ops/heartbeats", { expireVenuePoints: { toMillis: () => Date.now() } });
+  h.seed("ops/heartbeats", {
+    expireVenuePoints: { toMillis: () => Date.now() },
+    reconcileBonusWallets: { toMillis: () => Date.now() },
+  });
 }
 
 /** Алерты, записанные прогоном. */
@@ -87,17 +90,40 @@ test("сверка: новая пустая карта с нулём — это 
 
 test("пульс: expireVenuePoints не отработала сутки → alert job_stale", async () => {
   const h = harness();
-  h.seed("ops/heartbeats", { expireVenuePoints: { toMillis: () => Date.now() - 30 * 60 * 60 * 1000 } });
+  h.seed("ops/heartbeats", {
+    expireVenuePoints: { toMillis: () => Date.now() - 30 * 60 * 60 * 1000 },
+    reconcileBonusWallets: { toMillis: () => Date.now() - 60 * 60 * 1000 },
+  });
   await run(h);
   const alerts = alertsOf(h, "job_stale");
   assert.equal(alerts.length, 1);
   assert.equal(alerts[0].detail.job, "expireVenuePoints");
 });
 
-test("пульс: задача не запускалась никогда → alert job_stale", async () => {
+test("пульс: задачи не запускались никогда → alert job_stale на каждую", async () => {
   const h = harness();
   await run(h);
-  assert.equal(alertsOf(h, "job_stale").length, 1);
+  assert.deepEqual(alertsOf(h, "job_stale").map((a) => a.detail.job).sort(),
+    ["expireVenuePoints", "reconcileBonusWallets"]);
+});
+
+test("пульс: сверка кошельков проверяет сверку баллов, и обе пишут свой пульс", async () => {
+  const h = harness();
+  await h.mod.reconcileBonusWallets.run({});
+  assert.deepEqual(alertsOf(h, "job_stale").map((a) => a.detail.job), ["reconcileVenuePoints"]);
+  assert.ok(h.read("ops/heartbeats").reconcileBonusWallets, "пульс сверки кошельков записан");
+});
+
+test("эмиссия: новое заведение без истории сверх абсолютного порога → issuance_new_venue", async () => {
+  const h = harness();
+  seedFreshHeartbeat(h);
+  seedCard(h, "u1_v9", { balance: 6000, venueID: "v9" });
+  seedLedger(h, "u1_v9", [{ type: "earn", points: 6000, atMs: Date.now() }]);
+  await run(h);
+  const alerts = alertsOf(h, "issuance_new_venue");
+  assert.equal(alerts.length, 1);
+  assert.equal(alerts[0].detail.venueID, "v9");
+  assert.equal(alertsOf(h, "issuance_spike").length, 0);
 });
 
 test("эмиссия: всплеск больше 3× недельного среднего → alert issuance_spike", async () => {

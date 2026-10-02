@@ -328,6 +328,49 @@ extension ReviewReport {
     }
 }
 
+extension PhotoReport {
+    /// Та же очередь `reviewReports`, `reason = "photo"`.
+    var firestoreData: [String: Any] {
+        [
+            FS.ReviewReportDoc.reviewID: reviewID,
+            FS.ReviewReportDoc.venueID: venueID,
+            FS.ReviewReportDoc.reporterID: reporterID,
+            FS.ReviewReportDoc.reason: PhotoReport.reason,
+            FS.ReviewReportDoc.photoReason: photoReason.rawValue,
+            FS.ReviewReportDoc.photoURL: photoURL,
+            FS.ReviewReportDoc.createdAt: Timestamp(date: createdAt),
+            FS.ReviewReportDoc.status: ReviewReportStatus.open,
+        ]
+    }
+}
+
+// MARK: - UserLibrary
+
+extension UserLibrary {
+    /// Документ `userLibraries/{uid}`. Списки отсортированы — документ
+    /// стабилен, и одинаковая библиотека не выглядит изменённой.
+    var firestoreData: [String: Any] {
+        let lib = capped
+        return [
+            FS.UserLibraryDoc.savedVenueIDs: lib.savedVenueIDs.sorted(),
+            FS.UserLibraryDoc.favoriteDealIDs: lib.favoriteDealIDs.sorted(),
+            FS.UserLibraryDoc.likedDealIDs: lib.likedDealIDs.sorted(),
+            FS.UserLibraryDoc.blockedAuthorIDs: lib.blockedAuthorIDs.sorted(),
+            FS.UserLibraryDoc.updatedAt: FieldValue.serverTimestamp(),
+        ]
+    }
+
+    init(firestore d: [String: Any]) {
+        func ids(_ key: String) -> Set<String> {
+            Set((d[key] as? [Any] ?? []).compactMap { $0 as? String }.filter { !$0.isEmpty })
+        }
+        self.init(savedVenueIDs: ids(FS.UserLibraryDoc.savedVenueIDs),
+                  favoriteDealIDs: ids(FS.UserLibraryDoc.favoriteDealIDs),
+                  likedDealIDs: ids(FS.UserLibraryDoc.likedDealIDs),
+                  blockedAuthorIDs: ids(FS.UserLibraryDoc.blockedAuthorIDs))
+    }
+}
+
 // MARK: - Review
 
 extension HostReply {
@@ -365,8 +408,10 @@ extension Review {
         if let itemID { d[FS.ReviewDoc.itemID] = itemID }
         if let itemName { d[FS.ReviewDoc.itemName] = itemName }
         if !photos.isEmpty { d[FS.ReviewDoc.photos] = photos }
-        if verifiedVisit { d[FS.ReviewDoc.verifiedVisit] = true }
-        if let hostReply { d[FS.ReviewDoc.hostReply] = hostReply.firestoreMap }
+        // `verifiedVisit` и `hostReply` клиент автора НЕ пишет: отметку визита
+        // ставит сервер, ответ — владелец заведения (`setHostReply`, отдельной
+        // записью). Правила отклоняют их от автора; раньше автор мог подделать
+        // и то и другое.
         return d
     }
 
@@ -435,7 +480,8 @@ extension Coupon {
             venueID: d.string(FS.CouponDoc.venueID) ?? "",
             venueName: d.string(FS.CouponDoc.venueName) ?? "",
             kind: d.string(FS.CouponDoc.kind) ?? "bonus",
-            dealID: d.string(FS.CouponDoc.dealID) ?? ""
+            dealID: d.string(FS.CouponDoc.dealID) ?? "",
+            expiresAt: d.date(FS.CouponDoc.expiresAt)
         )
     }
 }
@@ -483,13 +529,25 @@ extension VenuePointsCard {
 // MARK: - Host DTO ⇄ Firestore
 
 extension HostProfile {
-    var firestoreData: [String: Any] {
+    /// Профиль хоста. `verification` — только при создании (`none`/`pending`):
+    /// на обновлении устаревшая копия иначе возвращала «verified» в «none».
+    /// Заявку на проверку отправляет `FirebaseHostRepository.saveProfile`
+    /// отдельно, сверившись с сервером.
+    func firestoreData(isNew: Bool) -> [String: Any] {
+        var d = baseFirestoreData
+        if isNew {
+            d[FS.HostDoc.verification] = verification == .pending
+                ? VerificationStatus.pending.rawValue : VerificationStatus.none.rawValue
+        }
+        return d
+    }
+
+    private var baseFirestoreData: [String: Any] {
         [
             FS.HostDoc.businessName: businessName,
             FS.HostDoc.categoryRaw: categoryRaw,
             FS.HostDoc.phone: phone,
             FS.HostDoc.email: email,
-            FS.HostDoc.verification: verification.rawValue,
             FS.HostDoc.legalForm: legalForm,
             FS.HostDoc.legalName: legalName,
             FS.HostDoc.inn: inn,
@@ -525,7 +583,12 @@ extension HostVenueDTO {
     /// отсутствовали, чтобы сохранение из приложения не затирало конфиг из
     /// админки. Запись по-прежнему идёт с `merge: true`: поля, которых DTO не
     /// знает (рейтинг, счётчики сохранений, служебные), остаются нетронутыми.
-    func firestoreData(ownerID: String) -> [String: Any] {
+    ///
+    /// `isNew` — создание: модерация (`status: pending`), `isVerified: false`,
+    /// без `boostedUntil`. При обновлении эти три поля НЕ отправляются вовсе:
+    /// их ведут админ и сервер, а устаревшая копия кабинета иначе снимала
+    /// одобрение, галочку и оплаченный буст.
+    func firestoreData(ownerID: String, isNew: Bool = false) -> [String: Any] {
         var d: [String: Any] = [
             FS.VenueDoc.name: name,
             FS.VenueDoc.category: FSKeys.key(for: category),
@@ -540,11 +603,9 @@ extension HostVenueDTO {
             FS.VenueDoc.longitude: longitude,
             FS.VenueDoc.openHour: openHour,
             FS.VenueDoc.closeHour: closeHour,
-            FS.VenueDoc.isVerified: isVerified,
             FS.VenueDoc.isPaused: isPaused,
             FS.VenueDoc.ownerID: ownerID,
             FS.VenueDoc.photoEmojis: [emoji],
-            FS.VenueDoc.status: status,
             FS.VenueDoc.items: items.map(\.firestoreMap),
             FS.VenueDoc.imageURL: imageURL,
             FS.VenueDoc.weekHours: weekHours.map(\.firestoreMap),
@@ -553,7 +614,6 @@ extension HostVenueDTO {
             FS.VenueDoc.instagram: instagram,
             FS.VenueDoc.telegram: telegram,
             FS.VenueDoc.branches: branches.map(\.firestoreMap),
-            FS.VenueDoc.boostedUntil: boostedUntil.map { Timestamp(date: $0) } as Any,
             FS.VenueDoc.todaySpecial: todaySpecial ?? "",
             // Карта лояльности — её настраивает сам хост, в отличие от баллов САН.
             FS.VenueDoc.loyaltyEnabled: loyaltyEnabled,
@@ -576,6 +636,10 @@ extension HostVenueDTO {
         if stampCardsLoaded {
             d[FS.VenueDoc.loyaltyTitle] = loyaltyTitle
             d[FS.VenueDoc.stampCards] = extraStampCards.map(\.firestoreMap)
+        }
+        if isNew {
+            d[FS.VenueDoc.status] = ModerationStatus.pending.rawValue
+            d[FS.VenueDoc.isVerified] = false
         }
         return d
     }
@@ -691,7 +755,9 @@ extension HostDealDTO {
 extension CouponOffer {
     /// `soldCount` НЕ пишется: его считает сервер при покупке. Отправить его
     /// отсюда — значит затереть чужие покупки своим устаревшим значением.
-    func firestoreData(ownerID: String) -> [String: Any] {
+    /// `status` пишется, только если передан (`HostForms.couponStatusToWrite`):
+    /// иначе устаревший статус из кэша кабинета перетёр бы решение модерации.
+    func firestoreData(ownerID: String, status: String?) -> [String: Any] {
         var d: [String: Any] = [
             FS.CouponOfferDoc.venueID: venueID,
             FS.CouponOfferDoc.venueName: venueName,
@@ -700,7 +766,6 @@ extension CouponOffer {
             FS.CouponOfferDoc.emoji: emoji,
             FS.CouponOfferDoc.imageURL: imageURL,
             FS.CouponOfferDoc.cost: cost,
-            FS.CouponOfferDoc.status: statusRaw,
             FS.CouponOfferDoc.isPaused: isPaused,
             FS.CouponOfferDoc.ownerID: ownerID,
             FS.CouponOfferDoc.city: citySlug,
@@ -709,6 +774,8 @@ extension CouponOffer {
         // «снять ограничение» не удалило бы старое значение при merge.
         d[FS.CouponOfferDoc.stock] = stock ?? NSNull()
         d[FS.CouponOfferDoc.expiresAt] = expiresAt.map { Timestamp(date: $0) } ?? NSNull()
+        d[FS.CouponOfferDoc.perGuestLimit] = perGuestLimit
+        if let status { d[FS.CouponOfferDoc.status] = status }
         return d
     }
 
@@ -726,6 +793,7 @@ extension CouponOffer {
             stock: d.int(FS.CouponOfferDoc.stock),
             soldCount: d.int(FS.CouponOfferDoc.soldCount) ?? 0,
             expiresAt: d.date(FS.CouponOfferDoc.expiresAt),
+            perGuestLimit: d.int(FS.CouponOfferDoc.perGuestLimit) ?? 0,
             statusRaw: d.string(FS.CouponOfferDoc.status) ?? ModerationStatus.pending.rawValue,
             isPaused: d[FS.CouponOfferDoc.isPaused] as? Bool ?? false,
             citySlug: d.string(FS.CouponOfferDoc.city) ?? City.bishkek.id)

@@ -76,7 +76,8 @@ struct AuthView: View {
         .alert("Ошибка", isPresented: .constant(session.errorMessage != nil)) {
             Button("Ок") { session.errorMessage = nil }
         } message: {
-            Text(session.errorMessage ?? "")
+            // Тексты `AuthError` — русские строки пакета; переводит каталог.
+            Text(LS(session.errorMessage ?? ""))
         }
     }
 
@@ -185,7 +186,7 @@ struct AuthView: View {
             if let email = session.passwordResetSentTo {
                 Text(LF("Письмо для сброса пароля отправлено на %@", email))
             } else {
-                Text(session.infoMessage ?? "")
+                Text(LS(session.infoMessage ?? ""))
             }
         }
         // Подсказка «введите почту» живёт до первого изменения поля.
@@ -218,7 +219,7 @@ struct AuthView: View {
     /// Ссылка на политику: единый текст под всеми способами входа.
     /// Markdown-ссылка в `Text` открывается системным `openURL`.
     private var privacyFooter: some View {
-        Text("Продолжая, вы принимаете [политику конфиденциальности](https://ayant.kg/privacy.html)")
+        Text("Продолжая, вы принимаете [условия использования](https://ayant.kg/terms.html) и [политику конфиденциальности](https://ayant.kg/privacy.html)")
             .font(.caption)
             .foregroundStyle(.secondary)
             .tint(Color.sanAccentText)

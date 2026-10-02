@@ -20,6 +20,8 @@ struct HostMenuImportView: View {
     @State private var showImporter = false
     @State private var fileError: String?
     @State private var downloading = false
+    /// Выбранный файл читается (вне главного потока).
+    @State private var readingFile = false
     @State private var editing: MenuDraftItem?
 
     private var state: MenuImportState { store.state }
@@ -51,14 +53,24 @@ struct HostMenuImportView: View {
         .interactiveDismissDisabled(store.isReading || state.phase == .review)
         .fileImporter(isPresented: $showImporter, allowedContentTypes: Self.fileTypes) { result in
             guard case .success(let url) = result else { return }
-            let access = url.startAccessingSecurityScopedResource()
-            defer { if access { url.stopAccessingSecurityScopedResource() } }
             guard let kind = MenuFileKind(fileName: url.lastPathComponent) else {
                 fileError = LS("Поддерживаются PDF, Excel (.xlsx) и CSV.")
                 return
             }
-            guard let data = try? Data(contentsOf: url) else { fileError = LS("Не удалось открыть файл."); return }
-            parse(data, kind: kind)
+            // Чтение — вне главного потока: файл из iCloud Drive сначала
+            // докачивается, и `Data(contentsOf:)` на главном потоке замораживал
+            // экран на секунды (а то и до вотчдога).
+            readingFile = true
+            fileError = nil
+            Task {
+                defer { readingFile = false }
+                switch await Self.readPickedFile(url) {
+                case .success(let data): parse(data, kind: kind)
+                case .failure(.tooLarge):
+                    fileError = LS("Файл больше 60 МБ. Сожмите его или загрузите меню по частям.")
+                case .failure(.unreadable): fileError = LS("Не удалось открыть файл.")
+                }
+            }
         }
         .sheet(item: $editing) { draft in
             DraftDishEditor(draft: draft, sections: draftSections) { store.send(.update($0)) }
@@ -92,14 +104,15 @@ struct HostMenuImportView: View {
                               systemImage: "doc.fill")
                     }
                     .buttonStyle(SanPrimaryButton())
-                    .disabled(downloading)
+                    .disabled(downloading || readingFile)
                 }
                 Button { showImporter = true } label: {
                     Label(venue.pdfMenuURL.isEmpty ? "Выбрать файл" : "Выбрать другой файл",
                           systemImage: "doc.badge.plus")
                 }
                 .buttonStyle(venue.pdfMenuURL.isEmpty ? AnyButtonStyle(SanPrimaryButton()) : AnyButtonStyle(SanPillButton()))
-                .disabled(downloading)
+                .disabled(downloading || readingFile)
+                if readingFile { ProgressView() }
 
                 if let fileError {
                     Text(fileError).font(.golos(12.5, .semibold)).foregroundStyle(Color(hex: 0xC24A12))
@@ -277,6 +290,32 @@ struct HostMenuImportView: View {
             return
         }
         store.send(.parse(file: data, kind: kind))
+    }
+
+    enum PickedFileError: Error { case tooLarge, unreadable }
+
+    /// Читает выбранный файл вне главного потока: доступ по security scope,
+    /// координированное чтение (файл в iCloud сначала докачивается системой)
+    /// и проверка размера ДО чтения — 500-мегабайтный файл не грузим в память,
+    /// чтобы потом отказать.
+    static func readPickedFile(_ url: URL) async -> Result<Data, PickedFileError> {
+        await Task.detached(priority: .userInitiated) { () -> Result<Data, PickedFileError> in
+            let access = url.startAccessingSecurityScopedResource()
+            defer { if access { url.stopAccessingSecurityScopedResource() } }
+            var result: Result<Data, PickedFileError> = .failure(.unreadable)
+            var coordinationError: NSError?
+            NSFileCoordinator().coordinate(readingItemAt: url, options: [], error: &coordinationError) { readURL in
+                if let size = try? readURL.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+                   size > MenuImport.maxFileBytes {
+                    result = .failure(.tooLarge)
+                    return
+                }
+                if let data = try? Data(contentsOf: readURL, options: .mappedIfSafe) {
+                    result = .success(data)
+                }
+            }
+            return result
+        }.value
     }
 
     /// Уже загруженный PDF заведения скачиваем и разбираем здесь же.

@@ -44,6 +44,11 @@ export interface VenueDoc {
   ownerID?: string;
   name?: string;
   citySlug?: string;
+  /** Модерация: нет поля = «одобрено» (старые записи сида). */
+  status?: string;
+  isPaused?: boolean;
+  /** Владелец удалил аккаунт — заведение снято с публикации (deleteAccount). */
+  ownerDeleted?: boolean;
 
   // Лояльность (штампы).
   loyaltyEnabled?: boolean;
@@ -87,6 +92,8 @@ export interface CouponDoc {
   usedAt?: Date;
   usedByVenue?: string;
   title?: string;
+  /** Срок купона (с couponOffers.expiresAt); нет — бессрочный. */
+  expiresAt?: unknown;
 }
 
 /** loyaltyCards/{userID_venueID} — карта штампов. */
@@ -126,7 +133,7 @@ export interface LedgerEntry {
 
 /** pushCampaigns/{id} — рекламная кампания (шлётся после одобрения админом). */
 export interface PushCampaignDoc {
-  status?: "pending" | "approved" | "rejected" | "sent" | "error";
+  status?: "pending" | "approved" | "rejected" | "sending" | "sent" | "error";
   delivered?: boolean;
   city?: string;
   headline?: string;

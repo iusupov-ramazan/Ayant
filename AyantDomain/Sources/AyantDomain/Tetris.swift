@@ -92,7 +92,9 @@ public enum Tetris {
 
         /// Заработанные за партию бонусы. Остаток линий не пропадает: он
         /// копится дальше, потому что считается от общего числа линий.
-        public var bonuses: Int { lines / Tetris.linesPerBonus }
+        public var bonuses: Int { bonuses(linesPerBonus: Tetris.linesPerBonus) }
+        /// То же по курсу из Remote Config (`GameRates.linesPerBonus`).
+        public func bonuses(linesPerBonus: Int) -> Int { lines / max(1, linesPerBonus) }
     }
 
     // MARK: - Старт и случайность

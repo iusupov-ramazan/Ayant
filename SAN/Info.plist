@@ -8,6 +8,8 @@
 	<false/>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Ayant показывает расстояние до заведений рядом с вами.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Чтобы сохранить картинку подарка в фото.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Камера нужна, чтобы сканировать QR-коды купонов гостей и начислять штампы лояльности.</string>
 	<key>LSApplicationQueriesSchemes</key>

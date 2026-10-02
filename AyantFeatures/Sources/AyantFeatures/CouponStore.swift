@@ -24,7 +24,15 @@ public final class CouponStore: ObservableObject {
     /// Ключ идемпотентности на покупку (по `BonusPurchase.ref`): живёт, пока
     /// сервер не дал окончательный ответ. Обрыв сети → повтор с тем же ключом,
     /// и сервер вернёт уже выданный купон, а не продаст второй.
-    private var purchaseKeys: [String: String] = [:]
+    ///
+    /// Лежит в UserDefaults по uid: приложение убили между списанием и
+    /// ответом — после перезапуска повтор уйдёт с тем же ключом, а не купит
+    /// второй купон. У другого пользователя — свои ключи. Окно повтора —
+    /// `PersistedAttemptKeys.retryWindow`: ключ, брошенный на дни, не
+    /// воспроизводит старую покупку вместо новой.
+    private var purchaseKeys: PersistedAttemptKeys {
+        PersistedAttemptKeys(storageKey: "san.coupons.purchaseKeys.\(userID)")
+    }
     public private(set) var userID = ""
 
     public init(backend: CouponService, clock: Clock = SystemClock(), wallet: BonusWalletService? = nil) {
@@ -44,13 +52,16 @@ public final class CouponStore: ObservableObject {
         case failed(String)
     }
 
-    public var activeCount: Int { coupons.filter { !$0.used }.count }
+    /// Действующие: не погашены и не истекли (истёкший сервер уже не гасит).
+    public var activeCount: Int { coupons.filter { !$0.used && !$0.isExpired(at: clock.now) }.count }
 
     /// Синк с Firestore: подтягивает used-статус и новые купоны-награды лояльности.
     /// Бэкенд — источник правды для купонов, привязанных к заведению.
     public func sync(userID: String) async {
         self.userID = userID
         guard !userID.isEmpty, let fetched = try? await backend.fetchCoupons(userID: userID) else { return }
+        // Пока ждали ответа, пользователь вышел или сменился — купоны чужие.
+        guard self.userID == userID else { return }
         merge(fetched)
     }
 
@@ -66,7 +77,7 @@ public final class CouponStore: ObservableObject {
         observedUserID = userID
         observeTask = Task { [weak self, backend] in
             for await list in backend.coupons(userID: userID) {
-                guard let self, !Task.isCancelled else { return }
+                guard let self, !Task.isCancelled, self.observedUserID == userID else { return }
                 self.merge(list)
             }
         }
@@ -86,7 +97,14 @@ public final class CouponStore: ObservableObject {
     private func merge(_ fetched: [Coupon]) {
         var map: [String: Coupon] = [:]
         for c in coupons { map[c.code] = c }        // локальные (в т.ч. общие бонус-купоны)
-        for c in fetched { map[c.code] = c }         // бэкенд перекрывает по коду
+        for var c in fetched {                       // бэкенд перекрывает по коду…
+            // …кроме отметки «использован», поставленной гостем у стойки.
+            // Купон без заведения сервер не гасит, а правила не дают клиенту
+            // писать `used` в `coupons` — без этого следующий снапшот снова
+            // показывал бы применённый купон активным.
+            if usedLocally.contains(c.code) { c.used = true }
+            map[c.code] = c
+        }
         let merged = map.values.sorted { $0.createdAt > $1.createdAt }
         guard merged != coupons else { return }     // снапшот без изменений — не перерисовываем
         coupons = merged
@@ -96,8 +114,18 @@ public final class CouponStore: ObservableObject {
     /// Загружает каталог наград. Ошибка сети → каталог остаётся пустым, и
     /// раздел наград показывает пустое состояние вместо нерабочих карточек.
     public func loadRewards() async {
-        rewards = (try? await backend.fetchGlobalRewards()) ?? []
+        do {
+            rewards = try await backend.fetchGlobalRewards()
+            shopLoadFailed = false
+        } catch {
+            rewards = []
+            shopLoadFailed = true
+        }
     }
+
+    /// Последняя загрузка витрины (каталог наград или купоны заведений) не
+    /// удалась — экран показывает «нет связи», а не «пока пусто».
+    @Published public private(set) var shopLoadFailed = false
 
     /// Списывает бонусы и выдаёт купон. Возвращает купон или nil (не хватило
     /// бонусов либо у награды нет партнёра).
@@ -124,14 +152,21 @@ public final class CouponStore: ObservableObject {
     /// на сервере; клиент только показывает итог и кладёт купон в кошелёк.
     private func purchase(_ item: BonusPurchase, bonus: BonusEngine) async -> PurchaseResult {
         guard let wallet else { return .failed("local") }
-        let key = purchaseKeys[item.ref] ?? UUID().uuidString
-        purchaseKeys[item.ref] = key
+        let uid = userID
+        let keys = purchaseKeys
+        let key = keys.key(for: item.ref, now: clock.now) ?? UUID().uuidString
+        keys.set(key, for: item.ref, now: clock.now)
         guard let r = try? await wallet.buy(item, idempotencyKey: key) else {
             return .failed("network")          // ключ остаётся — повтор безопасен
         }
-        purchaseKeys[item.ref] = nil           // ответ окончательный: следующая покупка — новый ключ
+        // Пользователь сменился за время запроса: ключ остаётся у прежнего
+        // (его следующий повтор получит купон), а в кошелёк нового не кладём.
+        guard userID == uid else { return .failed("network") }
+        keys.set(nil, for: item.ref, now: clock.now)   // ответ окончательный: следующая покупка — новый ключ
         guard r.ok else { return .failed(r.errorCode ?? "buy_failed") }
-        bonus.applyServerBalance(r.balance)
+        // Повтор отдаёт баланс на момент ПЕРВОЙ покупки — устаревший; свежий
+        // придёт снапшотом кошелька.
+        if !r.replayed { bonus.applyServerBalance(r.balance) }
         if let code = r.giftCode {
             AnalyticsLog.log(.couponClaim, ["ref": item.ref, "gift": true])
             return .gift(code: code)
@@ -176,7 +211,8 @@ public final class CouponStore: ObservableObject {
 
     /// Загружает витрину. Ошибка сети — прежний список остаётся.
     public func loadShopOffers() async {
-        guard let all = try? await backend.fetchApprovedCouponOffers() else { return }
+        guard let all = try? await backend.fetchApprovedCouponOffers() else { shopLoadFailed = true; return }
+        shopLoadFailed = false
         let now = clock.now
         shopOffers = all.filter { $0.isAvailable(at: now) }
             .sorted { ($0.cost, $0.venueName, $0.title) < ($1.cost, $1.venueName, $1.title) }
@@ -245,9 +281,22 @@ public final class CouponStore: ObservableObject {
     }
 
     public func markUsed(_ coupon: Coupon) {
+        var used = usedLocally
+        used.insert(coupon.code)
+        usedLocally = used
         guard let i = coupons.firstIndex(where: { $0.id == coupon.id }) else { return }
         coupons[i].used = true
         save()
+    }
+
+    /// Коды купонов, которые гость применил сам («Использовать купон»).
+    /// Отдельный список, потому что `coupons` перезаписывается снапшотом
+    /// сервера, а сервер об этой отметке не знает. Ключ — данные установок,
+    /// не переименовывать.
+    private static let usedLocallyKey = "san.coupons.usedLocally"
+    private var usedLocally: Set<String> {
+        get { Set(UserDefaults.standard.stringArray(forKey: Self.usedLocallyKey) ?? []) }
+        set { UserDefaults.standard.set(Array(newValue), forKey: Self.usedLocallyKey) }
     }
 
     /// Очищает кошелёк купонов при смене пользователя.
@@ -258,8 +307,12 @@ public final class CouponStore: ObservableObject {
         // вернулись бы в кошелёк следующего.
         stopObserving()
         coupons = []
+        // Ключи покупок прежнего пользователя остаются под его uid (вернётся —
+        // повтор пройдёт с тем же ключом); безымянные — стираем.
         userID = ""
+        purchaseKeys.clear()
         UserDefaults.standard.removeObject(forKey: key)
+        UserDefaults.standard.removeObject(forKey: Self.usedLocallyKey)
     }
 
     private func save() {
@@ -271,18 +324,21 @@ public final class CouponStore: ObservableObject {
         purgeLegacyOnce()
     }
 
-    /// Купоны до серверного кошелька (их создавал клиент, часть из них не
-    /// гасится) убираются с устройства один раз. С сервера их убирает
-    /// `scripts/purge-legacy-coupons.js` — иначе синк вернул бы их обратно.
-    /// Отсечка та же, что у переноса баланса в кошелёк.
+    /// Уборка купонов до серверного кошелька — один раз. Убираются только
+    /// УЖЕ ИСПОЛЬЗОВАННЫЕ: раньше очистка удаляла всё до отсечки, в том числе
+    /// награды карт штампов (их выдал сервер за визиты) и купоны акций,
+    /// которые `scanCoupon` по-прежнему гасит, — то есть отнимала у гостя
+    /// заработанное. Действующий купон с телефона не исчезает никогда; тот же
+    /// принцип у `scripts/purge-legacy-coupons.js`. Отсечка та же, что у
+    /// переноса баланса в кошелёк.
     public static let legacyCutoff = Date(timeIntervalSince1970: 1_790_791_200)   // 2026-10-01 00:00 Бишкек
-    private static let legacyPurgeKey = "san.coupons.legacyPurged.v1"
+    private static let legacyPurgeKey = "san.coupons.legacyPurged.v2"
 
     private func purgeLegacyOnce() {
         let d = UserDefaults.standard
         guard !d.bool(forKey: Self.legacyPurgeKey) else { return }
         d.set(true, forKey: Self.legacyPurgeKey)
-        let kept = coupons.filter { $0.createdAt >= Self.legacyCutoff }
+        let kept = coupons.filter { $0.createdAt >= Self.legacyCutoff || !$0.used }
         guard kept.count != coupons.count else { return }
         coupons = kept
         save()

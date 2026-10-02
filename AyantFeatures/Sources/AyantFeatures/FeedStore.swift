@@ -28,6 +28,11 @@ public final class FeedStore: ObservableObject {
     private var repoDeals: [Deal] = []
     private var hostVenues: [Venue] = []
     private var hostDeals: [Deal] = []
+    /// Каталог из репозитория хоть раз пришёл. До этого `recombine` ничего не
+    /// публикует: оверлей хоста (`hostStore.bind` на старте) иначе переводил
+    /// ленту `.idle → .loaded(пусто)` — и первый запуск показывал «Пока нет
+    /// заведений» вместо спиннера.
+    private var hasLoadedCatalog = false
 
     // Отзывы: база из репозитория + локальные пользовательские + ответы владельца.
     //
@@ -86,9 +91,14 @@ public final class FeedStore: ObservableObject {
             async let v = repository.fetchVenues()
             async let d = repository.fetchDeals()
             (repoVenues, repoDeals) = try await (v, d)
+            hasLoadedCatalog = true
         } catch {
+            // Ошибка остаётся видимой (с «Повторить»): раньше ниже шёл
+            // `recombine()`, и `.failed` тут же затирался пустым `.loaded`.
+            // При обновлении поверх готовой ленты старый каталог остаётся.
             loadError = error.localizedDescription
             send(.setFailure(.network))
+            return
         }
         // Веса ранжирования — некритично: ошибка/отсутствие → остаёмся на дефолтах.
         if let m = try? await repository.fetchRankingWeights() {
@@ -112,6 +122,7 @@ public final class FeedStore: ObservableObject {
 
     /// Пересобирает каталог: репозиторий + оверлей хоста + агрегаты отзывов.
     private func recombine() {
+        guard hasLoadedCatalog else { return }
         var vmap: [String: Venue] = [:]
         for x in repoVenues { vmap[x.id] = x }
         for x in hostVenues { vmap[x.id] = x }
@@ -156,10 +167,11 @@ public final class FeedStore: ObservableObject {
     public func loadReviews(forVenue venueID: String) async {
         guard let fetched = try? await repository.fetchReviews(
             venueID: venueID, limit: Self.reviewPageSize) else { return }
-        if fetched.count < Self.reviewPageSize {
+        let complete = fetched.count < Self.reviewPageSize
+        if complete {
             fullyLoadedReviewVenueIDs.insert(venueID)
         }
-        absorb(fetched)
+        absorb(fetched, complete: complete) { $0.venueID == venueID }
     }
 
     /// Инбокс владельца: отзывы по всем его заведениям.
@@ -167,22 +179,31 @@ public final class FeedStore: ObservableObject {
         guard !ids.isEmpty,
               let fetched = try? await repository.fetchReviews(
                 venueIDs: ids, limit: Self.reviewPageSize) else { return }
-        absorb(fetched)
+        let scope = Set(ids)
+        absorb(fetched, complete: fetched.count < Self.reviewPageSize) { scope.contains($0.venueID) }
     }
 
     /// Отзывы текущего пользователя — для профиля.
     public func loadMyReviews(authorID: String) async {
         guard let fetched = try? await repository.fetchReviews(
             authorID: authorID, limit: Self.reviewPageSize) else { return }
-        absorb(fetched)
+        absorb(fetched, complete: fetched.count < Self.reviewPageSize) { $0.authorID == authorID }
     }
 
     /// Вливает пришедшую страницу в кэш: дедуп по id, свежая версия выигрывает,
     /// локальные отзывы пользователя и ответы владельца не теряются.
-    private func absorb(_ fetched: [Review]) {
-        guard !fetched.isEmpty else { return }
+    ///
+    /// `complete` — пришёл ВЕСЬ набор для `scope` (меньше страницы). Тогда
+    /// отзывы из этого набора, которых сервер больше не вернул (удалены автором
+    /// или модерацией), из кэша убираются; раньше они жили до перезапуска.
+    /// Неполная страница ничего не удаляет: остальное просто не пришло.
+    func absorb(_ fetched: [Review], complete: Bool = false,
+                scope: (Review) -> Bool = { _ in false }) {
         let incoming = Set(fetched.map(\.id))
-        baseReviews = baseReviews.filter { !incoming.contains($0.id) } + fetched
+        let before = baseReviews.count
+        baseReviews = baseReviews.filter { !incoming.contains($0.id) && !(complete && scope($0)) }
+        guard !fetched.isEmpty || baseReviews.count != before else { return }
+        baseReviews += fetched
         mergeReviews()
         recombine()
     }
@@ -198,16 +219,35 @@ public final class FeedStore: ObservableObject {
     }
 
     /// Добавляет/заменяет отзыв пользователя и сохраняет его локально.
+    ///
+    /// База правится тоже: `mergeReviews` отдаёт приоритет базе, и правка
+    /// отзыва, уже пришедшего с сервера, откатывалась при следующей подгрузке.
     public func upsertUserReview(_ review: Review) {
         if let i = reviews.firstIndex(where: { $0.id == review.id }) { reviews[i] = review }
         else { reviews.append(review) }
+        if let i = baseReviews.firstIndex(where: { $0.id == review.id }) { baseReviews[i] = review }
         persistUserReviews()
         recombine()
     }
 
+    /// Удаляет из кэша и из базы — иначе удалённый отзыв возвращался из
+    /// `baseReviews` при первой же подгрузке отзывов.
     public func removeReview(id: String) {
         reviews.removeAll { $0.id == id }
+        baseReviews.removeAll { $0.id == id }
         persistUserReviews()
+        recombine()
+    }
+
+    /// Выход / удаление аккаунта: локальные копии отзывов и ответов владельца
+    /// принадлежали вышедшему. Раньше `san.userReviews`/`san.hostReplies`
+    /// переживали выход, и следующий вошедший видел чужие «свои» отзывы
+    /// (а после удаления аккаунта они продолжали жить на телефоне).
+    public func clearLocalUserCaches() {
+        UserDefaults.standard.removeObject(forKey: Key.userReviews)
+        UserDefaults.standard.removeObject(forKey: Key.hostReplies)
+        hostReplies = [:]
+        mergeReviews()
         recombine()
     }
 
@@ -277,7 +317,14 @@ public final class FeedStore: ObservableObject {
         return scoped.venues(now: clock.now)
     }
 
-    public var isLoading: Bool { state.catalog.isLoading }
+    /// `.idle` — тоже загрузка: каталог ещё ни разу не запрашивали (первый
+    /// кадр до `load()`), и экран должен показать спиннер, а не «пусто».
+    public var isLoading: Bool {
+        switch state.catalog {
+        case .idle, .loading: return true
+        case .loaded, .failed: return false
+        }
+    }
     public var hasVenuesInCity: Bool { state.hasVenuesInCity }
     /// Загрузка каталога упала. Отличать обязательно: без этого экран показывал
     /// «в городе пока нет заведений» — то есть пустой экран вместо ошибки, и

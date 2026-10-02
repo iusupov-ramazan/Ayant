@@ -60,13 +60,32 @@ const FieldValue = {
   increment: (n) => ({ __inc: n }),
 };
 
+// Агрегаты (`query.aggregate({ s: AggregateField.sum("points") })`, `count()`)
+// — как в admin SDK: описание поля, которое считает CollectionRef.aggregate.
+const AggregateField = {
+  sum: (field) => ({ __agg: "sum", field }),
+  count: () => ({ __agg: "count" }),
+  average: (field) => ({ __agg: "avg", field }),
+};
+
+// `FieldPath.documentId()` — сортировка/пагинация по id документа.
+const DOC_ID = "__name__";
+const FieldPath = { documentId: () => DOC_ID };
+
 function isIncrement(v) {
   return v && typeof v === "object" && typeof v.__inc === "number";
 }
 
 // Сравнение для where(field, op, value). Поддерживает операторы, которыми
 // реально пользуются функции (== и диапазонные для сгорания баллов).
-function matchesOp(actual, op, expected) {
+function cmpValue(v) {
+  if (v instanceof Date) return v.getTime();
+  if (v && typeof v === "object" && typeof v.toMillis === "function") return v.toMillis();
+  return v;
+}
+
+function matchesOp(actualRaw, op, expectedRaw) {
+  const actual = cmpValue(actualRaw), expected = cmpValue(expectedRaw);
   switch (op) {
     case "==": return actual === expected;
     case "!=": return actual !== expected;
@@ -122,10 +141,25 @@ class FakeFirestore {
     };
   }
 
+  /** `db.recursiveDelete(ref)` — документ и все его подколлекции. */
+  async recursiveDelete(ref) {
+    const prefix = `${ref.path}/`;
+    for (const key of [...this.store.keys()]) {
+      if (key === ref.path || key.startsWith(prefix)) this.store.delete(key);
+    }
+  }
+
+  /** `db.getAll(...refs)` — снапшоты в том же порядке. */
+  async getAll(...refs) {
+    this.getAllCalls = (this.getAllCalls || 0) + 1;
+    return Promise.all(refs.map((r) => r.get()));
+  }
+
   async runTransaction(fn) {
     // Однопоточные тесты: операции применяются сразу, изоляция не нужна.
     const tx = {
       get: (ref) => ref.get(),
+      getAll: (...refs) => Promise.all(refs.map((r) => r.get())),
       set: (ref, data, opts) => ref.set(data, opts),
       update: (ref, data) => ref.update(data),
       delete: (ref) => ref.delete(),
@@ -140,6 +174,53 @@ class CollectionRef {
     this.path = path;
     this._filters = [];
     this._limit = Infinity;
+    this._orderById = false;
+    this._startAfter = null;
+  }
+
+  _clone() {
+    const q = new CollectionRef(this.fs, this.path);
+    q._filters = this._filters;
+    q._limit = this._limit;
+    q._orderById = this._orderById;
+    q._startAfter = this._startAfter;
+    return q;
+  }
+
+  /** Поддержана только сортировка по id документа (пагинация ночных проходов). */
+  orderBy(field) {
+    const q = this._clone();
+    if (field === DOC_ID) q._orderById = true;
+    return q;
+  }
+
+  /** startAfter(snapshot | id) — после документа с этим id (при orderBy по id). */
+  startAfter(cursor) {
+    const q = this._clone();
+    q._startAfter = cursor && typeof cursor === "object" ? cursor.id : String(cursor);
+    return q;
+  }
+
+  /** `count()` — как `aggregate({ count: AggregateField.count() })`. */
+  count() {
+    return this.aggregate({ count: AggregateField.count() });
+  }
+
+  /** Агрегатный запрос: `{ get() → { data() → { alias: число } } }`. */
+  aggregate(spec) {
+    return {
+      get: async () => {
+        const snap = await this._clone()._all();
+        const out = {};
+        for (const [alias, f] of Object.entries(spec)) {
+          if (f.__agg === "count") { out[alias] = snap.length; continue; }
+          const nums = snap.map((d) => d.data()[f.field]).filter((v) => typeof v === "number");
+          const total = nums.reduce((a, b) => a + b, 0);
+          out[alias] = f.__agg === "sum" ? total : (nums.length ? total / nums.length : null);
+        }
+        return { data: () => out };
+      },
+    };
   }
 
   doc(id) {
@@ -147,15 +228,13 @@ class CollectionRef {
   }
 
   where(field, op, value) {
-    const q = new CollectionRef(this.fs, this.path);
+    const q = this._clone();
     q._filters = this._filters.concat([{ field, op, value }]);
-    q._limit = this._limit;
     return q;
   }
 
   limit(n) {
-    const q = new CollectionRef(this.fs, this.path);
-    q._filters = this._filters;
+    const q = this._clone();
     q._limit = n;
     return q;
   }
@@ -166,18 +245,29 @@ class CollectionRef {
     return ref;
   }
 
+  /** Все подходящие документы без limit (для агрегатов). */
+  async _all() {
+    const q = this._clone();
+    q._limit = Infinity;
+    return (await q.get()).docs;
+  }
+
   async get() {
     const prefix = `${this.path}/`;
-    const docs = [];
+    let paths = [];
     for (const [fullPath, data] of this.fs.store.entries()) {
       if (!fullPath.startsWith(prefix)) continue;
       const rest = fullPath.slice(prefix.length);
       if (rest.includes("/")) continue; // прямые дети, не подколлекции
       const ok = this._filters.every((f) => matchesOp(data[f.field], f.op, f.value));
       if (!ok) continue;
-      docs.push(new DocRef(this.fs, fullPath)._snapshot());
-      if (docs.length >= this._limit) break;
+      paths.push(fullPath);
     }
+    if (this._orderById || this._startAfter !== null) {
+      paths.sort((a, b) => (a.split("/").pop() < b.split("/").pop() ? -1 : 1));
+      if (this._startAfter !== null) paths = paths.filter((p) => p.split("/").pop() > this._startAfter);
+    }
+    const docs = paths.slice(0, this._limit).map((p) => new DocRef(this.fs, p)._snapshot());
     return {
       empty: docs.length === 0,
       size: docs.length,
@@ -228,4 +318,4 @@ class DocRef {
   }
 }
 
-module.exports = { FakeFirestore, FieldValue, FakeTimestamp, mergeData, toStored };
+module.exports = { FakeFirestore, FieldValue, AggregateField, FieldPath, FakeTimestamp, mergeData, toStored };

@@ -54,21 +54,25 @@ public struct RankingItemFeatures {
     public let daysSinceStart: Double?
     public let discountPercent: Int?
     public let hoursUntilExpiry: Double?
-    public let distanceKm: Double?
+    // `distanceKm` убран (запуск, 2026-10): журнал привязан к userID, и
+    // расстояние до каждого заведения в слейте — это точная геолокация,
+    // связанная с аккаунтом. Метка приватности обещает, что локация остаётся
+    // на устройстве. Экспорт/обучение (`ml/`) отсутствие поля переносят:
+    // слагаемое W_DISTANCE считается нулём.
     public let timeRelevance: Double
 
     public init(dealID: String, venueID: String, position: Int, kind: String, score: Double,
                 bayesRating: Double, reviewCount: Int, savedByCount: Int, isVerified: Bool,
                 hasTodaySpecial: Bool, activeDealCount: Int, isFresh: Bool,
                 daysSinceStart: Double?, discountPercent: Int?, hoursUntilExpiry: Double?,
-                distanceKm: Double?, timeRelevance: Double) {
+                timeRelevance: Double) {
         self.dealID = dealID; self.venueID = venueID; self.position = position
         self.kind = kind; self.score = score; self.bayesRating = bayesRating
         self.reviewCount = reviewCount; self.savedByCount = savedByCount
         self.isVerified = isVerified; self.hasTodaySpecial = hasTodaySpecial
         self.activeDealCount = activeDealCount; self.isFresh = isFresh
         self.daysSinceStart = daysSinceStart; self.discountPercent = discountPercent
-        self.hoursUntilExpiry = hoursUntilExpiry; self.distanceKm = distanceKm
+        self.hoursUntilExpiry = hoursUntilExpiry
         self.timeRelevance = timeRelevance
     }
 
@@ -83,7 +87,6 @@ public struct RankingItemFeatures {
         if let d = daysSinceStart { m["daysSinceStart"] = d }
         if let d = discountPercent { m["discountPercent"] = d }
         if let h = hoursUntilExpiry { m["hoursUntilExpiry"] = h }
-        if let km = distanceKm { m["distanceKm"] = km }
         return m
     }
 }

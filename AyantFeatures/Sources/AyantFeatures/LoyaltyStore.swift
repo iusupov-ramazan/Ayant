@@ -66,16 +66,20 @@ public final class LoyaltyStore: ObservableObject {
         self.userID = userID
         guard !userID.isEmpty else { return }
         observation = Task { [backend] in
-            for await fetched in backend.loyaltyCards(userID: userID) {
-                if Task.isCancelled { return }
-                apply(fetched)
+            for await snapshot in backend.liveLoyaltyCards(userID: userID) {
+                if Task.isCancelled || self.userID != userID { return }
+                apply(snapshot.value, fromCache: snapshot.isFromCache)
             }
         }
     }
 
     /// Снимок с сервера поверх известных карт; рост штампов или собранный круг
     /// у уже известной карты — событие для экрана «Начислено».
-    private func apply(_ fetched: [LoyaltyCard]) {
+    ///
+    /// Точка отсчёта (`hasBaseline`) — только с серверного снимка: первый
+    /// снимок из пустого/неполного кэша SDK, взятый за «было», превращал
+    /// следующий серверный в ложное «+1 штамп» (или «карта заполнена»).
+    private func apply(_ fetched: [LoyaltyCard], fromCache: Bool = false) {
         // Ключ — id карты, а не заведение: у заведения их может быть несколько,
         // и по `venueID` вторая карта затирала бы первую.
         let before = Dictionary(cards.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
@@ -83,9 +87,12 @@ public final class LoyaltyStore: ObservableObject {
         for c in fetched { map[c.id] = c }   // бэкенд — источник правды
         if hasBaseline, pendingStamp == nil {
             for c in fetched {
-                guard let was = before[c.id] else { continue }
-                let completed = c.completedRounds > was.completedRounds
-                guard completed || c.stamps > was.stamps else { continue }
+                // Новой карты в прошлом снимке нет — первый штамп: «было» = 0.
+                let wasStamps = before[c.id]?.stamps ?? 0
+                let wasRounds = before[c.id]?.completedRounds ?? 0
+                let completed = c.completedRounds > wasRounds
+                guard completed || c.stamps > wasStamps else { continue }
+                PointsStore.logFirstOnce("san.analytics.firstStampLogged", .firstStamp)
                 pendingStamp = LoyaltyStampEvent(
                     id: "\(c.id)-\(c.completedRounds)-\(c.stamps)",
                     venueID: c.venueID, venueName: c.venueName,
@@ -94,7 +101,7 @@ public final class LoyaltyStore: ObservableObject {
                 break
             }
         }
-        hasBaseline = true
+        if !fromCache { hasBaseline = true }
         cards = map.values.sorted { $0.stamps > $1.stamps }
         save()
     }
@@ -110,6 +117,8 @@ public final class LoyaltyStore: ObservableObject {
     public func sync(userID: String) async {
         self.userID = userID
         guard !userID.isEmpty, let fetched = try? await backend.fetchLoyaltyCards(userID: userID) else { return }
+        // Пока шёл запрос, гость мог выйти или смениться — чужие карты не кладём.
+        guard self.userID == userID else { return }
         apply(fetched)
     }
 

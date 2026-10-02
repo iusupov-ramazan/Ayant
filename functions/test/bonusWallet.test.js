@@ -136,8 +136,8 @@ test("earn: начисляет и пишет ledger", async () => {
 test("earn: повтор с тем же ключом не начисляет второй раз", async () => {
   const h = harness();
   seedWallet(h);
-  await call(h, "earnBonus", { amount: 7, source: "time", idempotencyKey: "k1" });
-  const res = await call(h, "earnBonus", { amount: 7, source: "time", idempotencyKey: "k1" });
+  await call(h, "earnBonus", { amount: 7, source: "game:snake", idempotencyKey: "k1" });
+  const res = await call(h, "earnBonus", { amount: 7, source: "game:snake", idempotencyKey: "k1" });
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.replayed, true);
   assert.equal(res.body.granted, 7);
@@ -147,8 +147,8 @@ test("earn: повтор с тем же ключом не начисляет в�
 test("earn: тот же ключ на другую сумму — коллизия, 409 key_reused", async () => {
   const h = harness();
   seedWallet(h);
-  await call(h, "earnBonus", { amount: 7, source: "time", idempotencyKey: "k1" });
-  const res = await call(h, "earnBonus", { amount: 70, source: "time", idempotencyKey: "k1" });
+  await call(h, "earnBonus", { amount: 7, source: "game:snake", idempotencyKey: "k1" });
+  const res = await call(h, "earnBonus", { amount: 70, source: "game:snake", idempotencyKey: "k1" });
   assert.equal(res.statusCode, 409);
   assert.equal(res.body.error, "key_reused");
   assert.equal(wallet(h).balance, 7);
@@ -163,7 +163,7 @@ test("earn: потолок за вызов — 100", async () => {
 
 test("earn: дневной потолок — отдаём остаток, дальше ноль", async () => {
   const h = harness();
-  seedWallet(h, { earnDay: bishkekDay(), earnedToday: 990 });
+  seedWallet(h, { earnDay: bishkekDay(), earnedToday: 190 });
   const res = await call(h, "earnBonus", { amount: 50, source: "game:snake", idempotencyKey: "k1" });
   assert.equal(res.body.granted, 10);
   const next = await call(h, "earnBonus", { amount: 50, source: "game:snake", idempotencyKey: "k2" });
@@ -173,8 +173,8 @@ test("earn: дневной потолок — отдаём остаток, да�
 
 test("earn: вчерашний счётчик не мешает сегодня", async () => {
   const h = harness();
-  seedWallet(h, { earnDay: "2000-01-01", earnedToday: 1000 });
-  const res = await call(h, "earnBonus", { amount: 5, source: "time", idempotencyKey: "k1" });
+  seedWallet(h, { earnDay: "2000-01-01", earnedToday: 200, earnedBySource: { "time": 4 } });
+  const res = await call(h, "earnBonus", { amount: 5, source: "game:snake", idempotencyKey: "k1" });
   assert.equal(res.body.granted, 5);
 });
 
@@ -183,6 +183,9 @@ test("earn: неизвестный источник, ноль и отрицат�
   seedWallet(h);
   for (const body of [
     { amount: 5, source: "admin", idempotencyKey: "a" },
+    // Выдуманная игра — не лазейка мимо потолков источников.
+    { amount: 5, source: "game:x", idempotencyKey: "a2" },
+    { amount: 5, source: "game:diamond2", idempotencyKey: "a3" },
     { amount: 0, source: "time", idempotencyKey: "b" },
     { amount: -5, source: "time", idempotencyKey: "c" },
     { amount: 5, source: "time" },
@@ -193,7 +196,157 @@ test("earn: неизвестный источник, ноль и отрицат�
   assert.equal(wallet(h).balance, 0);
 });
 
+test("earn: «time» — не больше 4 в сутки, как BonusEngine.dailyGoalCap", async () => {
+  const h = harness();
+  seedWallet(h);
+  const granted = [];
+  for (let i = 0; i < 6; i++) {
+    const res = await call(h, "earnBonus", { amount: 1, source: "time", idempotencyKey: `t${i}` });
+    granted.push(res.body.granted);
+  }
+  assert.deepEqual(granted, [1, 1, 1, 1, 0, 0]);
+  assert.equal(wallet(h).balance, 4);
+});
+
+test("earn: потолок Diamond не обходится подписью другой игры — общий потолок держит сумму", async () => {
+  const h = harness();
+  seedWallet(h);
+  const d = await call(h, "earnBonus", { amount: 100, source: "game:diamond", idempotencyKey: "d1" });
+  assert.equal(d.body.granted, 30);
+  // Остальные игры без своего потолка — но вместе с Diamond не больше 200.
+  const s1 = await call(h, "earnBonus", { amount: 100, source: "game:snake", idempotencyKey: "s1" });
+  const s2 = await call(h, "earnBonus", { amount: 100, source: "game:tetris", idempotencyKey: "s2" });
+  assert.equal(s1.body.granted, 100);
+  assert.equal(s2.body.granted, 70);
+  assert.equal(wallet(h).earnedToday, 200);
+  assert.equal(wallet(h).balance, 200);
+});
+
+/* ═══════════ earnBonus: чей потолок урезал (capReason / dailyLeft / sourceLeft) ═══════════ */
+
+test("earn: без урезания — capReason null, остатки дня и источника", async () => {
+  const h = harness();
+  seedWallet(h);
+  const snake = await call(h, "earnBonus", { amount: 7, source: "game:snake", idempotencyKey: "k1" });
+  assert.equal(snake.body.capReason, null);
+  assert.equal(snake.body.dailyLeft, 193);
+  // У Змейки своего потолка нет — null, а не число.
+  assert.equal(snake.body.sourceLeft, null);
+  const d = await call(h, "earnBonus", { amount: 5, source: "game:diamond", idempotencyKey: "k2" });
+  assert.equal(d.body.capReason, null);
+  assert.equal(d.body.sourceLeft, 25);
+  assert.equal(d.body.dailyLeft, 188);
+});
+
+test("earn: упор в общий дневной потолок → capReason daily, dailyLeft 0", async () => {
+  const h = harness();
+  seedWallet(h, { earnDay: bishkekDay(), earnedToday: 190 });
+  const res = await call(h, "earnBonus", { amount: 50, source: "game:snake", idempotencyKey: "k1" });
+  assert.equal(res.body.granted, 10);
+  assert.equal(res.body.capReason, "daily");
+  assert.equal(res.body.dailyLeft, 0);
+});
+
+test("earn: упор в потолок Diamond → capReason source; другие игры платят", async () => {
+  const h = harness();
+  seedWallet(h, { earnDay: bishkekDay(), earnedToday: 25, earnedBySource: { "game:diamond": 25 } });
+  const res = await call(h, "earnBonus", { amount: 20, source: "game:diamond", idempotencyKey: "k1" });
+  assert.equal(res.body.granted, 5);
+  assert.equal(res.body.capReason, "source");
+  assert.equal(res.body.sourceLeft, 0);
+  assert.equal(res.body.dailyLeft, 170);
+  const other = await call(h, "earnBonus", { amount: 20, source: "game:snake", idempotencyKey: "k2" });
+  assert.equal(other.body.capReason, null);
+  assert.equal(other.body.granted, 20);
+});
+
+test("earn: «time» сверх 4 → capReason source", async () => {
+  const h = harness();
+  seedWallet(h, { earnDay: bishkekDay(), earnedToday: 4, earnedBySource: { "time": 4 } });
+  const res = await call(h, "earnBonus", { amount: 1, source: "time", idempotencyKey: "t" });
+  assert.equal(res.body.granted, 0);
+  assert.equal(res.body.capReason, "source");
+});
+
+test("earn: крупный вызов → capReason per_call — это не потолок дня", async () => {
+  const h = harness();
+  seedWallet(h);
+  const res = await call(h, "earnBonus", { amount: 150, source: "game:2048", idempotencyKey: "k1" });
+  assert.equal(res.body.granted, 100);
+  assert.equal(res.body.capReason, "per_call");
+  assert.equal(res.body.dailyLeft, 100);
+});
+
+test("earn: равенство потолков — побеждает общий (daily)", async () => {
+  const h = harness();
+  seedWallet(h, { earnDay: bishkekDay(), earnedToday: 195, earnedBySource: { "game:diamond": 25 } });
+  const res = await call(h, "earnBonus", { amount: 10, source: "game:diamond", idempotencyKey: "k1" });
+  assert.equal(res.body.granted, 5);
+  assert.equal(res.body.capReason, "daily");
+});
+
+test("earn: повтор с тем же ключом возвращает исходную причину", async () => {
+  const h = harness();
+  seedWallet(h, { earnDay: bishkekDay(), earnedToday: 190 });
+  await call(h, "earnBonus", { amount: 50, source: "game:snake", idempotencyKey: "k1" });
+  const again = await call(h, "earnBonus", { amount: 50, source: "game:snake", idempotencyKey: "k1" });
+  assert.equal(again.body.replayed, true);
+  assert.equal(again.body.granted, 10);
+  assert.equal(again.body.capReason, "daily");
+  assert.equal(again.body.dailyLeft, 0);
+  assert.equal(again.body.sourceLeft, null);
+});
+
+test("earnCapReason: чистая функция", () => {
+  const { earnCapReason } = harness().mod;
+  assert.equal(earnCapReason(5, 5, 100, Infinity), null);
+  assert.equal(earnCapReason(50, 10, 10, Infinity), "daily");
+  assert.equal(earnCapReason(20, 5, 100, 5), "source");
+  assert.equal(earnCapReason(150, 100, 200, Infinity), "per_call");
+  assert.equal(earnCapReason(10, 0, 0, 0), "daily");
+});
+
+test("clampedCapFromEnv: мусор → дефолт, вне границ → прижат, явный 0 сохранён", () => {
+  const { clampedCapFromEnv } = harness().mod;
+  assert.equal(clampedCapFromEnv(undefined, 1000, 0, 5000), 1000);
+  assert.equal(clampedCapFromEnv("abc", 1000, 0, 5000), 1000);
+  assert.equal(clampedCapFromEnv("100000", 1000, 0, 5000), 5000);
+  assert.equal(clampedCapFromEnv("-3", 20, 0, 200), 0);
+  assert.equal(clampedCapFromEnv("0", 20, 0, 200), 0);
+});
+
 /* ═══════════════════════ buyCoupon: купон заведения ════════════════════════ */
+
+test("buy: срок купона заведения переходит на купон гостя", async () => {
+  const h = harness();
+  seedWallet(h, { balance: 200 });
+  const until = new Date(Date.now() + 7 * 86400000);
+  seedOffer(h, { expiresAt: until });
+  const res = await call(h, "buyCoupon", { offerID: "co1", idempotencyKey: "b1" });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.expiresAt, until.getTime());
+  const [c] = coupons(h);
+  assert.equal(c.expiresAt.toMillis(), until.getTime());
+});
+
+test("buy: лимит в одни руки — сверх perGuestLimit → 409 limit_reached", async () => {
+  const h = harness();
+  seedWallet(h, { balance: 1000 });
+  seedOffer(h, { perGuestLimit: 2 });
+  const a = await call(h, "buyCoupon", { offerID: "co1", idempotencyKey: "b1" });
+  const b = await call(h, "buyCoupon", { offerID: "co1", idempotencyKey: "b2" });
+  const c = await call(h, "buyCoupon", { offerID: "co1", idempotencyKey: "b3" });
+  assert.equal(a.statusCode, 200);
+  assert.equal(b.statusCode, 200);
+  assert.equal(c.statusCode, 409);
+  assert.equal(c.body.error, "limit_reached");
+  assert.equal(wallet(h).balance, 760);
+  assert.equal(h.read("couponOffers/co1").soldCount, 2);
+  // Повтор уже прошедшей покупки — не «третья», а replay.
+  const replay = await call(h, "buyCoupon", { offerID: "co1", idempotencyKey: "b2" });
+  assert.equal(replay.body.replayed, true);
+});
+
 
 test("buy: списывает бонусы, увеличивает soldCount и выдаёт купон заведения", async () => {
   const h = harness();
@@ -478,6 +631,16 @@ test("gift: неизвестный код → 404", async () => {
 
 /* ═══════════════════════ reconcileBonusWallets ═════════════════════════════ */
 
+test("reconcile: вчерашний упор в потолок тоже виден (прогон в начале суток)", async () => {
+  const h = harness();
+  const yesterday = bishkekDay(Date.now() - 24 * 3600000);
+  seedWallet(h, { balance: 0, earnDay: yesterday, earnedToday: 200 });
+  await h.mod.reconcileBonusWallets.run({});
+  const capped = docsUnder(h, "ops/alerts/items/").map((d) => d.data).filter((a) => a.kind === "wallet_cap_hit");
+  assert.equal(capped.length, 1);
+  assert.equal(capped[0].detail.day, yesterday);
+});
+
 test("reconcile: баланс ≠ сумме ledger → алерт wallet_mismatch", async () => {
   const h = harness();
   await call(h, "bonusWalletSync", { localBalance: 100 });
@@ -489,6 +652,7 @@ test("reconcile: баланс ≠ сумме ledger → алерт wallet_mismat
 
 test("reconcile: честный кошелёк — без алертов", async () => {
   const h = harness();
+  h.seed("ops/heartbeats", { reconcileVenuePoints: new Date() });   // соседняя сверка жива
   await call(h, "bonusWalletSync", { localBalance: 100 });
   await call(h, "earnBonus", { amount: 7, source: "time", idempotencyKey: "k" });
   await h.mod.reconcileBonusWallets.run({});

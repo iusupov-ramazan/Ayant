@@ -1,0 +1,192 @@
+{
+  "parameterGroups": {
+    "iOS: обновление": {
+      "description": "Экран «Обновите приложение» (RemoteSettingsStore). Применяется сразу после загрузки значений.",
+      "parameters": {
+        "ios_min_version": {
+          "defaultValue": {
+            "value": ""
+          },
+          "valueType": "STRING",
+          "description": "Минимальная версия (CFBundleShortVersionString), например 1.0.2. Ниже — блокирующий экран обновления. Пусто или нечитаемо (2.x, 1.0-beta) — никого не блокирует."
+        },
+        "ios_update_url": {
+          "defaultValue": {
+            "value": ""
+          },
+          "valueType": "STRING",
+          "description": "Ссылка кнопки «Обновить»: https://apps.apple.com/app/id<ID>. Пусто — поиск «Ayant» в App Store."
+        }
+      }
+    },
+    "iOS: выключатели функций": {
+      "description": "false прячет функцию сразу (в открытом приложении — за секунды). Включить спрятанное в сборке нельзя — только выключить. Ключи — контракт с RemoteFeature, не переименовывать.",
+      "parameters": {
+        "ios_couponShopPurchase_enabled": {
+          "defaultValue": {
+            "value": "true"
+          },
+          "valueType": "BOOLEAN",
+          "description": "Кнопка «Обменять» в магазине купонов (покупка за бонусы)."
+        },
+        "ios_globalBonusWallet_enabled": {
+          "defaultValue": {
+            "value": "true"
+          },
+          "valueType": "BOOLEAN",
+          "description": "Глобальный кошелёк: капсула «БОНУСЫ», игры, каталог наград, подарки."
+        },
+        "ios_referrals_enabled": {
+          "defaultValue": {
+            "value": "true"
+          },
+          "valueType": "BOOLEAN",
+          "description": "Реферальная программа в профиле."
+        },
+        "ios_instagramImport_enabled": {
+          "defaultValue": {
+            "value": "true"
+          },
+          "valueType": "BOOLEAN",
+          "description": "Кабинет: кнопка «Из Instagram» в разделе «Акции»."
+        },
+        "ios_menuImport_enabled": {
+          "defaultValue": {
+            "value": "true"
+          },
+          "valueType": "BOOLEAN",
+          "description": "Кабинет: кнопка «Из файла» (меню из PDF/Excel/CSV) в разделе «Меню»."
+        }
+      }
+    },
+    "iOS: начисление бонусов в играх": {
+      "description": "_enabled=false — игра не платит бонусы (играть можно). _daily_cap — лимит бонусов игры в день, 0 = без лимита (у Diamond 0 = 30). Действует сразу. Выше серверного лимита не сработает. Ключи не переименовывать.",
+      "parameters": {
+        "ios_bonus_snake_enabled": {
+          "defaultValue": {
+            "value": "true"
+          },
+          "valueType": "BOOLEAN",
+          "description": "Начисление бонусов за «Змейка»."
+        },
+        "ios_bonus_snake_daily_cap": {
+          "defaultValue": {
+            "value": "0"
+          },
+          "valueType": "NUMBER",
+          "description": "Дневной лимит бонусов за «Змейка». 0 — без лимита."
+        },
+        "ios_bonus_tetris_enabled": {
+          "defaultValue": {
+            "value": "true"
+          },
+          "valueType": "BOOLEAN",
+          "description": "Начисление бонусов за «Тетрис»."
+        },
+        "ios_bonus_tetris_daily_cap": {
+          "defaultValue": {
+            "value": "0"
+          },
+          "valueType": "NUMBER",
+          "description": "Дневной лимит бонусов за «Тетрис». 0 — без лимита."
+        },
+        "ios_bonus_diamond_enabled": {
+          "defaultValue": {
+            "value": "true"
+          },
+          "valueType": "BOOLEAN",
+          "description": "Начисление бонусов за Diamond (бывш. «Три в ряд»)."
+        },
+        "ios_bonus_diamond_daily_cap": {
+          "defaultValue": {
+            "value": "30"
+          },
+          "valueType": "NUMBER",
+          "description": "Дневной лимит бонусов за Diamond. 0 или пусто — 30 (бесконечную игру без лимита оставить нельзя). Выше серверного потолка BONUS_DIAMOND_DAILY_CAP (env, по умолчанию 30, не больше 500) сервер не зачислит."
+        },
+        "ios_bonus_2048_enabled": {
+          "defaultValue": {
+            "value": "true"
+          },
+          "valueType": "BOOLEAN",
+          "description": "Начисление бонусов за «2048»."
+        },
+        "ios_bonus_2048_daily_cap": {
+          "defaultValue": {
+            "value": "0"
+          },
+          "valueType": "NUMBER",
+          "description": "Дневной лимит бонусов за «2048». 0 — без лимита."
+        }
+      }
+    },
+    "iOS: курс игр и времени": {
+      "description": "Сколько платят игры и время в приложении. 0 или пусто — как в сборке (в скобках). Действует сразу после загрузки; игра берёт курс в начале партии. Выше серверных потолков earnBonus (BONUS_DAILY_EARN_CAP — 200/сутки всего, ≤2000; время — BONUS_TIME_DAILY_CAP, 4, ≤100; Diamond — BONUS_DIAMOND_DAILY_CAP, 30, ≤500) не начислится. Ключи — контракт с GameRates.Key, не переименовывать.",
+      "parameters": {
+        "ios_bonus_time_enabled": {
+          "defaultValue": {
+            "value": "true"
+          },
+          "valueType": "BOOLEAN",
+          "description": "Начисление бонусов за время в приложении. false — таймер не копит и «time» не начисляется сразу, игры не затронуты; пуш-напоминание снимается."
+        },
+        "ios_bonus_minutes_per_bonus": {
+          "defaultValue": {
+            "value": "0"
+          },
+          "valueType": "NUMBER",
+          "description": "Минут игры за 1 бонус — общий якорь (1). Двигает цену Змейки, Тетриса и Diamond разом, если их цена ниже не задана. 0.25…60 (меньше — прижимается к 0.25)."
+        },
+        "ios_bonus_snake_apples_per_bonus": {
+          "defaultValue": {
+            "value": "0"
+          },
+          "valueType": "NUMBER",
+          "description": "«Змейка»: яблок за 1 бонус (12 при якоре 1). 0 — из якоря."
+        },
+        "ios_bonus_tetris_lines_per_bonus": {
+          "defaultValue": {
+            "value": "0"
+          },
+          "valueType": "NUMBER",
+          "description": "«Тетрис»: линий за 1 бонус (5 при якоре 1). 0 — из якоря."
+        },
+        "ios_bonus_diamond_matches_per_bonus": {
+          "defaultValue": {
+            "value": "0"
+          },
+          "valueType": "NUMBER",
+          "description": "«Diamond»: совпадений за 1 бонус (15 при якоре 1). 0 — из якоря."
+        },
+        "ios_bonus_2048_first_tile": {
+          "defaultValue": {
+            "value": "0"
+          },
+          "valueType": "NUMBER",
+          "description": "«2048»: с какой плитки начинаются бонусы (128), дальше +1 за каждое удвоение. Только степень двойки 64…2048, иначе — 128: лестница — единственный анти-фарм игры, с 8/16/32 перезапуск партии становится фермой."
+        },
+        "ios_bonus_time_goal_minutes": {
+          "defaultValue": {
+            "value": "0"
+          },
+          "valueType": "NUMBER",
+          "description": "Время в приложении: активных минут за цикл (30). 1…240."
+        },
+        "ios_bonus_time_reward": {
+          "defaultValue": {
+            "value": "0"
+          },
+          "valueType": "NUMBER",
+          "description": "Время в приложении: бонусов за цикл (1). 1…100. Пуш-напоминание показывает это же число."
+        },
+        "ios_bonus_time_goals_per_day": {
+          "defaultValue": {
+            "value": "0"
+          },
+          "valueType": "NUMBER",
+          "description": "Время в приложении: циклов в день (4). 1…24; 0 — как в сборке, а не «выключить» (для этого ios_bonus_time_enabled = false). Награда × циклы выше BONUS_TIME_DAILY_CAP сервера (4) не начислится — поднимите его вместе."
+        }
+      }
+    }
+  }
+}

@@ -65,45 +65,107 @@ public enum FeedBuilder {
         return deals.filter { !hidden.contains($0.venueID) }
     }
 
+    // MARK: Контекст скоринга (считается один раз на сборку)
+
+    /// Всё, что скорингу нужно «по заведению», посчитанное ОДИН раз.
+    ///
+    /// Раньше `venueScore` на каждый вызов фильтровал все акции каталога, а
+    /// `dealScore` искал заведение линейным поиском и пересчитывал его скор —
+    /// и всё это внутри компаратора `sorted`, то есть O(n log n) раз. На ленте
+    /// из сотни акций это десятки тысяч проходов по каталогу на каждый кадр.
+    /// Порядок выдачи от этого не меняется (закреплено `FeedPerformanceTests`).
+    struct ScoreContext {
+        let catalog: FeedCatalog
+        let weights: RankingWeights
+        let now: Date
+        /// Первое заведение с таким id — как прежний `first { $0.id == … }`.
+        let venuesByID: [String: Venue]
+        let activeDealCount: [String: Int]
+        private var venueScores: [String: Double] = [:]
+        private var calendars: [String: Calendar] = [:]
+
+        init(catalog: FeedCatalog, weights: RankingWeights, now: Date) {
+            self.catalog = catalog; self.weights = weights; self.now = now
+            venuesByID = Dictionary(catalog.venues.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+            var counts: [String: Int] = [:]
+            for d in catalog.deals where d.isActive(at: now) { counts[d.venueID, default: 0] += 1 }
+            activeDealCount = counts
+        }
+
+        mutating func venueScore(_ venue: Venue) -> Double {
+            if let cached = venueScores[venue.id] { return cached }
+            let aggregate = catalog.ratings[venue.id]
+                ?? VenueRating(rating: venue.rating, count: venue.reviewCount)
+            let score = Ranking.venueScore(rating: aggregate.rating, reviewCount: aggregate.count,
+                                           savedByCount: venue.savedByCount, isVerified: venue.isVerified,
+                                           hasTodaySpecial: venue.hasTodaySpecial,
+                                           isOpenNow: venue.isOpen(at: now),
+                                           activeDealCount: activeDealCount[venue.id] ?? 0, w: weights)
+            venueScores[venue.id] = score
+            return score
+        }
+
+        mutating func calendar(forSlug slug: String) -> Calendar {
+            if let c = calendars[slug] { return c }
+            let c = City.calendar(forSlug: slug)
+            calendars[slug] = c
+            return c
+        }
+
+        mutating func dealScore(_ deal: Deal) -> Double {
+            let venue = venuesByID[deal.venueID]
+            let vs = venue.map { venueScore($0) } ?? 0
+            let daysSinceStart = deal.startDate.map { now.timeIntervalSince($0) / 86_400 }
+            let hoursUntilExpiry = deal.validUntil.timeIntervalSince(now) / 3600
+            // Час — по городу акции, а не по телефону: «время завтрака» должно
+            // совпадать с местным утром, даже если гость приехал из другого пояса.
+            let hour = calendar(forSlug: deal.citySlug).component(.hour, from: now)
+            let timeRelevance = venue?.category.timeRelevance(hour: hour) ?? 0.5
+            return Ranking.dealScore(venueScore: vs, isFresh: deal.isFresh(at: now),
+                                     daysSinceStart: daysSinceStart,
+                                     discountPercent: deal.effectiveDiscountPercent,
+                                     hoursUntilExpiry: hoursUntilExpiry,
+                                     timeRelevance: timeRelevance, w: weights)
+        }
+    }
+
+    /// Сортировка по заранее посчитанному скору (по убыванию). При равных
+    /// скорах сохраняется исходный порядок — выдача детерминирована.
+    static func sortedByScore<T>(_ items: [T], score: (T) -> Double) -> [T] {
+        var scored: [(index: Int, score: Double, item: T)] = []
+        scored.reserveCapacity(items.count)
+        for (i, item) in items.enumerated() { scored.append((index: i, score: score(item), item: item)) }
+        scored.sort { a, b in
+            if a.score != b.score { return a.score > b.score }
+            return a.index < b.index
+        }
+        return scored.map { $0.item }
+    }
+
     /// Оценка привлекательности заведения (рейтинг, отзывы, сохранения, верификация,
     /// спецпредложение, «открыто сейчас», число активных акций).
     public static func venueScore(_ venue: Venue, catalog: FeedCatalog,
                                   weights: RankingWeights, now: Date) -> Double {
-        let aggregate = catalog.ratings[venue.id]
-            ?? VenueRating(rating: venue.rating, count: venue.reviewCount)
-        let activeDeals = catalog.deals.filter { $0.venueID == venue.id && $0.isActive(at: now) }.count
-        return Ranking.venueScore(rating: aggregate.rating, reviewCount: aggregate.count,
-                                  savedByCount: venue.savedByCount, isVerified: venue.isVerified,
-                                  hasTodaySpecial: venue.hasTodaySpecial, isOpenNow: venue.isOpen(at: now),
-                                  activeDealCount: activeDeals, w: weights)
+        var ctx = ScoreContext(catalog: catalog, weights: weights, now: now)
+        return ctx.venueScore(venue)
     }
 
     /// Органическая оценка предложения: релевантность заведения + свежесть + новизна +
     /// глубина скидки + мягкий буст «скоро закончится». Платный буст — отдельно.
     public static func dealScore(_ deal: Deal, catalog: FeedCatalog,
                                  weights: RankingWeights, now: Date) -> Double {
-        let venue = catalog.venues.first { $0.id == deal.venueID }
-        let vs = venue.map { venueScore($0, catalog: catalog, weights: weights, now: now) } ?? 0
-        let daysSinceStart = deal.startDate.map { now.timeIntervalSince($0) / 86_400 }
-        let hoursUntilExpiry = deal.validUntil.timeIntervalSince(now) / 3600
-        // Час — по городу акции, а не по телефону: «время завтрака» должно
-        // совпадать с местным утром, даже если гость приехал из другого пояса.
-        let hour = City.calendar(forSlug: deal.citySlug).component(.hour, from: now)
-        let timeRelevance = venue?.category.timeRelevance(hour: hour) ?? 0.5
-        return Ranking.dealScore(venueScore: vs, isFresh: deal.isFresh(at: now),
-                                 daysSinceStart: daysSinceStart,
-                                 discountPercent: deal.effectiveDiscountPercent,
-                                 hoursUntilExpiry: hoursUntilExpiry,
-                                 timeRelevance: timeRelevance, w: weights)
+        var ctx = ScoreContext(catalog: catalog, weights: weights, now: now)
+        return ctx.dealScore(deal)
     }
 
     /// Заведения города по релевантности.
     public static func rankedVenues(_ catalog: FeedCatalog, citySlug: String,
                                     category: VenueCategory? = nil,
                                     weights: RankingWeights, now: Date) -> [Venue] {
-        visibleVenues(catalog, citySlug: citySlug, category: category)
-            .sorted { venueScore($0, catalog: catalog, weights: weights, now: now)
-                    > venueScore($1, catalog: catalog, weights: weights, now: now) }
+        var ctx = ScoreContext(catalog: catalog, weights: weights, now: now)
+        return sortedByScore(visibleVenues(catalog, citySlug: citySlug, category: category)) {
+            ctx.venueScore($0)
+        }
     }
 
     /// Активные акции заведений города, отсортированные по `dealScore`.
@@ -111,20 +173,31 @@ public enum FeedBuilder {
                                    category: VenueCategory? = nil,
                                    weights: RankingWeights, now: Date) -> [Deal] {
         let ids = Set(visibleVenues(catalog, citySlug: citySlug, category: category).map(\.id))
-        return catalog.deals
-            .filter { $0.isActive(at: now) && ids.contains($0.venueID) }
-            .sorted { dealScore($0, catalog: catalog, weights: weights, now: now)
-                    > dealScore($1, catalog: catalog, weights: weights, now: now) }
+        var ctx = ScoreContext(catalog: catalog, weights: weights, now: now)
+        return sortedByScore(catalog.deals.filter { $0.isActive(at: now) && ids.contains($0.venueID) }) {
+            ctx.dealScore($0)
+        }
     }
 
     /// Заведения с активным платным бустом — рекламные карточки в ленте.
     /// Порядок вращается раз в 30 минут, чтобы верхнее место доставалось не всегда одному.
+    ///
+    /// Ключ — СТАБИЛЬНЫЙ хэш `id|окно` (`StableHash.orderKey`). Раньше был `id.hashValue &+ окно`:
+    /// `hashValue` в Swift случаен на каждый запуск (порядок прыгал между
+    /// запусками), а прибавка одной константы ко всем ключам порядок не меняет
+    /// вовсе — то есть «вращения раз в 30 минут» не было.
     public static func boostedVenues(_ catalog: FeedCatalog, citySlug: String,
                                      category: VenueCategory? = nil, now: Date) -> [Venue] {
-        let rotation = Int(now.timeIntervalSince1970 / 1800)
-        return visibleVenues(catalog, citySlug: citySlug, category: category)
+        let rotation = Int(floor(now.timeIntervalSince1970 / 1800))
+        let boosted = visibleVenues(catalog, citySlug: citySlug, category: category)
             .filter { $0.isBoosted(at: now) }
-            .sorted { ($0.id.hashValue &+ rotation) < ($1.id.hashValue &+ rotation) }
+        let keyed: [(key: UInt64, venue: Venue)] = boosted.map { venue in
+            (key: StableHash.orderKey(venue.id + "|" + String(rotation)), venue: venue)
+        }
+        return keyed.sorted { a, b in
+            if a.key != b.key { return a.key < b.key }
+            return a.venue.id < b.venue.id
+        }.map { $0.venue }
     }
 
     /// Готовая лента: акции + рекламные карточки, вставленные через интервал.
@@ -134,6 +207,33 @@ public enum FeedBuilder {
         Ranking.feed(deals: rankedDeals(catalog, citySlug: citySlug, category: category,
                                         weights: weights, now: now),
                      ads: boostedVenues(catalog, citySlug: citySlug, category: category, now: now))
+    }
+}
+
+// MARK: - Стабильный хэш
+
+/// Хэш, одинаковый на всех запусках и устройствах (в отличие от `hashValue`,
+/// который Swift солит случайно на каждый запуск). Для порядка, который должен
+/// быть воспроизводимым: ротация буста, раскладка мозаики.
+public enum StableHash {
+    /// FNV-1a, 64 бита, по UTF-8 байтам строки.
+    public static func fnv1a(_ s: String) -> UInt64 {
+        var h: UInt64 = 0xcbf2_9ce4_8422_2325
+        for b in s.utf8 {
+            h ^= UInt64(b)
+            h = h &* 0x0000_0100_0000_01b3
+        }
+        return h
+    }
+
+    /// Ключ для ПОРЯДКА: FNV-1a + финализатор splitmix64. У голого FNV
+    /// изменение последних байтов (номер окна ротации в хвосте строки)
+    /// почти не трогает старшие биты — и сортировка по ним не вращалась.
+    public static func orderKey(_ s: String) -> UInt64 {
+        var z = fnv1a(s)
+        z = (z ^ (z >> 30)) &* 0xbf58_476d_1ce4_e5b9
+        z = (z ^ (z >> 27)) &* 0x94d0_49bb_1331_11eb
+        return z ^ (z >> 31)
     }
 }
 

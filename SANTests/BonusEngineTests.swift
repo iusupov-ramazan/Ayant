@@ -67,31 +67,73 @@ final class BonusEngineTests: XCTestCase {
     // платит через свой дневной потолок. Общий `awardGameplay` при этом
     // по-прежнему ничего не режет — это разные решения.
 
-    func testEndlessAwardStopsAtDailyCap() {
-        let cap = 5
-        XCTAssertEqual(engine.awardEndlessGameplay(3, dailyCap: cap), 3)
-        XCTAssertEqual(engine.awardEndlessGameplay(3, dailyCap: cap), 2, "выдаётся только остаток до потолка")
-        XCTAssertEqual(engine.awardEndlessGameplay(3, dailyCap: cap), 0)
+    // MARK: Дневные лимиты по играм (Remote Config `ios_bonus_<game>_daily_cap`)
+
+    func testDiamondHasDailyCapByDefault() {
+        XCTAssertEqual(engine.remainingToday(.diamond), GameEconomy.endlessDailyBonusCap,
+                       "бесконечная игра без удалённых настроек всё равно ограничена")
+        XCTAssertNil(engine.remainingToday(.snake), "обычные игры по умолчанию без лимита")
+    }
+
+    func testCappedGamePaysOnlyRemainder() {
+        engine.setBonusDailyCaps([.diamond: 5])
+        let diamond = BonusGame.diamond.source
+        XCTAssertEqual(engine.awardGameplay(3, source: diamond), 3)
+        XCTAssertEqual(engine.awardGameplay(3, source: diamond), 2, "выдаётся только остаток до лимита")
+        XCTAssertEqual(engine.awardGameplay(3, source: diamond), 0)
         XCTAssertEqual(engine.balance, 5)
-        XCTAssertEqual(engine.remainingEndlessToday(dailyCap: cap), 0)
+        XCTAssertEqual(engine.remainingToday(.diamond), 0)
     }
 
-    func testEndlessCapResetsNextDay() {
-        let cap = 4
-        engine.awardEndlessGameplay(10, dailyCap: cap)
-        XCTAssertEqual(engine.remainingEndlessToday(dailyCap: cap), 0)
+    func testCapResetsNextDay() {
+        engine.setBonusDailyCaps([.tetris: 4])
+        engine.awardGameplay(10, source: BonusGame.tetris.source)
+        XCTAssertEqual(engine.remainingToday(.tetris), 0)
         clock.advance(by: 86_400)
-        XCTAssertEqual(engine.remainingEndlessToday(dailyCap: cap), cap, "новый день — новый лимит")
-        XCTAssertEqual(engine.awardEndlessGameplay(1, dailyCap: cap), 1)
+        XCTAssertEqual(engine.remainingToday(.tetris), 4, "новый день — новый лимит")
+        XCTAssertEqual(engine.awardGameplay(1, source: BonusGame.tetris.source), 1)
     }
 
-    func testEndlessCapDoesNotLimitOtherGames() {
-        engine.awardEndlessGameplay(GameEconomy.endlessDailyBonusCap)
-        XCTAssertEqual(engine.awardGameplay(7), 7, "Змейку и Тетрис потолок бесконечной игры не трогает")
+    func testCapsAreCountedPerGame() {
+        engine.setBonusDailyCaps([.snake: 2, .diamond: 2])
+        XCTAssertEqual(engine.awardGameplay(5, source: BonusGame.snake.source), 2)
+        XCTAssertEqual(engine.awardGameplay(5, source: BonusGame.diamond.source), 2, "лимит змейки не трогает Diamond")
+        XCTAssertEqual(engine.awardGameplay(5, source: BonusGame.game2048.source), 5, "игра без лимита платит целиком")
+    }
+
+    func testRaisingCapMidDayPaysTheDifference() {
+        engine.setBonusDailyCaps([.snake: 2])
+        engine.awardGameplay(5, source: BonusGame.snake.source)
+        engine.setBonusDailyCaps([.snake: 6])
+        XCTAssertEqual(engine.remainingToday(.snake), 4, "поднятый в консоли лимит считает уже начисленное")
     }
 
     func testDefaultEndlessCapKeepsCouponsFarAway() {
         // 300-бонусный купон не должен собираться за один день одной игрой.
         XCTAssertLessThan(GameEconomy.endlessDailyBonusCap * 3, 300)
+    }
+
+    // MARK: Удалённый выключатель начисления по играм
+
+    func testPausedGamePaysNothingOthersStillPay() {
+        engine.setBonusPaused([.snake])
+        XCTAssertEqual(engine.awardGameplay(5, source: BonusGame.snake.source), 0, "выключенная игра не платит")
+        XCTAssertEqual(engine.awardGameplay(5, source: BonusGame.tetris.source), 5, "остальные игры не задеты")
+        XCTAssertEqual(engine.balance, 5)
+    }
+
+    func testPausedGameDoesNotEatDailyCap() {
+        engine.setBonusDailyCaps([.diamond: 5])
+        engine.setBonusPaused([.diamond])
+        XCTAssertEqual(engine.awardGameplay(3, source: BonusGame.diamond.source), 0)
+        XCTAssertEqual(engine.remainingToday(.diamond), 5, "пауза не расходует дневной лимит")
+        engine.setBonusPaused([])
+        XCTAssertEqual(engine.awardGameplay(3, source: BonusGame.diamond.source), 3,
+                       "включили обратно — платит сразу")
+    }
+
+    func testNonGameSourcesIgnoreGameSwitches() {
+        engine.setBonusPaused(Set(BonusGame.allCases))
+        XCTAssertEqual(engine.awardGameplay(4, source: "game"), 4, "источник без игры этим выключателем не гасится")
     }
 }

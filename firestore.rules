@@ -34,22 +34,88 @@ service cloud.firestore {
     function ownsExisting() {
       return isSignedIn() && resource.data.ownerID == uid();
     }
+    // Настоящий аккаунт (не анонимный вход — он доступен любому скрипту).
+    function isRealUser() {
+      return isSignedIn() && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    }
+    // Ссылка, которую клиенты откроют/покажут: пусто, null или https://.
+    // Раньше хост мог записать `javascript:`/`http:`/`data:` в imageURL или
+    // pdfMenuURL — админ-панель и клиенты открывали бы это как есть.
+    function safeURL(v) {
+      return v == null || v == '' || (v is string && v.size() <= 2048 && v.matches('^https://[^ ]+$'));
+    }
+    // Поле-ссылка допустимо в создаваемом документе.
+    function urlFieldOK(field) {
+      return safeURL(request.resource.data.get(field, ''));
+    }
+    // При правке проверяем только изменённые ссылки: старые записи с http://
+    // не должны блокировать правку других полей.
+    function urlFieldChangeOK(field) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny([field])
+        || urlFieldOK(field);
+    }
 
     // ── Заведения ────────────────────────────────────────────────────────
     // Читают все. Создаёт/меняет владелец (ownerID == uid) или админ.
     // При создании ownerID обязателен и должен совпадать с uid (кроме админа).
+    //
+    // Модерацию и витринные счётчики владелец себе не ставит (аудит 2026-10-01):
+    // раньше он мог записать status: "approved", isVerified: true и любой
+    // rating/reviewCount/savedByCount — а это то, по чему ранжируется лента.
+    //  • status: заводится только «pending»; дальше владелец может лишь вернуть
+    //    заведение на модерацию, одобряет админ. Нет поля = «одобрено» (так
+    //    читают клиенты старые записи из сида), поэтому сохранение такого
+    //    заведения со status: "approved" — не повышение.
+    //  • isVerified: владелец может только снять.
+    //  • rating/reviewCount/ratingHistogram считает recomputeVenueRating,
+    //    savedByCount — сервер; ни создать, ни поменять их клиенту нельзя.
+    //  • boostedUntil — платное продвижение: только сохранить как было или убрать
+    //    (iOS-кабинет пишет null, когда продвижения нет).
+    function venueServerFields() {
+      return ['rating', 'reviewCount', 'ratingHistogram', 'savedByCount'];
+    }
+    function venueCreateAllowed() {
+      let d = request.resource.data;
+      return d.get('status', '') == 'pending'
+        && d.get('isVerified', false) == false
+        && d.get('boostedUntil', null) == null
+        && !d.keys().hasAny(venueServerFields());
+    }
+    function venueUpdateAllowed() {
+      let d = request.resource.data;
+      let old = resource.data;
+      return d.ownerID == old.ownerID
+        && (d.get('status', 'approved') == old.get('status', 'approved') || d.get('status', '') == 'pending')
+        && (d.get('isVerified', false) == old.get('isVerified', false) || d.get('isVerified', false) == false)
+        && (d.get('boostedUntil', null) == old.get('boostedUntil', null) || d.get('boostedUntil', null) == null)
+        && !d.diff(old).affectedKeys().hasAny(venueServerFields());
+    }
     match /venues/{id} {
       allow read: if true;
-      allow create: if isAdmin() || (ownsIncoming() && request.resource.data.ownerID is string);
-      allow update: if isAdmin() || (ownsExisting() && request.resource.data.ownerID == resource.data.ownerID);
+      allow create: if isAdmin() || (ownsIncoming() && request.resource.data.ownerID is string && venueCreateAllowed()
+                                     && urlFieldOK('imageURL') && urlFieldOK('pdfMenuURL'));
+      allow update: if isAdmin() || (ownsExisting() && venueUpdateAllowed()
+                                     && urlFieldChangeOK('imageURL') && urlFieldChangeOK('pdfMenuURL'));
       allow delete: if isAdmin() || ownsExisting();
     }
 
     // ── Предложения (акции) ──────────────────────────────────────────────
+    // Акцию создаёт только владелец ЗАВЕДЕНИЯ акции (аудит запуска
+    // 2026-10-01): раньше хватало ownerID == uid, и любой вошедший создавал
+    // «акцию» от имени чужого заведения — с пушем всем его подписчикам
+    // (notifyOnNewDeal). Заведение и владельца у акции не переносят.
     match /deals/{id} {
       allow read: if true;
-      allow create: if isAdmin() || (ownsIncoming() && request.resource.data.ownerID is string);
-      allow update: if isAdmin() || (ownsExisting() && request.resource.data.ownerID == resource.data.ownerID);
+      allow create: if isAdmin()
+                    || (ownsIncoming() && request.resource.data.ownerID is string
+                        && request.resource.data.venueID is string
+                        && isVenueOwner(request.resource.data.venueID)
+                        && urlFieldOK('imageURL'));
+      allow update: if isAdmin()
+                    || (ownsExisting()
+                        && request.resource.data.ownerID == resource.data.ownerID
+                        && request.resource.data.get('venueID', '') == resource.data.get('venueID', '')
+                        && urlFieldChangeOK('imageURL'));
       allow delete: if isAdmin() || ownsExisting();
     }
 
@@ -63,12 +129,54 @@ service cloud.firestore {
     // ── Отзывы ───────────────────────────────────────────────────────────
     // Читают все. Создаёт автор (authorID == uid). Менять/удалять может автор,
     // владелец заведения (ответ хоста hostReply) или админ.
+    // id отзыва: `{uid}_{venueID}_{itemID}`; пустой/нет itemID → `_venue`.
+    function reviewIDMatches(id) {
+      let d = request.resource.data;
+      let item = d.get('itemID', '');
+      return (item == null || item == '')
+        ? id == uid() + '_' + d.venueID + '_venue'
+        : (item is string && id == uid() + '_' + d.venueID + '_' + item);
+    }
+    // Оценка целая 1…5, текст ≤ 2000, имя ≤ 60, фото ≤ 6.
+    function reviewFieldsValid() {
+      let d = request.resource.data;
+      return d.rating is int && d.rating >= 1 && d.rating <= 5
+        && (d.get('text', '') is string && d.get('text', '').size() <= 2000)
+        && (d.get('authorName', '') is string && d.get('authorName', '').size() <= 60)
+        && (d.get('photos', []) is list && d.get('photos', []).size() <= 6)
+        && (d.get('photoEmojis', []) is list && d.get('photoEmojis', []).size() <= 6);
+    }
     match /reviews/{id} {
       allow read: if true;
-      allow create: if isSignedIn() && request.resource.data.authorID == uid();
+      // Автор не пишет ни ответ заведения (`hostReply`), ни отметку «был в
+      // заведении» (`verifiedVisit`): раньше и то и другое подделывалось из
+      // клиента — отзыв «с подтверждённым визитом» и «ответом владельца».
+      //
+      // Аудит запуска 2026-10-01: только настоящий аккаунт (не анонимный), один
+      // отзыв на гостя × заведение × блюдо — id детерминированный:
+      // `{uid}_{venueID}_{itemID}` или `{uid}_{venueID}_venue` для отзыва о
+      // заведении (клиент генерирует ровно так). Повтор перезаписывает свой
+      // отзыв (update), а не плодит новые — накрутка рейтинга одним аккаунтом
+      // закрыта. Поля проверяются по размеру, заведение должно существовать.
+      allow create: if isRealUser() && request.resource.data.authorID == uid()
+                    && !request.resource.data.keys().hasAny(['hostReply'])
+                    && request.resource.data.get('verifiedVisit', false) != true
+                    && request.resource.data.venueID is string
+                    && reviewIDMatches(id)
+                    && reviewFieldsValid()
+                    && exists(/databases/$(database)/documents/venues/$(request.resource.data.venueID));
+      // Владелец заведения правит только свой ответ (`hostReply`), а не
+      // оценку, текст или автора отзыва: раньше ему был открыт весь документ.
+      // Автор не переносит отзыв на другое заведение, не меняет авторство и
+      // не трогает `hostReply`/`verifiedVisit`.
       allow update: if isAdmin()
-                    || (isSignedIn() && resource.data.authorID == uid())
-                    || isVenueOwner(resource.data.venueID);
+                    || (isSignedIn() && resource.data.authorID == uid()
+                        && request.resource.data.authorID == resource.data.authorID
+                        && request.resource.data.venueID == resource.data.venueID
+                        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['hostReply', 'verifiedVisit'])
+                        && reviewFieldsValid())
+                    || (isVenueOwner(resource.data.venueID)
+                        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['hostReply']));
       allow delete: if isAdmin() || (isSignedIn() && resource.data.authorID == uid());
     }
 
@@ -85,7 +193,28 @@ service cloud.firestore {
       allow create: if isSignedIn()
                     && request.resource.data.reporterID == uid()
                     && request.resource.data.reviewID is string
-                    && request.resource.data.venueID is string;
+                    && request.resource.data.reviewID.matches('^[A-Za-z0-9_-]{1,120}$')
+                    && request.resource.data.venueID is string
+                    && request.resource.data.venueID.size() <= 128;
+    }
+
+    // ── Личная библиотека ────────────────────────────────────────────────
+    // userLibraries/{uid}: сохранённые места, избранные акции, отметки
+    // «нравится» и скрытые авторы отзывов (Guidelines 1.2). Раньше всё это
+    // жило только на устройстве и стиралось при выходе. Читает и пишет только
+    // владелец; только известные поля, каждый список ≤ 500 (UserLibrary.maxItems).
+    function libraryListOK(d, field) {
+      return !(field in d) || (d[field] is list && d[field].size() <= 500);
+    }
+    match /userLibraries/{userID} {
+      allow read, delete: if isSignedIn() && userID == uid();
+      allow create, update: if isSignedIn() && userID == uid()
+                    && request.resource.data.keys().hasOnly(['savedVenueIDs', 'favoriteDealIDs',
+                         'likedDealIDs', 'blockedAuthorIDs', 'updatedAt'])
+                    && libraryListOK(request.resource.data, 'savedVenueIDs')
+                    && libraryListOK(request.resource.data, 'favoriteDealIDs')
+                    && libraryListOK(request.resource.data, 'likedDealIDs')
+                    && libraryListOK(request.resource.data, 'blockedAuthorIDs');
     }
 
     // ── Push-кампании ────────────────────────────────────────────────────
@@ -96,9 +225,23 @@ service cloud.firestore {
     // (update разрешён только админу). Владение заведением тут проверять нельзя:
     // Android-хост не пишет venues в Firestore (только в SharedPreferences), а у
     // засеянных заведений ownerID пустой — проверка isVenueOwner их бы заблокировала.
+    // Аудит запуска 2026-10-01: создаёт только владелец заведения кампании
+    // (ownerID == uid), читает — свои кампании владелец или админ. Раньше
+    // любой вошедший читал все кампании всех заведений и засорял очередь
+    // модерации чужими заявками. Android-хост без синхронизированного
+    // заведения кампанию теперь не создаст — осознанно (см. claude-notes).
     match /pushCampaigns/{id} {
-      allow create: if isSignedIn();
-      allow read:   if isSignedIn();
+      allow create: if isAdmin()
+                    || (ownsIncoming()
+                        && request.resource.data.venueID is string
+                        && isVenueOwner(request.resource.data.venueID)
+                        && request.resource.data.get('status', 'pending') == 'pending'
+                        && request.resource.data.get('delivered', false) == false
+                        && request.resource.data.get('headline', '') is string
+                        && request.resource.data.get('headline', '').size() <= 120
+                        && request.resource.data.get('body', '') is string
+                        && request.resource.data.get('body', '').size() <= 400);
+      allow read:   if isAdmin() || ownsExisting();
       allow update: if isAdmin();
       allow delete: if false;
     }
@@ -119,7 +262,10 @@ service cloud.firestore {
     match /analyticsEvents/{id} {
       allow create: if isSignedIn()
                     && request.resource.data.venueID is string
-                    && request.resource.data.metric in ['views', 'saves', 'calls', 'maps', 'dealTaps'];
+                    && request.resource.data.venueID.size() > 0
+                    && request.resource.data.venueID.size() <= 128
+                    && request.resource.data.metric in ['views', 'saves', 'calls', 'maps', 'dealTaps']
+                    && request.resource.data.keys().hasOnly(['venueID', 'metric', 'createdAt']);
       allow read, update, delete: if false;
     }
 
@@ -130,7 +276,9 @@ service cloud.firestore {
       allow create: if isSignedIn()
                     && request.resource.data.type in ['impression', 'tap', 'redeem']
                     && request.resource.data.sessionID is string
-                    && request.resource.data.userID is string;
+                    && request.resource.data.userID == uid()
+                    && (!('items' in request.resource.data)
+                        || (request.resource.data.items is list && request.resource.data.items.size() <= 30));
       allow read, update, delete: if false;
     }
 
@@ -148,8 +296,11 @@ service cloud.firestore {
     // поле `verification` (none|pending|verified|rejected). Хост может лишь
     // ЗАПРОСИТЬ верификацию (none/pending); выставить verified/rejected — только
     // админ. Уже верифицированный хост может править прочие поля, не трогая статус.
+    // Чтение — только свой профиль или админ (аудит запуска 2026-10-01):
+    // в профиле телефон, ИНН/документы заявки на проверку. Гостевое
+    // приложение чужие профили не читает (статус проверки — `venues.isVerified`).
     match /hosts/{hostUid} {
-      allow read: if isSignedIn();
+      allow read: if isAdmin() || (isSignedIn() && hostUid == uid());
       allow create: if isAdmin()
                     || (isSignedIn() && hostUid == uid()
                         && request.resource.data.get('verification', 'none') in ['none', 'pending']);
@@ -182,14 +333,26 @@ service cloud.firestore {
                         && request.resource.data.ownerID is string
                         && request.resource.data.get('soldCount', 0) == 0
                         && request.resource.data.get('status', 'pending') == 'pending'
+                        && urlFieldOK('imageURL')
                         && exists(/databases/$(database)/documents/venues/$(request.resource.data.venueID))
                         && get(/databases/$(database)/documents/venues/$(request.resource.data.venueID)).data.ownerID == uid());
+      // Статус меняет только модерация — с одним исключением: владелец может
+      // вернуть купон на модерацию (`pending`). А правка того, что видит и
+      // покупает гость (цена, название, описание, эмодзи, фото), у ОДОБРЕННОГО
+      // купона обязана это сделать: иначе одобренный «Капучино за 120» тихо
+      // становился «чем угодно за 1» мимо модерации.
       allow update: if isAdmin()
                     || (ownsExisting()
                         && request.resource.data.ownerID == resource.data.ownerID
                         && request.resource.data.venueID == resource.data.venueID
                         && request.resource.data.get('soldCount', 0) == resource.data.get('soldCount', 0)
-                        && request.resource.data.get('status', 'pending') == resource.data.get('status', 'pending'));
+                        && urlFieldChangeOK('imageURL')
+                        && (request.resource.data.get('status', 'pending') == resource.data.get('status', 'pending')
+                            || request.resource.data.get('status', 'pending') == 'pending')
+                        && (resource.data.get('status', 'pending') != 'approved'
+                            || !request.resource.data.diff(resource.data).affectedKeys()
+                                  .hasAny(['cost', 'title', 'details', 'emoji', 'imageURL'])
+                            || request.resource.data.get('status', 'pending') == 'pending'));
       allow delete: if isAdmin() || ownsExisting();
     }
 
@@ -216,6 +379,17 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // ── Токены списания баллов (QR AYANT-RDT) и троттлинг пушей ──────────
+    // Пишут и читают только Cloud Functions (issueRedeemToken /
+    // redeemVenuePoints, notifyOnNewDeal / notifyHostOnReview). Токен — это
+    // право списать чужие баллы: клиенту ни прочитать, ни подделать его нельзя.
+    match /redeemTokens/{token} {
+      allow read, write: if false;
+    }
+    match /pushThrottle/{id} {
+      allow read, write: if false;
+    }
+
     // ── Служебные документы (ops) ────────────────────────────────────────
     // Пульсы задач и алерты целостности баллов (reconcileVenuePoints).
     // Пишет только Cloud Function (admin SDK обходит правила); читает админ —
@@ -226,8 +400,17 @@ service cloud.firestore {
     }
 
     // ── FCM-токены пользователей ─────────────────────────────────────────
+    // Токен можно записать только на себя: раньше любой вошедший мог
+    // записать документ с чужим uid и получать адресные пуши этого человека
+    // (сгорание баллов с балансом, ответы на отзывы). Документ без uid
+    // (аудит запуска 2026-10-01) больше не создаётся: такие записи были
+    // анонимным мусором, который никто не мог ни адресовать, ни удалить.
+    // Обновление старого документа без uid — только с проставлением своего.
+    // Удалить — свой или ничей (выход из аккаунта удаляет свой).
     match /userTokens/{token} {
-      allow write: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.get('uid', '') == uid();
+      allow update: if isSignedIn() && request.resource.data.get('uid', '') == uid();
+      allow delete: if isSignedIn() && (!('uid' in resource.data) || resource.data.uid == uid());
       allow read: if false;
     }
 
@@ -243,13 +426,25 @@ service cloud.firestore {
         && request.resource.data.userID == uid()
         && request.resource.data.dealID is string
         && request.resource.data.venueID is string
-        && id == uid() + '_' + request.resource.data.dealID;
+        && id == uid() + '_' + request.resource.data.dealID
+        // Счётчик погашений — витрина заведения: погашение засчитывается
+        // только для настоящей акции этого заведения (раньше подходила любая
+        // строка, и любой вошедший накручивал счётчик чужому заведению).
+        && exists(/databases/$(database)/documents/deals/$(request.resource.data.dealID))
+        && get(/databases/$(database)/documents/deals/$(request.resource.data.dealID)).data.venueID
+             == request.resource.data.venueID;
       allow read, update, delete: if false;
     }
 
     // ── Рефералы ─────────────────────────────────────────────────────────
+    // Только настоящий аккаунт: анонимный вход доступен любому скрипту, и
+    // реферал с него был бы бонусами без человека. rewardReferral проверяет то
+    // же самое на сервере (и новизну аккаунта) — правило лишь отсекает раньше.
     match /referrals/{inviteeID} {
-      allow create: if isSignedIn() && uid() == inviteeID;
+      allow create: if isSignedIn() && uid() == inviteeID
+                    && request.auth.token.firebase.sign_in_provider != 'anonymous'
+                    && request.resource.data.referrerID is string
+                    && request.resource.data.referrerID != uid();
       allow read, update, delete: if false;
     }
 

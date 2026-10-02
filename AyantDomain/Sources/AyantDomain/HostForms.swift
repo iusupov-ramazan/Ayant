@@ -186,15 +186,18 @@ public enum HostForms {
         /// `nil` — выпуск без ограничения.
         public var stock: Int?
         public var expiresAt: Date?
+        /// Лимит в одни руки; 0 — без лимита.
+        public var perGuestLimit: Int
         public var isPaused: Bool
 
         public init(venueID: String, venueName: String, title: String, details: String = "",
                     emoji: String = "🎁", imageURL: String = "", cost: Int,
-                    stock: Int? = nil, expiresAt: Date? = nil, isPaused: Bool = false) {
+                    stock: Int? = nil, expiresAt: Date? = nil, perGuestLimit: Int = 0,
+                    isPaused: Bool = false) {
             self.venueID = venueID; self.venueName = venueName
             self.title = title; self.details = details; self.emoji = emoji
             self.imageURL = imageURL; self.cost = cost; self.stock = stock
-            self.expiresAt = expiresAt; self.isPaused = isPaused
+            self.expiresAt = expiresAt; self.perGuestLimit = perGuestLimit; self.isPaused = isPaused
         }
     }
 
@@ -205,13 +208,20 @@ public enum HostForms {
     /// от объявления.
     public static let minCouponCost = 1
 
+    /// Верх лимита в одни руки в форме: больше — это уже «без лимита».
+    public static let maxPerGuestLimit = 99
+
     /// Купон из формы. Правки поверх существующего не трогают то, чем
     /// распоряжается не заведение.
     ///
     /// Три правила, которые легко нарушить и трудно заметить:
     ///
-    /// 1. `status` сохраняется. Иначе каждая правка текста возвращала бы
-    ///    одобренный купон на модерацию — как с заведением (`HostForms.venue`).
+    /// 1. `status` сохраняется — кроме одного случая: у ОДОБРЕННОГО купона
+    ///    изменилось то, что проверяла модерация (цена, название, условия,
+    ///    эмодзи, фото). Тогда он возвращается на модерацию (`pending`) — то же
+    ///    требует `firestore.rules`, и запись с прежним `approved` сервер
+    ///    отклонил бы. Остаток, срок, лимит в одни руки и пауза модерацию не
+    ///    трогают: это решения заведения, а не содержание купона.
     /// 2. `soldCount` сохраняется: его считает сервер при покупке, и запись с
     ///    клиента затёрла бы чужие покупки.
     /// 3. Остаток нельзя опустить НИЖЕ проданного. Иначе у купленных купонов
@@ -220,7 +230,7 @@ public enum HostForms {
                                    fields: CouponFields,
                                    newID: @autoclosure () -> String) -> CouponOffer {
         let sold = existing?.soldCount ?? 0
-        return CouponOffer(
+        var offer = CouponOffer(
             id: existing?.id ?? newID(),
             venueID: fields.venueID,
             venueName: trim(fields.venueName),
@@ -232,9 +242,42 @@ public enum HostForms {
             stock: fields.stock.map { max($0, sold) },
             soldCount: sold,
             expiresAt: fields.expiresAt,
+            perGuestLimit: min(max(0, fields.perGuestLimit), maxPerGuestLimit),
             statusRaw: existing?.statusRaw ?? ModerationStatus.pending.rawValue,
             isPaused: fields.isPaused,
             citySlug: existing?.citySlug ?? City.bishkek.id)
+        if let existing, existing.status == .approved,
+           couponNeedsReview(old: existing, new: offer) {
+            offer.statusRaw = ModerationStatus.pending.rawValue
+        }
+        return offer
+    }
+
+    /// Какой `status` отправить вместе с записью купона; `nil` — не отправлять
+    /// (merge оставит серверное значение).
+    ///
+    /// `server` — документ, каким он лежит на сервере СЕЙЧАС (`nil` — его нет).
+    /// Решаем по нему, а не по кэшу кабинета: `couponOffer` берёт статус из
+    /// кэша, и кэшированный `pending` у купона, который админ одобрил после
+    /// последней синхронизации, при каждом сохранении (даже паузы или остатка)
+    /// молча снимал одобрение. Поэтому статус уходит только в двух случаях:
+    /// купона ещё нет (создание — всегда `pending`) или одобренный на сервере
+    /// купон изменён в том, что видела модерация (возврат на `pending`, как
+    /// требует `firestore.rules`).
+    public static func couponStatusToWrite(server: CouponOffer?, edited: CouponOffer) -> String? {
+        guard let server else { return ModerationStatus.pending.rawValue }
+        if server.status == .approved, couponNeedsReview(old: server, new: edited) {
+            return ModerationStatus.pending.rawValue
+        }
+        return nil
+    }
+
+    /// Изменилось ли то, что проверяет модерация. Тот же список полей, что в
+    /// правиле `couponOffers` в `firestore.rules`: cost, title, details, emoji,
+    /// imageURL. Разойдутся списки — сервер начнёт отклонять сохранения.
+    public static func couponNeedsReview(old: CouponOffer, new: CouponOffer) -> Bool {
+        old.cost != new.cost || old.title != new.title || old.details != new.details
+            || old.emoji != new.emoji || old.imageURL != new.imageURL
     }
 
     // MARK: Баллы САН
@@ -297,7 +340,9 @@ public enum HostForms {
     ///  • диапазоны сортируются по `maxAmount`, дубли по сумме отбрасываются
     ///    (остаётся первый) — сервер выбирает диапазон по индексу, порядок важен;
     ///  • названия наград тримятся, безымянные награды удаляются, стоимость ≥ 1,
-    ///    для «money» коэффициент ≥ 1 (иначе балл стоил бы дешевле сома);
+    ///    для «money» коэффициент ≥ 1 (иначе балл стоил бы дешевле сома), а в
+    ///    режиме cashback — не выше `20 / процент` (`PointsMath.effectiveRatio`):
+    ///    иначе «20% баллами + 1 балл = 5 сом» давали бы скидку 100%;
     ///  • срок сгорания 1…24 мес, пауза 0…1440 мин.
     public static func applyPoints(to dto: HostVenueDTO, fields: PointsFields) -> HostVenueDTO {
         var out = dto
@@ -327,7 +372,9 @@ public enum HostForms {
             reward.type = r.type == "money" ? "money" : "item"
             reward.cost = max(r.cost, 1)
             if reward.type == "money" {
-                reward.ratio = r.ratio.isFinite ? max(r.ratio, 1) : 1
+                let ratio = r.ratio.isFinite ? max(r.ratio, 1) : 1
+                reward.ratio = PointsMath.effectiveRatio(ratio, pointsMode: out.pointsMode,
+                                                         cashbackPercent: out.cashbackPercent)
             }
             return reward
         }
@@ -339,9 +386,16 @@ public enum HostForms {
     }
 
     /// Акция из формы. При правке сохраняется `id` и исходный `startDate`.
+    ///
+    /// - Parameters:
+    ///   - pickerCalendar: календарь, в котором хозяин выбрал дату окончания
+    ///     (`DatePicker` показывает день в поясе телефона). В тесте — фиксированный.
+    ///   - citySlug: город заведения — дата окончания закрывается в ЕГО поясе.
     public static func deal(existing: HostDealDTO?,
                             fields: DealFields,
                             now: Date,
+                            pickerCalendar: Calendar = .current,
+                            citySlug: String = City.bishkek.id,
                             newID: @autoclosure () -> String) -> HostDealDTO {
         HostDealDTO(
             id: existing?.id ?? newID(),
@@ -353,8 +407,12 @@ public enum HostForms {
             newPrice: fields.newPrice,
             discountPercent: fields.discountPercent,
             startDate: existing?.startDate ?? now,
-            endDate: fields.endDate,
-            statusRaw: (fields.isDraft ? DealStatus.draft : .active).rawValue,
+            // Нетронутую при правке дату не пересчитываем: иначе на телефоне в
+            // поясе восточнее города каждое сохранение сдвигало бы её на день.
+            endDate: fields.endDate.map { end in
+                end == existing?.endDate ? end : endOfDay(end, pickedIn: pickerCalendar, citySlug: citySlug)
+            },
+            statusRaw: dealStatus(existing: existing, isDraft: fields.isDraft).rawValue,
             imageURL: trim(fields.imageURLs.first ?? ""),
             imageURLs: fields.imageURLs,
             // Пустые строки не сохраняем: пустой пункт условий — это буллет
@@ -368,5 +426,36 @@ public enum HostForms {
             locationIDs: fields.locationIDs.reduce(into: [String]()) { ids, id in
                 if !id.isEmpty && !ids.contains(id) { ids.append(id) }
             })
+    }
+
+    /// Статус акции после сохранения формы.
+    ///
+    /// Форма знает только переключатель «черновик». Раньше любое сохранение без
+    /// него ставило `active` — правка опечатки в акции на паузе молча
+    /// запускала её снова. Теперь:
+    ///  • «черновик» включён → `draft`;
+    ///  • был черновик, переключатель выключили → `active` (публикация);
+    ///  • иначе статус прежний (`paused` остаётся паузой); `expired` и новая
+    ///    акция → `active` — продлённая акция снова идёт.
+    public static func dealStatus(existing: HostDealDTO?, isDraft: Bool) -> DealStatus {
+        if isDraft { return .draft }
+        switch existing?.status {
+        case .paused?: return .paused
+        default: return .active
+        }
+    }
+
+    /// Конец выбранного дня (23:59:59) в поясе города.
+    ///
+    /// `DatePicker(displayedComponents: .date)` отдаёт выбранный день со
+    /// ВРЕМЕНЕМ открытия формы: акция «до 5 октября», созданная в 14:20,
+    /// заканчивалась 5-го в 14:20 — посреди дня, на котором гость её видел.
+    /// День берём в календаре выбора (телефон), а закрываем в поясе города.
+    public static func endOfDay(_ date: Date, pickedIn picker: Calendar, citySlug: String) -> Date {
+        let day = picker.dateComponents([.year, .month, .day], from: date)
+        var end = DateComponents()
+        end.year = day.year; end.month = day.month; end.day = day.day
+        end.hour = 23; end.minute = 59; end.second = 59
+        return City.calendar(forSlug: citySlug).date(from: end) ?? date
     }
 }

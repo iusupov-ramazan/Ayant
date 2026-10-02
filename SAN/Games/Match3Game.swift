@@ -27,6 +27,10 @@ struct Match3GameView: View {
     /// Сколько бонусов РЕАЛЬНО начислил `BonusEngine`: дневной лимит может
     /// урезать до нуля, и врать «+N» нельзя.
     @State private var awarded = 0
+    /// Курс на этот заход в игру (Remote Config): снимок при открытии, чтобы
+    /// смена курса не пересчитала уже предъявленные совпадения.
+    @State private var partyRates: GameRates?
+    private var rates: GameRates { partyRates ?? bonus.gameRates }
 
     // Украшения, живущие только в вью.
     // Искры и проезжающий по полю блик убраны: на поле из 49 камней они
@@ -56,6 +60,10 @@ struct Match3GameView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .sanScreenBackground()
             .navigationTitle("Diamond")
+            .bonusPausedNotice(.diamond)
+            // Партия бесконечная — «сыграл» засчитываем при выходе из игры.
+            .onDisappear { AnalyticsLog.log(.gamePlayed, ["game": BonusGame.diamond.rawValue]) }
+            .onAppear { if partyRates == nil { partyRates = bonus.gameRates } }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -149,15 +157,17 @@ struct Match3GameView: View {
 
     /// Начисляет бонусы за НОВЫЕ совпадения — по одному за каждые
     /// `Match3.matchesPerBonus`. Партия бесконечная, поэтому начисление идёт
-    /// через дневной потолок (`GameEconomy.endlessDailyBonusCap`): без него
+    /// через дневной лимит (`BonusCaps`, по умолчанию 30, в Remote Config —
+    /// `ios_bonus_diamond_daily_cap`): без него
     /// игра превращалась бы в станок для бонусов.
     private func award() {
-        let earned = state.bonuses
+        let earned = state.bonuses(matchesPerBonus: rates.matchesPerBonus)
         guard earned > credited else { return }
-        let granted = bonus.awardEndlessGameplay(earned - credited, source: "game:diamond")
+        let granted = bonus.awardGameplay(earned - credited, source: BonusGame.diamond.source)
         credited = earned
         guard granted > 0 else { return }
         withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) { awarded += granted }
+        announceBonus(awarded)
         SanHaptics.success()
     }
 
@@ -215,11 +225,12 @@ struct Match3GameView: View {
                         .contentTransition(.numericText())
                     // Потолок дня виден заранее: упереться в невидимый лимит —
                     // значит решить, что игра сломалась и перестала платить.
-                    let left = bonus.remainingEndlessToday()
-                    Text(left > 0 ? "бонусов сегодня: ещё \(left)" : "бонусы на сегодня собраны")
-                        .font(.golos(12.5, .semibold))
-                        .foregroundStyle(left > 0 ? Color.sanInkSoft : Color(hex: 0xE8556B))
-                        .contentTransition(.numericText())
+                    if let left = bonus.remainingToday(.diamond) {
+                        Text(left > 0 ? "бонусов сегодня: ещё \(left)" : "бонусы на сегодня собраны")
+                            .font(.golos(12.5, .semibold))
+                            .foregroundStyle(left > 0 ? Color.sanInkSoft : Color(hex: 0xE8556B))
+                            .contentTransition(.numericText())
+                    }
                 }
             }
             progressBar
@@ -350,8 +361,12 @@ struct Match3GameView: View {
 
     private var hint: some View {
         VStack(spacing: 2) {
-            Text("Меняй соседние камни местами: 4 в ряд — полоска, 5 — бомба")
-            Text("\(Match3.matchesPerBonus) совпадений = 1 бонус · до \(GameEconomy.endlessDailyBonusCap) в день")
+            Text("Меняйте соседние камни местами: 4 в ряд — полоска, 5 — бомба")
+            if let cap = bonus.bonusDailyCaps[.diamond] {
+                Text("\(rates.matchesPerBonus) совпадений = 1 бонус · до \(cap) в день")
+            } else {
+                Text("\(rates.matchesPerBonus) совпадений = 1 бонус")
+            }
         }
         .font(.caption)
         .multilineTextAlignment(.center)

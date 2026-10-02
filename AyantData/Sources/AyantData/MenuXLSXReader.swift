@@ -34,10 +34,19 @@ public enum MenuXLSXReader {
 
     // MARK: ZIP
 
+    /// Потолок распакованного размера одного файла книги. Заголовок ZIP
+    /// объявляет размер сам, и «ZIP-бомба» на 30 КБ просила бы `Data(count:)`
+    /// на гигабайты — приложение убивала система. Меню столько не весит.
+    static let maxUncompressedBytes = 50 * 1024 * 1024
+
     struct ZipArchive {
         struct Entry { let method: UInt16; let compressedSize: Int; let size: Int; let localOffset: Int }
         let data: Data
         var entries: [String: Entry] = [:]
+        /// ZIP64 — маркер 0xFFFFFFFF в 32-битных полях (настоящие размеры —
+        /// в extra-поле, которое мы не читаем). Для меню не бывает; принять
+        /// маркер за размер — читать 4 ГБ.
+        static let zip64Marker: UInt32 = 0xFFFF_FFFF
 
         init(_ data: Data) throws {
             self.data = data
@@ -54,12 +63,19 @@ public enum MenuXLSXReader {
             for _ in 0..<count {
                 guard p + 46 <= bytes.count, Self.u32(bytes, p) == 0x0201_4b50 else { break }
                 let method = Self.u16(bytes, p + 10)
-                let compressed = Int(Self.u32(bytes, p + 20))
-                let size = Int(Self.u32(bytes, p + 24))
+                let rawCompressed = Self.u32(bytes, p + 20)
+                let rawSize = Self.u32(bytes, p + 24)
+                let rawOffset = Self.u32(bytes, p + 42)
+                if rawCompressed == Self.zip64Marker || rawSize == Self.zip64Marker
+                    || rawOffset == Self.zip64Marker {
+                    throw AppError.server(code: "not_xlsx")
+                }
+                let compressed = Int(rawCompressed)
+                let size = Int(rawSize)
                 let nameLength = Int(Self.u16(bytes, p + 28))
                 let extraLength = Int(Self.u16(bytes, p + 30))
                 let commentLength = Int(Self.u16(bytes, p + 32))
-                let offset = Int(Self.u32(bytes, p + 42))
+                let offset = Int(rawOffset)
                 guard p + 46 + nameLength <= bytes.count else { break }
                 let name = String(decoding: bytes[(p + 46)..<(p + 46 + nameLength)], as: UTF8.self)
                 entries[name] = Entry(method: method, compressedSize: compressed, size: size, localOffset: offset)
@@ -69,7 +85,7 @@ public enum MenuXLSXReader {
         }
 
         func file(_ name: String) -> Data? {
-            guard let e = entries[name] else { return nil }
+            guard let e = entries[name], e.size <= MenuXLSXReader.maxUncompressedBytes else { return nil }
             let bytes = data
             let base = bytes.startIndex
             guard e.localOffset + 30 <= bytes.count else { return nil }
@@ -79,7 +95,7 @@ public enum MenuXLSXReader {
             guard start + e.compressedSize <= bytes.count else { return nil }
             let payload = bytes[(base + start)..<(base + start + e.compressedSize)]
             switch e.method {
-            case 0: return Data(payload)
+            case 0: return e.compressedSize <= MenuXLSXReader.maxUncompressedBytes ? Data(payload) : nil
             case 8: return Self.inflate(Data(payload), size: e.size)
             default: return nil
             }
@@ -88,12 +104,15 @@ public enum MenuXLSXReader {
         /// Сырой deflate (без заголовка zlib) — `COMPRESSION_ZLIB` в Compression.
         static func inflate(_ input: Data, size: Int) -> Data? {
             guard size > 0 else { return Data() }
+            // Пустой поток при ненулевом размере — битый файл; без этой
+            // проверки `baseAddress!` пустого буфера = падение.
+            guard !input.isEmpty, size <= MenuXLSXReader.maxUncompressedBytes else { return nil }
             var output = Data(count: size)
-            let written = output.withUnsafeMutableBytes { dst in
-                input.withUnsafeBytes { src in
-                    compression_decode_buffer(dst.bindMemory(to: UInt8.self).baseAddress!, size,
-                                              src.bindMemory(to: UInt8.self).baseAddress!, input.count,
-                                              nil, COMPRESSION_ZLIB)
+            let written = output.withUnsafeMutableBytes { dst -> Int in
+                input.withUnsafeBytes { src -> Int in
+                    guard let d = dst.bindMemory(to: UInt8.self).baseAddress,
+                          let s = src.bindMemory(to: UInt8.self).baseAddress else { return 0 }
+                    return compression_decode_buffer(d, size, s, input.count, nil, COMPRESSION_ZLIB)
                 }
             }
             return written == size ? output : nil
@@ -220,12 +239,18 @@ public enum MenuXLSXReader {
             default: break
             }
         }
-        /// «AB12» → 27 (с нуля).
+        /// Последний столбец Excel — XFD (16384). Длинный «адрес» из битого
+        /// файла иначе переполнял `Int` (падение) или раздувал строку до
+        /// миллионов пустых ячеек.
+        static let maxColumns = 16_384
+
+        /// «AB12» → 27 (с нуля), не больше `maxColumns - 1`.
         static func columnIndex(_ ref: String) -> Int {
             var n = 0
             for ch in ref.uppercased() {
                 guard let a = ch.asciiValue, a >= 65, a <= 90 else { break }
                 n = n * 26 + Int(a - 64)
+                if n > maxColumns { return maxColumns - 1 }
             }
             return max(0, n - 1)
         }

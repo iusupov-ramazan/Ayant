@@ -22,8 +22,10 @@ struct HomeFeedView: View {
     @State private var shareItem: DealShare?
     private static let pageSize = 8
 
-    private var items: [FeedItem] { feedStore.items(category: category) }
-    private var feed: [Deal] { feedStore.deals(category: category) }
+    /// Ранжирование — не бесплатное: считаем ленту ОДИН раз за проход `body`
+    /// (в `feedContent`) и передаём дальше, а не через вычисляемые свойства,
+    /// которые раньше дёргались трижды за кадр (prefix, count, пагинация).
+    private func rankedItems() -> [FeedItem] { feedStore.items(category: category) }
 
     /// Якорь самого верха экрана — к нему возвращаемся при смене категории.
     ///
@@ -73,7 +75,6 @@ struct HomeFeedView: View {
             // сломалось. Без анимации: фильтр должен срабатывать мгновенно.
             .onChange(of: category) { _, _ in
                 visibleCount = Self.pageSize
-                store.logFeedImpression(category: category, userCoord: location.lastLocation)
                 // Прокрутка — СЛЕДУЮЩИМ проходом, а не сразу: в момент
                 // `onChange` лента ещё старая, и `scrollTo` целился бы по
                 //высоте, которой уже нет. Отсюда и оставалась пустота.
@@ -81,7 +82,13 @@ struct HomeFeedView: View {
                     proxy.scrollTo(Self.feedTopID, anchor: .top)
                 }
             }
-            .onAppear {
+            // Показ ленты логируется НЕ в onAppear: там он ранжировал каталог
+            // синхронно до первого кадра (и на холодном старте — по пустому
+            // каталогу, то есть впустую). Здесь — после кадра, заново при смене
+            // категории и когда каталог догрузился.
+            .task(id: "\(category?.rawValue ?? "*")|\(feedStore.isLoading)") {
+                await Task.yield()
+                guard !feedStore.isLoading else { return }
                 store.logFeedImpression(category: category, userCoord: location.lastLocation)
             }
             .task { await refreshNotificationState() }
@@ -238,7 +245,14 @@ struct HomeFeedView: View {
             loadFailure
         } else if !feedStore.hasVenuesInCity {
             emptyCity
-        } else if feed.isEmpty {
+        } else {
+            rankedFeed(rankedItems())
+        }
+    }
+
+    @ViewBuilder
+    private func rankedFeed(_ items: [FeedItem]) -> some View {
+        if items.isEmpty {
             emptyCategory
         } else {
             // Категория больше НЕ меняет раскладку. Плитки в две колонки
@@ -253,7 +267,7 @@ struct HomeFeedView: View {
                         .sanRise(index, stagger: SanTiming.feedRise.stagger,
                                  duration: SanTiming.feedRise.duration,
                                  cap: SanTiming.feedStaggerCap)
-                        .onAppear { loadMoreIfNeeded(item, in: shown) }
+                        .onAppear { loadMoreIfNeeded(item, in: shown, total: items.count) }
                 }
                 if visibleCount < items.count {
                     ProgressView().padding(.vertical, 16)
@@ -309,9 +323,9 @@ struct HomeFeedView: View {
         store.toggleSave(venue)
     }
 
-    private func loadMoreIfNeeded(_ item: FeedItem, in shown: [FeedItem]) {
-        guard item.id == shown.last?.id, visibleCount < items.count else { return }
-        visibleCount = min(visibleCount + Self.pageSize, items.count)
+    private func loadMoreIfNeeded(_ item: FeedItem, in shown: [FeedItem], total: Int) {
+        guard item.id == shown.last?.id, visibleCount < total else { return }
+        visibleCount = min(visibleCount + Self.pageSize, total)
     }
 
     // MARK: Заведения
@@ -381,25 +395,38 @@ struct HomeFeedView: View {
 
     private var emptyCity: some View {
         ContentUnavailableView {
-            Label("Пока нет заведений в \(store.selectedCity.name)", systemImage: "storefront")
+            Label("Пока нет заведений в \(LS(store.selectedCity.name))", systemImage: "storefront")
         } description: {
             Text("Знаешь хорошее место? Помоги нам — добавь заведение.")
         }
         .padding(.top, 40)
     }
 
+    /// Лента пуста при выбранной категории — предлагаем сбросить фильтр.
+    /// Без категории (заведения есть, акций нет) сбрасывать нечего: раньше
+    /// здесь было «В категории «»…» и кнопка, которая ничего не делала.
+    @ViewBuilder
     private var emptyCategory: some View {
-        VStack(spacing: 12) {
-            ContentUnavailableView {
-                Label("Нет предложений в категории", systemImage: "tray")
-            } description: {
-                Text("В категории «\(category?.rawValue ?? "")» в городе \(store.selectedCity.name) пока нет акций.")
+        if let category {
+            VStack(spacing: 12) {
+                ContentUnavailableView {
+                    Label("Нет предложений в категории", systemImage: "tray")
+                } description: {
+                    Text("В категории «\(LS(category.rawValue))» в городе \(LS(store.selectedCity.name)) пока нет акций.")
+                }
+                Button("Сбросить фильтр") { self.category = nil }
+                    .buttonStyle(.bordered)
+                    .tint(.sanAccent)
             }
-            Button("Сбросить фильтр") { category = nil }
-                .buttonStyle(.bordered)
-                .tint(.sanAccent)
+            .padding(.top, 40)
+        } else {
+            ContentUnavailableView {
+                Label("Пока нет акций", systemImage: "tray")
+            } description: {
+                Text("В городе \(LS(store.selectedCity.name)) пока нет акций — загляните позже.")
+            }
+            .padding(.top, 40)
         }
-        .padding(.top, 40)
     }
 }
 
@@ -423,7 +450,8 @@ struct FeedVenueTile: View {
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
-            VenuePhoto(urlString: venue.imageURL, gradient: venue.gradientColors)
+            VenuePhoto(urlString: venue.imageURL, gradient: venue.gradientColors,
+                       points: Self.size.width)
                 .frame(width: Self.size.width, height: Self.size.height)
                 .clipped()
 

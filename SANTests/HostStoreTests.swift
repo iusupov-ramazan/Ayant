@@ -22,13 +22,22 @@ final class HostStoreTests: XCTestCase {
         repo = FakeHostRepository()
         instagram = FakeInstagramService()
         owner = "test_\(UUID().uuidString.prefix(8))"
+        // Легаси-кэш без владельца (`san.host.venues` и т. п.) стор УСЫНОВЛЯЕТ
+        // при первом входе и дозаливает на сервер — это нужная миграция, но в
+        // тестах такой кэш оставляют другие классы (стор без `configure`) или
+        // ручной запуск в симуляторе. Тогда «лишние» сохранения в `repo`
+        // приходили не из проверяемого сценария, и тест падал через раз.
+        for base in Self.cacheBases { UserDefaults.standard.removeObject(forKey: base) }
     }
+
+    private static let cacheBases = ["san.host.profile", "san.host.venues", "san.host.deals",
+                                     "san.host.campaigns", "san.host.couponOffers",
+                                     "san.host.knownVenues", "san.host.knownDeals"]
 
     override func tearDown() {
         // Стор пишет в UserDefaults.standard под ключами владельца — чистим.
         let d = UserDefaults.standard
-        for base in ["san.host.profile", "san.host.venues", "san.host.deals", "san.host.campaigns",
-                     "san.host.knownVenues", "san.host.knownDeals"] {
+        for base in Self.cacheBases {
             d.removeObject(forKey: "\(base).\(owner)")
         }
         super.tearDown()
@@ -99,7 +108,10 @@ final class HostStoreTests: XCTestCase {
         try? await Task.sleep(nanoseconds: 100_000_000)
 
         XCTAssertEqual(store.state.venues, [], "известное серверу и удалённое там — уходит и локально")
-        XCTAssertTrue(repo.savedVenues.isEmpty, "и не заливается обратно")
+        // Только про это заведение: легаси-кэш симулятора без владельца стор
+        // законно усыновляет и дозаливает (миграция), и `UserDefaults` не
+        // всегда даёт его стереть из теста — те сохранения к сценарию не относятся.
+        XCTAssertFalse(repo.savedVenues.contains { $0.id == "hv_known" }, "и не заливается обратно")
     }
 
     func testFailedRemoteSaveIsVisibleAndRetriedOnNextSync() async throws {
@@ -175,6 +187,86 @@ final class HostStoreTests: XCTestCase {
         XCTAssertEqual(store.state.couponOffers[0].remaining, 38)
         await waitUntil(self.repo.savedCouponOffers.count == 2)
         XCTAssertEqual(repo.savedCouponOffers.last?.id, localID, "неотправленный купон дозаливается")
+    }
+
+    /// Форма купона ждёт ответа сервера. Отказ правил (например, правка
+    /// одобренного купона, которую сервер требует вернуть на модерацию) —
+    /// не «сохранено»: форма получает ошибку, кабинет показывает плашку, а
+    /// локальная копия откатывается к той, что лежит на сервере.
+    func testDeniedCouponSaveIsReportedAndRolledBack() async {
+        let store = makeStore()
+        let saved = await store.saveCouponOffer(existing: nil, fields: couponFields(cost: 500))
+        XCTAssertNil(saved)
+        let original = store.state.couponOffers[0]
+
+        repo.saveError = NSError(domain: "FIRFirestoreErrorDomain", code: 7)   // permission denied
+        let error = await store.saveCouponOffer(existing: original, fields: couponFields(cost: 900))
+
+        XCTAssertEqual(error, .permissionDenied, "форма узнаёт об отказе и не закрывается")
+        XCTAssertEqual(store.state.couponOffers, [original], "правка, которую сервер не принял, не висит как сохранённая")
+        XCTAssertEqual(store.state.sync, .failed(.server(code: HostStore.couponSaveDenied)),
+                       "плашка говорит про купон, а не про права на заведение")
+    }
+
+    /// Новый купон, который сервер отверг, не остаётся в кабинете призраком.
+    func testDeniedNewCouponIsRemoved() async {
+        let store = makeStore()
+        repo.saveError = NSError(domain: "FIRFirestoreErrorDomain", code: 7)
+        let error = await store.saveCouponOffer(existing: nil, fields: couponFields())
+        XCTAssertEqual(error, .permissionDenied)
+        XCTAssertTrue(store.state.couponOffers.isEmpty)
+    }
+
+    /// Без сети купон остаётся на устройстве (новый дозальёт `sync()`), но
+    /// форма всё равно узнаёт, что сервер его не получил.
+    func testCouponSaveWithoutNetworkKeepsLocalCopyAndReportsIt() async {
+        let store = makeStore()
+        repo.saveError = NSError(domain: NSURLErrorDomain, code: NSURLErrorNotConnectedToInternet)
+        let error = await store.saveCouponOffer(existing: nil, fields: couponFields())
+        XCTAssertEqual(error, .network)
+        XCTAssertEqual(store.state.couponOffers.count, 1)
+        XCTAssertEqual(store.state.sync, .failed(.network))
+    }
+
+    func testDeletedCouponGoesToServer() async {
+        let store = makeStore()
+        _ = await store.saveCouponOffer(existing: nil, fields: couponFields())
+        let id = store.state.couponOffers[0].id
+
+        let error = await store.deleteCouponOffer(id: id)
+
+        XCTAssertNil(error)
+        XCTAssertTrue(store.state.couponOffers.isEmpty)
+        XCTAssertEqual(repo.deletedCouponOfferIDs, [id])
+    }
+
+    /// Раньше удаление глоталось `try?`: купон пропадал из кабинета, а гости
+    /// продолжали его покупать. Теперь он возвращается и ошибка видна.
+    func testFailedCouponDeleteRestoresItAndIsVisible() async {
+        let failing = CouponDeleteFailingRepository()
+        let store = HostStore(repo: failing, instagram: instagram,
+                              clock: FixedClock(Date(timeIntervalSince1970: 1_700_000_000)))
+        store.send(.configure(ownerID: owner))
+        _ = await store.saveCouponOffer(existing: nil, fields: couponFields())
+        let offer = store.state.couponOffers[0]
+
+        let error = await store.deleteCouponOffer(id: offer.id)
+
+        XCTAssertEqual(error, .permissionDenied)
+        XCTAssertEqual(store.state.couponOffers, [offer], "купон снова в списке — он всё ещё продаётся")
+        XCTAssertEqual(store.state.sync, .failed(.server(code: HostStore.couponDeleteDenied)))
+    }
+
+    /// `boostedUntil` клиент писать не вправе (правила), и стор больше не
+    /// делает вид, что буст включён: ни кэш, ни сервер не трогаются.
+    func testBoostVenueDoesNotWriteBoostedUntil() async throws {
+        try seedCache(venues: [venue("hv_1")])
+        let store = makeStore()
+        store.send(.boostVenue(id: "hv_1", until: Date(timeIntervalSince1970: 1_900_000_000)))
+        try? await Task.sleep(nanoseconds: 100_000_000)
+
+        XCTAssertNil(store.state.venues.first?.boostedUntil)
+        XCTAssertTrue(repo.savedVenues.isEmpty)
     }
 
     func testCouponsAreListedPerVenue() {
@@ -277,4 +369,26 @@ final class HostStoreTests: XCTestCase {
 
         XCTAssertEqual(store.state.venues.first?.name, "Имя из админки", "сервер — источник истины")
     }
+}
+
+/// Кабинет, где сервер отказывает в удалении купона (правила). Остальное —
+/// пустые заглушки: тест про удаление.
+@MainActor
+private final class CouponDeleteFailingRepository: HostRepository {
+    var offers: [CouponOffer] = []
+    func saveVenue(_ dto: HostVenueDTO, ownerID: String) async throws {}
+    func deleteVenue(id: String) async throws {}
+    func saveDeal(_ dto: HostDealDTO, ownerID: String) async throws {}
+    func deleteDeal(id: String) async throws {}
+    func fetchOwnedVenues(ownerID: String) async throws -> [HostVenueDTO] { [] }
+    func fetchOwnedDeals(ownerID: String) async throws -> [HostDealDTO] { [] }
+    func saveCouponOffer(_ offer: CouponOffer, ownerID: String) async throws { offers.append(offer) }
+    func deleteCouponOffer(id: String) async throws {
+        throw NSError(domain: "FIRFirestoreErrorDomain", code: 7)
+    }
+    func fetchOwnedCouponOffers(ownerID: String) async throws -> [CouponOffer] { offers }
+    func saveProfile(_ profile: HostProfile, ownerID: String) async throws {}
+    func fetchProfile(ownerID: String) async throws -> HostProfile? { nil }
+    func queuePushCampaign(headline: String, body: String, city: String,
+                           category: String?, venueID: String, dealID: String?, ownerID: String) async throws {}
 }

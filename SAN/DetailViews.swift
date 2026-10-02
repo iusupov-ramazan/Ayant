@@ -241,6 +241,8 @@ struct VenueDetailView: View {
     @State private var hoursExpanded = false
     @State private var photoViewerIndex: Int?
     @State private var reportingReview: Review?
+    /// Отзыв, автора которого пользователь собирается скрыть (подтверждение).
+    @State private var blockingReview: Review?
     /// Показываем подтверждение: молчаливая жалоба неотличима от сломанной кнопки.
     @State private var reportSent = false
     @State private var showGuestPrompt = false
@@ -328,7 +330,10 @@ struct VenueDetailView: View {
             get: { photoViewerIndex.map { IndexBox(value: $0) } },
             set: { photoViewerIndex = $0?.value }
         )) { box in
-            PhotoViewerView(photos: galleryPhotos, startIndex: box.value)
+            // Жалоба на фото уходит в очередь модерации (раньше — никуда).
+            PhotoViewerView(photos: galleryPhotos, startIndex: box.value) { url, reason in
+                store.reportPhoto(url, venueID: venue.id, reason: reason)
+            }
         }
     }
 
@@ -436,7 +441,7 @@ struct VenueDetailView: View {
                 Text(agg.rating.sanRatingText)
                     .font(.golos(13, .bold)).foregroundStyle(Color.sanInk)
             }
-            Text("· \(agg.count) \(Self.reviewsWord(agg.count))")
+            Text("· \(agg.count) отзывов")
                 .font(.golos(13, .semibold)).foregroundStyle(Color.sanInkSoft)
             if venue.isVerified {
                 Image(systemName: "checkmark.seal.fill")
@@ -472,7 +477,7 @@ struct VenueDetailView: View {
             .background((venue.isOpenNow ? Color.sanOpen : Color.sanInkSoft).opacity(0.12), in: Capsule())
 
             if venue.locations.count > 1 {
-                Text(verbatim: "\(venue.locations.count) \(Plural.ru(venue.locations.count, LS("адрес"), LS("адреса"), LS("адресов")))")
+                Text(verbatim: LF("%lld адресов", venue.locations.count))
                     .font(.golos(12.5, .semibold)).foregroundStyle(Color.sanInkSoft)
                     .padding(.horizontal, 13).padding(.vertical, 8)
                     .background(Color.sanSurface, in: Capsule())
@@ -491,7 +496,11 @@ struct VenueDetailView: View {
     /// которая гарантированно открывается в пустоту, хуже отсутствующей: она
     /// обещает содержимое и обманывает. Если объекты есть — вкладка остаётся
     /// даже без единого отзыва: иначе первый отзыв некому оставить.
-    private var hasReviewsTab: Bool { !venue.items.isEmpty || !venueReviews.isEmpty }
+    ///
+    /// Теперь отзыв можно оставить и о заведении в целом, поэтому вкладка есть
+    /// всегда: раньше у заведения без меню не было ни вкладки, ни способа
+    /// оставить первый отзыв.
+    private var hasReviewsTab: Bool { true }
 
     private var segmentedTabs: some View {
         HStack(spacing: 4) {
@@ -637,15 +646,18 @@ struct VenueDetailView: View {
     /// не перекладывается по мере загрузки фотографий и не прыгает под пальцем.
     private static func tileAspect(for deal: Deal) -> CGFloat {
         let variants: [CGFloat] = [0.78, 1.0, 1.3]      // ширина / высота
-        let hash = abs(deal.id.hashValue)
-        return variants[hash % variants.count]
+        // Стабильный хэш: `hashValue` солится заново на каждый запуск (мозаика
+        // перекладывалась между запусками), а `abs(Int.min)` — падение.
+        let hash = StableHash.fnv1a(deal.id)
+        return variants[Int(hash % UInt64(variants.count))]
     }
 
     private func publicationTile(_ deal: Deal) -> some View {
         Button { activeSheet = .deal(deal) } label: {
             VStack(alignment: .leading, spacing: 0) {
                 ZStack(alignment: .topLeading) {
-                    VenuePhoto(urlString: deal.allImages.first, gradient: venue.gradientColors)
+                    VenuePhoto(urlString: deal.allImages.first, gradient: venue.gradientColors,
+                               points: 200)   // плитка мозаики — полширины экрана
                         .frame(maxWidth: .infinity)
                         .aspectRatio(Self.tileAspect(for: deal), contentMode: .fit)
                         .clipped()
@@ -692,7 +704,7 @@ struct VenueDetailView: View {
                             .frame(width: 66, height: 66)
                             .overlay {
                                 if let url = deal.allImages.first, !url.isEmpty {
-                                    VenuePhoto(urlString: url, gradient: venue.gradientColors)
+                                    VenuePhoto(urlString: url, gradient: venue.gradientColors, points: 66)
                                         .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
                                 } else {
                                     Text(deal.emoji).font(.system(size: 28))
@@ -735,7 +747,6 @@ struct VenueDetailView: View {
         }
     }
 
-    private static func reviewsWord(_ n: Int) -> String { LPlural(n, "отзыв", "отзыва", "отзывов") }
 
     // MARK: Действия
 
@@ -836,20 +847,20 @@ struct VenueDetailView: View {
                         .padding(.horizontal, 8).padding(.vertical, 4)
                         .background(.white.opacity(0.25), in: Capsule())
                 }
-                HStack(spacing: 6) {
-                    ForEach(0..<goal, id: \.self) { i in
-                        Image(systemName: i < stamps ? "checkmark.seal.fill" : "seal")
-                            .font(.footnote)
-                            .foregroundStyle(i < stamps ? .white : .white.opacity(0.45))
-                    }
+                // Цель первой карты сверху не ограничена: перенос строк и потолок
+                // `StampLayout.maxShown` вместо `ForEach(0..<goal)` в одну строку.
+                StampRows(goal: goal, perRow: 12, spacing: 6) { i in
+                    Image(systemName: i < stamps ? "checkmark.seal.fill" : "seal")
+                        .font(.footnote)
+                        .foregroundStyle(i < stamps ? .white : .white.opacity(0.45))
                 }
                 HStack(spacing: 6) {
                     Image(systemName: "info.circle.fill").font(.caption2)
                     // Штамп ставит только сервер, когда сотрудник сканирует QR
                     // карты (`scanCoupon`, ветка A) — не за купон.
                     Text(rounds > 0
-                         ? "Наград получено: \(rounds). Штамп за визит: сотрудник сканирует QR вашей карты."
-                         : "Штамп за визит: сотрудник сканирует QR вашей карты.")
+                         ? "Наград получено: \(rounds). Штамп за визит: сотрудник сканирует «Мой QR»."
+                         : "Штамп за визит: сотрудник сканирует «Мой QR».")
                         .font(.caption2)
                     Spacer()
                     Image(systemName: "chevron.right").font(.caption2)
@@ -898,7 +909,7 @@ struct VenueDetailView: View {
                     }
                 }
                 SanProgressBar(fraction: fraction, height: 8).padding(.top, 16)
-                Text(next.map { "Ещё \($0.cost - balance) \(Self.pointsWord($0.cost - balance)) до «\($0.title)»" }
+                Text(next.map { LF("Ещё %lld баллов до «%@»", $0.cost - balance, $0.title) }
                      ?? "Баллы можно потратить на награды заведения")
                     .font(.golos(12.5, .semibold)).foregroundStyle(.white.opacity(0.94))
                     .fixedSize(horizontal: false, vertical: true)
@@ -913,7 +924,6 @@ struct VenueDetailView: View {
         .buttonStyle(.sanPress(0.98))
     }
 
-    private static func pointsWord(_ n: Int) -> String { LPlural(n, "балл", "балла", "баллов") }
 
     // MARK: Инфо
 
@@ -965,17 +975,16 @@ struct VenueDetailView: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(Color.sanAccentText)
             }
-            if venue.whatsappURL != nil || venue.instagramURL != nil || venue.telegramURL != nil {
+            // Контакты — через `ContactLinks`: «0555…» получает код страны для
+            // wa.me, «instagram.com/x» и «t.me/x» без схемы не удваивают хост.
+            let wa = ContactLinks.whatsapp(venue.whatsapp)
+            let tg = ContactLinks.telegram(venue.telegram)
+            let ig = ContactLinks.instagram(venue.instagram)
+            if wa != nil || ig != nil || tg != nil {
                 HStack(spacing: 12) {
-                    if let wa = venue.whatsappURL {
-                        socialIcon("whatsapp", wa)
-                    }
-                    if let tg = venue.telegramURL {
-                        socialIcon("telegram", tg)
-                    }
-                    if let ig = venue.instagramURL {
-                        socialIcon("instagram", ig)
-                    }
+                    if let wa { socialIcon("whatsapp", wa) }
+                    if let tg { socialIcon("telegram", tg) }
+                    if let ig { socialIcon("instagram", ig) }
                 }
             }
             Button { withAnimation { hoursExpanded.toggle() } } label: {
@@ -1128,27 +1137,38 @@ struct VenueDetailView: View {
                     VStack(spacing: 2) {
                         Text(String(format: "%.1f", agg.rating)).font(.system(size: 40, weight: .bold))
                         StarRatingView(rating: agg.rating, size: 12)
-                        Text("\(agg.count) \(Self.reviewsWord(agg.count))").font(.caption2).foregroundStyle(.secondary)
+                        Text("\(agg.count) отзывов").font(.caption2).foregroundStyle(.secondary)
                     }
-                    RatingBreakdownView(breakdown: detail.state.ratingBreakdown)
+                    // Разбивка — по загруженной странице, заголовок — по всем
+                    // отзывам (серверный агрегат). Неполную разбивку подписываем.
+                    if !venueReviews.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            RatingBreakdownView(breakdown: detail.state.ratingBreakdown)
+                            if detail.state.ratingBreakdownIsPartial {
+                                Text(LF("По последним %lld отзывам", venueReviews.count))
+                                    .font(.caption2).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
                 }
                 .padding(.horizontal, 16)
             }
 
-            if !venue.items.isEmpty {
-                Button {
-                    if session.isGuest { guestMessage = GuestGate.review; showGuestPrompt = true }
-                    else { activeSheet = .writeReview(nil) }
-                } label: {
-                    Label("Оценить блюдо или услугу", systemImage: "square.and.pencil")
-                        .font(.subheadline.weight(.semibold))
-                        .frame(maxWidth: .infinity).padding(.vertical, 12)
-                        .background(Color.sanAccent, in: RoundedRectangle(cornerRadius: 12))
-                        .foregroundStyle(.white)
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 16)
+            // Отзыв можно оставить и о заведении в целом — кнопка есть и у
+            // заведения без меню.
+            Button {
+                if session.isGuest { guestMessage = GuestGate.review; showGuestPrompt = true }
+                else { activeSheet = .writeReview(nil) }
+            } label: {
+                Label(venue.items.isEmpty ? "Написать отзыв" : "Оценить блюдо или услугу",
+                      systemImage: "square.and.pencil")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity).padding(.vertical, 12)
+                    .background(Color.sanAccent, in: RoundedRectangle(cornerRadius: 12))
+                    .foregroundStyle(.white)
             }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 16)
 
             if venueReviews.isEmpty {
                 Text("Пока нет отзывов. Будь первым!")
@@ -1158,12 +1178,22 @@ struct VenueDetailView: View {
                 VStack(spacing: 0) {
                     ForEach(venueReviews) { review in
                         ReviewRow(review: review)
-                            .contextMenu {
+                            // Видимая кнопка «…», а не только долгое нажатие:
+                            // жалобу и скрытие автора должно быть легко найти (1.2).
+                            .overlay(alignment: .topTrailing) {
                                 if review.authorID != store.currentUserID {
-                                    Button(role: .destructive) { reportingReview = review } label: {
-                                        Label("Пожаловаться", systemImage: "flag")
+                                    Menu { reviewActions(review) } label: {
+                                        Image(systemName: "ellipsis")
+                                            .font(.subheadline.weight(.semibold))
+                                            .foregroundStyle(.secondary)
+                                            .frame(width: 36, height: 36)
+                                            .contentShape(Rectangle())
                                     }
+                                    .accessibilityLabel(Text("Действия с отзывом"))
                                 }
+                            }
+                            .contextMenu {
+                                if review.authorID != store.currentUserID { reviewActions(review) }
                             }
                         Divider()
                     }
@@ -1185,6 +1215,30 @@ struct VenueDetailView: View {
             Button("Понятно", role: .cancel) {}
         } message: {
             Text("Мы проверим отзыв. Если он нарушает правила, его удалят.")
+        }
+        .confirmationDialog("Скрыть отзывы автора?", isPresented: Binding(
+            get: { blockingReview != nil }, set: { if !$0 { blockingReview = nil } }
+        ), titleVisibility: .visible, presenting: blockingReview) { review in
+            Button("Скрыть", role: .destructive) {
+                store.blockAuthor(of: review)
+                blockingReview = nil
+                SanHaptics.success()
+                detail.refresh()
+            }
+            Button("Отмена", role: .cancel) { blockingReview = nil }
+        } message: { review in
+            Text(LF("Вы больше не увидите отзывы %@ ни в одном заведении. Вернуть можно в профиле: «Скрытые авторы».",
+                    review.authorName))
+        }
+    }
+
+    /// Жалоба и скрытие автора — для чужого отзыва.
+    @ViewBuilder private func reviewActions(_ review: Review) -> some View {
+        Button(role: .destructive) { reportingReview = review } label: {
+            Label("Пожаловаться", systemImage: "flag")
+        }
+        Button(role: .destructive) { blockingReview = review } label: {
+            Label("Скрыть отзывы автора", systemImage: "person.crop.circle.badge.xmark")
         }
     }
 

@@ -33,11 +33,18 @@ public struct RedeemReceipt: Equatable, Sendable {
     public let somOff: Int?
     /// `true` — запрос с этим ключом уже выполнялся, баллы повторно НЕ списаны.
     public let replayed: Bool
+    /// Код чека (4 цифры) и момент списания — с сервера. Экран «погашено»
+    /// показывает их рядом с живыми часами, чтобы сотрудник отличил свежее
+    /// списание от скриншота старого. Пусто / `nil` — сервер старее.
+    public let receiptCode: String
+    public let redeemedAt: Date?
 
     public init(redeemed: Int, balance: Int, rewardTitle: String,
-                somOff: Int? = nil, replayed: Bool = false) {
+                somOff: Int? = nil, replayed: Bool = false,
+                receiptCode: String = "", redeemedAt: Date? = nil) {
         self.redeemed = redeemed; self.balance = balance; self.rewardTitle = rewardTitle
         self.somOff = somOff; self.replayed = replayed
+        self.receiptCode = receiptCode; self.redeemedAt = redeemedAt
     }
 }
 
@@ -186,6 +193,46 @@ public protocol PointsRepository {
 
     /// Журнал карты гостя в заведении, новые записи сверху, не больше `limit`.
     func ledger(userID: String, venueID: String, limit: Int) async -> Result<[PointsLedgerEntry], AppError>
+
+    /// Тот же поток, но с пометкой, откуда снимок: из локального кэша SDK или
+    /// с сервера. Нужна детектору «Начислено»: первый снимок из пустого или
+    /// неполного кэша, взятый за точку отсчёта, превращал следующий серверный
+    /// в «Начислено +<весь баланс>».
+    func liveCards(userID: String) -> AsyncStream<Result<LiveSnapshot<[VenuePointsCard]>, AppError>>
+}
+
+/// Снимок живого потока и его происхождение.
+public struct LiveSnapshot<Value> {
+    public let value: Value
+    /// `true` — снимок из локального кэша (сервер ещё не подтвердил).
+    public let isFromCache: Bool
+    public init(value: Value, isFromCache: Bool) {
+        self.value = value
+        self.isFromCache = isFromCache
+    }
+}
+
+extension LiveSnapshot: Sendable where Value: Sendable {}
+extension LiveSnapshot: Equatable where Value: Equatable {}
+
+public extension AsyncStream {
+    /// Поток, преобразованный `transform`; отмена потребителя снимает исходный.
+    func mapped<T>(_ transform: @escaping (Element) -> T) -> AsyncStream<T> {
+        AsyncStream<T> { continuation in
+            let task = Task {
+                for await element in self { continuation.yield(transform(element)) }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+}
+
+public extension PointsRepository {
+    /// Источники без кэша (моки, фейки): каждый снимок — серверный.
+    func liveCards(userID: String) -> AsyncStream<Result<LiveSnapshot<[VenuePointsCard]>, AppError>> {
+        cards(userID: userID).mapped { $0.map { LiveSnapshot(value: $0, isFromCache: false) } }
+    }
 }
 
 // MARK: - Одна механика лояльности на заведение

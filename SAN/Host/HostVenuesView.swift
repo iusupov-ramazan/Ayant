@@ -149,6 +149,14 @@ struct HostSyncFailureBanner: View {
             return "Сервер отклонил сохранение: у аккаунта нет прав на это заведение. Данные видны только на этом устройстве."
         case .network:
             return "Нет связи с сервером. Изменения сохранены на устройстве и отправятся при следующем обновлении."
+        case .server(let code) where code == HostStore.couponSaveDenied:
+            return "Сервер не принял изменения купона — купон остался прежним. Обновите кабинет и попробуйте ещё раз."
+        case .server(let code) where code == HostStore.couponWriteQueued:
+            return "Нет связи с сервером. Купон сохранится, когда появится сеть."
+        case .server(let code) where code == HostStore.venueDeletedOnServer:
+            return "Это заведение удалено на сервере, поэтому изменения не сохранены. Если это ошибка, напишите в поддержку."
+        case .server(let code) where code == HostStore.couponDeleteDenied:
+            return "Сервер не дал удалить купон — он по-прежнему продаётся гостям. Обновите кабинет и попробуйте ещё раз."
         default:
             return "Не удалось синхронизировать с сервером."
         }
@@ -406,6 +414,10 @@ struct HostVenueDetailView: View {
     @State private var activeSheet: HostVenueSheet?
     /// Блюдо, удаление которого ждёт подтверждения.
     @State private var itemPendingDelete: VenueItem?
+    /// Купон, удаление которого ждёт подтверждения.
+    @State private var couponPendingDelete: CouponOffer?
+    /// Сервер не дал удалить купон — купон вернулся в список и продаётся.
+    @State private var couponDeleteError: String?
     @State private var tab: HostVenueTab = .deals
 
     private var dto: HostVenueDTO? { host.state.venue(id: venueID) }
@@ -464,6 +476,30 @@ struct HostVenueDetailView: View {
             Button("Отмена", role: .cancel) {}
         } message: { item in
             Text("«\(item.name)» пропадёт из меню вместе с отзывами о нём.")
+        }
+        .alert("Удалить купон?",
+               isPresented: Binding(get: { couponPendingDelete != nil },
+                                    set: { if !$0 { couponPendingDelete = nil } }),
+               presenting: couponPendingDelete) { offer in
+            Button("Удалить", role: .destructive) {
+                Task {
+                    if let error = await host.deleteCouponOffer(id: offer.id),
+                       error != .server(code: HostStore.couponWriteQueued) {
+                        couponDeleteError = HostCouponFormView.message(for: error, deleting: true)
+                    }
+                }
+            }
+            Button("Отмена", role: .cancel) {}
+        } message: { _ in
+            Text("Купленные купоны останутся у гостей и будут гаситься.")
+        }
+        .alert("Купон не удалён",
+               isPresented: Binding(get: { couponDeleteError != nil },
+                                    set: { if !$0 { couponDeleteError = nil } }),
+               presenting: couponDeleteError) { _ in
+            Button("OK", role: .cancel) {}
+        } message: { text in
+            Text(text)
         }
     }
 
@@ -682,7 +718,7 @@ struct HostVenueDetailView: View {
         switch places.count {
         case 0: where_ = v.district
         case 1: where_ = places[0].address
-        default: where_ = "\(places.count) \(Plural.ru(places.count, "адрес", "адреса", "адресов"))"
+        default: where_ = LF("%lld адресов", places.count)
         }
         return [LS(v.category.rawValue), where_].filter { !$0.isEmpty }.joined(separator: " · ")
     }
@@ -843,14 +879,18 @@ struct HostVenueDetailView: View {
         HStack(spacing: 8) {
             Button { activeSheet = .addDeal } label: { primaryAction("Новая акция") }
                 .buttonStyle(.sanPress(0.97))
-            NavigationLink(value: HostInstagramTarget(venueID: v.id)) {
-                secondaryAction("Из Instagram", icon: "camera.on.rectangle") {
-                    if ig.isConnected {
-                        Circle().fill(Color.green).frame(width: 6, height: 6)
+            // Удалённый выключатель: внешний API Meta — первое, что может
+            // сломаться без нашего релиза.
+            if ReleaseFlags.instagramImport {
+                NavigationLink(value: HostInstagramTarget(venueID: v.id)) {
+                    secondaryAction("Из Instagram", icon: "camera.on.rectangle") {
+                        if ig.isConnected {
+                            Circle().fill(Color.green).frame(width: 6, height: 6)
+                        }
                     }
                 }
+                .buttonStyle(.sanPress(0.97))
             }
-            .buttonStyle(.sanPress(0.97))
         }
         .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 14)
 
@@ -944,10 +984,12 @@ struct HostVenueDetailView: View {
         HStack(spacing: 8) {
             Button { activeSheet = .addItem(section: "") } label: { primaryAction("Блюдо") }
                 .buttonStyle(.sanPress(0.97))
-            Button { activeSheet = .menuImport } label: {
-                secondaryAction("Из файла", icon: "doc.text.magnifyingglass")
+            if ReleaseFlags.menuImport {
+                Button { activeSheet = .menuImport } label: {
+                    secondaryAction("Из файла", icon: "doc.text.magnifyingglass")
+                }
+                .buttonStyle(.sanPress(0.97))
             }
-            .buttonStyle(.sanPress(0.97))
         }
         .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 14)
 
@@ -1075,7 +1117,7 @@ struct HostVenueDetailView: View {
                             host.send(.toggleCouponPause(id: offer.id))
                         }
                         Button("Удалить", role: .destructive) {
-                            host.send(.deleteCouponOffer(id: offer.id))
+                            couponPendingDelete = offer
                         }
                     } label: { couponRow(offer) }
                 }
@@ -2124,6 +2166,9 @@ struct HostCouponFormView: View {
     let venueName: String
     let existing: CouponOffer?
     @EnvironmentObject private var host: HostStore
+    /// Курс игр из Remote Config (`BonusEngine.gameRates`) — тот, по которому
+    /// гость реально зарабатывает, а не зашитый в домене дефолт.
+    @EnvironmentObject private var bonus: BonusEngine
     @Environment(\.dismiss) private var dismiss
 
     @State private var title: String
@@ -2134,7 +2179,12 @@ struct HostCouponFormView: View {
     @State private var stock: String
     @State private var hasExpiry: Bool
     @State private var expiresAt: Date
+    @State private var perGuestLimit: Int
     @State private var isPaused: Bool
+    /// Идёт запись на сервер: форма не закрывается до ответа.
+    @State private var saving = false
+    /// Сервер не принял купон — форма остаётся открытой с введёнными данными.
+    @State private var saveError: String?
 
     init(venueID: String, venueName: String, existing: CouponOffer?) {
         self.venueID = venueID
@@ -2149,6 +2199,9 @@ struct HostCouponFormView: View {
         _hasExpiry = State(initialValue: existing?.expiresAt != nil)
         _expiresAt = State(initialValue: existing?.expiresAt
                            ?? Calendar.current.date(byAdding: .month, value: 1, to: .now)!)
+        // Новый купон — один в одни руки: так задумано большинство подарков, а
+        // снять лимит — один тап. Старые купоны сохраняют то, что у них было.
+        _perGuestLimit = State(initialValue: existing?.perGuestLimit ?? 1)
         _isPaused = State(initialValue: existing?.isPaused ?? false)
     }
 
@@ -2173,6 +2226,14 @@ struct HostCouponFormView: View {
                 Section("Цена в бонусах") {
                     TextField("Например, 500", text: $cost)
                         .keyboardType(.numberPad)
+                    // Во что гостю обходится цена: бонусы зарабатываются игрой,
+                    // и «500» само по себе ничего не говорит — а «≈ 500 мин»
+                    // говорит. Курс — тот же якорь, по которому платят игры.
+                    if let minutes = playMinutes {
+                        Text(LF("≈ %lld мин игры у гостя (1 бонус ≈ %@ мин)",
+                                minutes, minutesPerBonusText))
+                            .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    }
                     Text("Гость копит бонусы в приложении и обменивает их на этот купон. Цену выбираете вы — купон вы и отдаёте.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
@@ -2192,40 +2253,138 @@ struct HostCouponFormView: View {
                     }
                 }
 
-                Section("Срок") {
+                Section {
+                    Stepper(value: $perGuestLimit, in: 0...HostForms.maxPerGuestLimit) {
+                        Text(perGuestLimit == 0 ? LS("Без лимита") : LF("Не больше %lld", perGuestLimit))
+                    }
+                } header: {
+                    Text("В одни руки")
+                } footer: {
+                    Text("Сколько штук один гость может купить. Без лимита один гость с большим запасом бонусов может выкупить весь выпуск.")
+                }
+
+                Section {
                     Toggle("Ограничить сроком", isOn: $hasExpiry.animation())
                     if hasExpiry {
                         DatePicker("Действует до", selection: $expiresAt, displayedComponents: .date)
+                    }
+                } header: {
+                    Text("Срок")
+                } footer: {
+                    if hasExpiry {
+                        Text("После этой даты купон нельзя ни купить, ни погасить — даже уже купленный. Скажите гостям об этом в условиях.")
                     }
                 }
 
                 Section {
                     Toggle("Снять с продажи", isOn: $isPaused)
-                    Text(existing == nil
-                         ? "Новый купон проходит модерацию — он появится у гостей после проверки."
-                         : "Правка текста и цены модерацию не сбрасывает.")
+                    Text(moderationNote)
                         .font(.caption).foregroundStyle(.secondary)
                 }
+
+                if let saveError {
+                    Section {
+                        Label(saveError, systemImage: "exclamationmark.triangle.fill")
+                            .font(.footnote).foregroundStyle(Color(hex: 0xC24A12))
+                    }
+                }
             }
+            .disabled(saving)
             .navigationTitle(existing == nil ? "Новый купон" : "Купон")
             .navigationBarTitleDisplayMode(.inline)
+            .interactiveDismissDisabled(saving)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Отмена") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Отмена") { dismiss() }.disabled(saving)
+                }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Сохранить") { save() }.disabled(!canSave)
+                    if saving {
+                        ProgressView()
+                    } else {
+                        Button("Сохранить") { save() }.disabled(!canSave)
+                    }
                 }
             }
         }
     }
 
-    private func save() {
-        host.send(.saveCouponOffer(existing: existing, fields: HostForms.CouponFields(
+    private var fields: HostForms.CouponFields {
+        HostForms.CouponFields(
             venueID: venueID, venueName: venueName,
             title: title, details: details, emoji: emoji,
+            // Фото в форме не редактируется, но и стирать его нельзя: пустая
+            // строка вместо ссылки — это «правка фото», и одобренный купон
+            // ушёл бы на модерацию от любого сохранения.
+            imageURL: existing?.imageURL ?? "",
             cost: costValue ?? HostForms.minCouponCost,
             stock: limited ? stockValue : nil,
-            expiresAt: hasExpiry ? expiresAt : nil,
-            isPaused: isPaused)))
-        dismiss()
+            // Купон действует весь выбранный день, а не до текущего часа.
+            expiresAt: hasExpiry ? Calendar.current.date(bySettingHour: 23, minute: 59, second: 59, of: expiresAt) : nil,
+            perGuestLimit: perGuestLimit,
+            isPaused: isPaused)
+    }
+
+    /// Минуты игры за цену купона — якорь `minutesPerBonus` из текущих ставок
+    /// (`bonus.gameRates`, Remote Config), тот же курс, по которому игры
+    /// начисляют бонусы.
+    private var playMinutes: Int? {
+        guard let c = costValue, c >= HostForms.minCouponCost else { return nil }
+        return Int((Double(c) * bonus.gameRates.minutesPerBonus).rounded())
+    }
+
+    private var minutesPerBonusText: String {
+        let m = bonus.gameRates.minutesPerBonus
+        return m == m.rounded() ? String(Int(m)) : String(format: "%.1f", m)
+    }
+
+    /// Что модерация сделает с этой правкой — честно, а не «ничего»: правило
+    /// `HostForms.couponOffer` / `firestore.rules` возвращает одобренный купон
+    /// на проверку, если поменялось то, что видела модерация.
+    private var moderationNote: LocalizedStringKey {
+        guard let existing else {
+            return "Новый купон проходит модерацию — он появится у гостей после проверки."
+        }
+        guard existing.status == .approved else {
+            return "Купон ещё не одобрен — он появится у гостей после проверки."
+        }
+        let draft = HostForms.couponOffer(existing: existing, fields: fields, newID: existing.id)
+        return draft.status == .pending
+            ? "Вы изменили цену, название, условия, эмодзи или фото — купон снова уйдёт на модерацию и пропадёт из продажи до проверки. Уже купленные купоны продолжат гаситься."
+            : "Правка цены, названия, условий, эмодзи или фото одобренного купона отправит его на повторную модерацию. Количество, срок, лимит и паузу можно менять без проверки."
+    }
+
+    private func save() {
+        saving = true
+        saveError = nil
+        let snapshot = self.fields
+        Task {
+            let error = await host.saveCouponOffer(existing: existing, fields: snapshot)
+            saving = false
+            // `couponWriteQueued` — не ошибка: сервер не ответил вовремя, запись
+            // ждёт сети, а кабинет показывает плашку «сохранится, когда появится сеть».
+            if let error, error != .server(code: HostStore.couponWriteQueued) {
+                saveError = Self.message(for: error, deleting: false)
+            } else {
+                dismiss()
+            }
+        }
+    }
+
+    /// Отказ сервера по купону — словами для хозяина.
+    static func message(for error: AppError, deleting: Bool) -> String {
+        switch error {
+        case .network:
+            return deleting
+                ? LS("Нет связи с сервером — купон не удалён. Попробуйте ещё раз.")
+                : LS("Нет связи с сервером — купон не сохранён. Попробуйте ещё раз.")
+        case .permissionDenied:
+            return deleting
+                ? LS("Сервер не дал удалить купон — он по-прежнему продаётся гостям. Обновите кабинет и попробуйте ещё раз.")
+                : LS("Сервер не принял купон. Обновите кабинет (потяните список вниз) и попробуйте ещё раз.")
+        case .unauthenticated:
+            return LS("Войдите в аккаунт заведения ещё раз.")
+        default:
+            return deleting ? LS("Не удалось удалить купон.") : LS("Не удалось сохранить купон.")
+        }
     }
 }

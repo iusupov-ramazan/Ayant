@@ -31,8 +31,10 @@ extension Venue {
     /// русская строка; здесь тот же смысл через ключи каталога, чтобы в
     /// английском интерфейсе не оставалось «Открыто · до 23:00».
     var hoursStatusKey: LocalizedStringKey {
-        let d = todayHours(at: Date())
-        if d.closed { return "Сегодня выходной" }
-        return isOpenNow ? "Открыто · до \(DayHours.time(d.close))" : "Закрыто"
+        let now = Date()
+        // Хвост вчерашней ночной смены идёт и в «выходной» день — как в
+        // доменном `hoursStatusText`.
+        if let close = openShiftClose(at: now) { return "Открыто · до \(DayHours.time(close))" }
+        return todayHours(at: now).closed ? "Сегодня выходной" : "Закрыто"
     }
 }

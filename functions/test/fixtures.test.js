@@ -141,3 +141,22 @@ for (const c of fixture.redeem) {
     }
   });
 }
+
+/* ═════════════ Списание: страховка курса в режиме cashback (redeemRatio) ═════════════ */
+
+assert.ok((fixture.redeemRatio || []).length > 0, "В фикстуре нет кейсов redeemRatio");
+
+for (const c of fixture.redeemRatio) {
+  test(`фикстур/курс: ${c.name}`, async () => {
+    const h = harness();
+    seedVenue(h, { redeemMode: "staffScan", pointsRewards: c.rewards, ...c.venue });
+    seedCard(h, { balance: c.balance });
+    const res = await redeem(h, {
+      venueID: VENUE, userID: USER, rewardId: c.rewardId, pointsToSpend: c.pointsToSpend,
+    });
+    assert.equal(res.statusCode, 200, `ожидалось списание, получено ${JSON.stringify(res.body)}`);
+    assert.equal(res.body.redeemed, c.expect.cost);
+    assert.equal(res.body.balance, c.expect.newBalance);
+    assert.equal(res.body.somOff, c.expect.somOff);
+  });
+}

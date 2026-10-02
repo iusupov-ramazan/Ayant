@@ -11,14 +11,15 @@
 
 const { EventEmitter } = require("node:events");
 const proxyquire = require("proxyquire").noCallThru();
-const { FakeFirestore, FieldValue, toStored } = require("./fakeFirestore");
+const { FakeFirestore, FieldValue, AggregateField, FieldPath, toStored } = require("./fakeFirestore");
 
 /**
  * @param {object} opts
  * @param {Record<string,string>} opts.tokens  Map<idToken, uid> для verifyIdToken.
  * @returns харнесс с загруженным модулем и доступом к хранилищу.
  */
-function makeHarness({ tokens = {}, anonymousTokens = [], createdAt = {} } = {}) {
+function makeHarness({ tokens = {}, anonymousTokens = [], createdAt = {}, anonymousUsers = [], missingUsers = [],
+  unverifiedUsers = [], providers = {}, staleTokens = [] } = {}) {
   const db = new FakeFirestore();
   const messagingCalls = [];
   const messaging = {
@@ -28,27 +29,39 @@ function makeHarness({ tokens = {}, anonymousTokens = [], createdAt = {} } = {})
     },
     sendEachForMulticast: async (m) => {
       messagingCalls.push(m);
-      return {
-        successCount: (m.tokens || []).length,
-        responses: (m.tokens || []).map(() => ({ success: true })),
-      };
+      // Токены из `staleTokens` отвечают «не зарегистрирован», как протухшие в FCM.
+      const responses = (m.tokens || []).map((t) => (staleTokens.includes(t)
+        ? { success: false, error: { code: "messaging/registration-token-not-registered" } }
+        : { success: true }));
+      return { successCount: responses.filter((r) => r.success).length, responses };
     },
   };
+  const deletedUsers = [];
   const auth = {
+    deleteUser: async (uid) => { deletedUsers.push(uid); },
     verifyIdToken: async (token) => {
       if (Object.prototype.hasOwnProperty.call(tokens, token)) {
         // Как в настоящем декодированном токене: провайдер входа в `firebase`.
-        const provider = anonymousTokens.includes(token) ? "anonymous" : "password";
-        return { uid: tokens[token], firebase: { sign_in_provider: provider } };
+        // Почта подтверждена у всех, кроме `unverifiedUsers` (по uid);
+        // провайдер — `providers[uid]` или «password».
+        const uid = tokens[token];
+        const provider = anonymousTokens.includes(token) ? "anonymous" : (providers[uid] || "password");
+        return { uid, firebase: { sign_in_provider: provider }, email_verified: !unverifiedUsers.includes(uid) };
       }
       throw new Error("invalid token");
     },
     // Дата создания аккаунта (для переноса баланса кошелька). По умолчанию —
     // давний аккаунт, созданный задолго до серверного кошелька.
-    getUser: async (uid) => ({
-      uid,
-      metadata: { creationTime: createdAt[uid] || "Mon, 01 Jan 2024 00:00:00 GMT" },
-    }),
+    // providerData пуст у анонимного аккаунта — как в настоящем UserRecord.
+    getUser: async (uid) => {
+      if (missingUsers.includes(uid)) throw new Error("auth/user-not-found");
+      return {
+        uid,
+        metadata: { creationTime: createdAt[uid] || "Mon, 01 Jan 2024 00:00:00 GMT" },
+        providerData: anonymousUsers.includes(uid) ? [] : [{ providerId: providers[uid] || "password" }],
+        emailVerified: !unverifiedUsers.includes(uid),
+      };
+    },
   };
 
   // Тесты гоняются по СКОМПИЛИРОВАННОМУ выводу (lib/index.js) — источник на TS
@@ -57,7 +70,7 @@ function makeHarness({ tokens = {}, anonymousTokens = [], createdAt = {} } = {})
   // поэтому перехват работает как и раньше.
   const mod = proxyquire("../../lib/index.js", {
     "firebase-admin/app": { initializeApp: () => ({}) },
-    "firebase-admin/firestore": { getFirestore: () => db, FieldValue },
+    "firebase-admin/firestore": { getFirestore: () => db, FieldValue, AggregateField, FieldPath },
     "firebase-admin/messaging": { getMessaging: () => messaging },
     "firebase-admin/auth": { getAuth: () => auth },
   });
@@ -66,6 +79,7 @@ function makeHarness({ tokens = {}, anonymousTokens = [], createdAt = {} } = {})
     mod,
     db,
     messagingCalls,
+    deletedUsers,
     /**
      * Записать документ по полному пути ("venues/v1").
      * Значения проходят ту же нормализацию, что и при записи через SDK

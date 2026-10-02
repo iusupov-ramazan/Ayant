@@ -15,7 +15,14 @@ public final class AppStore: ObservableObject {
     /// заведения продолжали работать без правок.
     public var venues: [Venue] { feed.catalogVenues ?? [] }
     public var deals: [Deal] { feed.catalogDeals ?? [] }
-    public var reviews: [Review] { feed.reviews ?? [] }
+    /// Без отзывов скрытых авторов («Скрыть отзывы автора») — фильтр здесь,
+    /// на входе, поэтому они не видны ни на карточке, ни в ленте фото, ни в
+    /// инбоксе владельца.
+    public var reviews: [Review] {
+        let blocked = profile.blockedAuthorIDs
+        let all = feed.reviews
+        return blocked.isEmpty ? all : all.filter { !blocked.contains($0.authorID) }
+    }
     public var isLoading: Bool { feed.state.catalog.isLoading ?? false }
     public var loadError: String? { feed.loadError }
 
@@ -88,6 +95,13 @@ public final class AppStore: ObservableObject {
         (try? await analytics.fetchDailyStats(venueID: venueID, days: days)) ?? [:]
     }
 
+    /// То же, но ошибка не превращается в «пусто»: экран «Аналитика» должен
+    /// отличать «данных пока нет» от «не загрузилось». Суммы считаются из этого
+    /// же ряда (`HostAnalyticsSeries.totals`) — один запрос на заведение, не два.
+    public func analyticsDailyOrThrow(venueID: String, days: Int) async throws -> [String: [String: Int]] {
+        try await analytics.fetchDailyStats(venueID: venueID, days: days)
+    }
+
     public init(clock: Clock = SystemClock(),
          profile: ProfileStore? = nil,
          feed: FeedStore? = nil,
@@ -99,7 +113,10 @@ public final class AppStore: ObservableObject {
         // Дефолтный профиль строим на ИНЖЕКТИРОВАННОМ хранилище настроек, иначе
         // тест с InMemoryPreferences всё равно читал бы реальные UserDefaults.
         self.clock = clock
-        self.profile = profile ?? ProfileStore(storage: UserDefaultsProfileStorage(prefs: prefs))
+        // Библиотека синхронизируется с аккаунтом, если репозиторий это умеет
+        // (Firestore); мок-репозиторий — нет, и она остаётся на устройстве.
+        self.profile = profile ?? ProfileStore(storage: UserDefaultsProfileStorage(prefs: prefs),
+                                               library: repository as? UserLibrarySyncing)
         self.feed = feed ?? FeedStore(repository: repository)
         self.repository = repository
         self.analytics = analytics
@@ -130,6 +147,8 @@ public final class AppStore: ObservableObject {
     /// всех — остаётся.
     public func resetForNewUser() {
         profile.resetForNewUser()
+        // Локальные копии своих отзывов и ответов владельца — тоже его.
+        feed.clearLocalUserCaches()
         currentUserID = "me"
         currentUserName = "Вы"
         isGuest = false
@@ -285,9 +304,10 @@ public final class AppStore: ObservableObject {
         let v = venue(for: deal)
         let agg = v.map(aggregate(for:)) ?? (rating: 0, count: 0)
         let hour = Calendar.current.component(.hour, from: clock.now)
-        let distanceKm = (v.flatMap { ven in userCoord.map { ($0, ven) } }).map {
-            Ranking.haversineKm($0.0.latitude, $0.0.longitude, $0.1.latitude, $0.1.longitude)
-        }
+        // Расстояние в журнал НЕ пишем: с userID это геолокация, связанная с
+        // аккаунтом (см. `RankingItemFeatures`). `userCoord` остаётся в подписи
+        // ради вызовов, но наружу не уходит.
+        _ = userCoord
         return RankingItemFeatures(
             dealID: deal.id, venueID: deal.venueID, position: position, kind: "deal",
             score: dealScore(deal),
@@ -299,7 +319,6 @@ public final class AppStore: ObservableObject {
             daysSinceStart: deal.startDate.map { -$0.timeIntervalSinceNow / 86_400 },
             discountPercent: deal.effectiveDiscountPercent,
             hoursUntilExpiry: deal.validUntil.timeIntervalSinceNow / 3600,
-            distanceKm: distanceKm,
             timeRelevance: v?.category.timeRelevance(hour: hour) ?? 0.5)
     }
 
@@ -451,7 +470,9 @@ public final class AppStore: ObservableObject {
         // начисляет `rewardReferral` (грант «welcome»), а `addFromGame` там
         // ничего не делает — второго начисления не будет.
         bonus.addFromGame(100)
-        AnalyticsLog.log(.referralJoin, ["referrer_id": ref, "user_id": currentUserID])
+        // Без uid и кода пригласившего: в продуктовую аналитику идентификаторы
+        // пользователей не уходят (метка приватности — «не связано с вами»).
+        AnalyticsLog.log(.referralJoin, ["stage": "granted"])
         // Записываем реферал — Cloud Function начислит бонус пригласившему.
         Task { try? await repository.recordReferral(inviteeID: currentUserID, referrerID: ref) }
     }
@@ -468,15 +489,22 @@ public final class AppStore: ObservableObject {
     }
 
     /// Забирает подарок по коду и кладёт купон в кошелёк получателя (с уведомлением).
+    ///
+    /// Тексты — ключи каталога приложения (тост переводит `Text(L(msg))`).
+    /// Временные сбои сервера говорят «попробуйте ещё раз», а не «подарок уже
+    /// забрали»: раньше любой код, кроме `own_gift`, читался как потерянный подарок.
     public func claimGift(code: String, into coupons: CouponStore) {
-        guard !isGuest, !code.isEmpty else { return }
+        guard !code.isEmpty else { return }
+        guard !isGuest else {
+            toastMessage = Self.giftSignInMessage
+            return
+        }
         Task {
             // Серверный кошелёк: купон создаёт сервер — с заведением, гасимый.
             if let result = await coupons.claimGift(code: code) {
                 switch result {
-                case .coupon: toastMessage = "🎁 Подарок получен — купон в «Мои купоны»!"
-                case .failed("network"): toastMessage = "Нет связи — откройте ссылку на подарок ещё раз"
-                default: toastMessage = "Этот подарок уже забрали или ссылка недействительна"
+                case .coupon, .gift: toastMessage = "🎁 Подарок получен — купон в «Мои купоны»!"
+                case .failed(let code): toastMessage = Self.giftClaimMessage(forError: code)
                 }
                 return
             }
@@ -489,11 +517,38 @@ public final class AppStore: ObservableObject {
         }
     }
 
+    private var guestGiftPromptShownFor: String?
+
+    static let giftSignInMessage = "Войдите, чтобы забрать подарок."
+
+    /// Код ошибки сервера (`claimGift`) → текст тоста. Отдельной функцией, чтобы
+    /// закрепить сопоставление тестом.
+    nonisolated public static func giftClaimMessage(forError code: String) -> String {
+        switch code {
+        case "network": return "Нет связи — откройте ссылку на подарок ещё раз"
+        case "own_gift": return "Это ваш подарок — отправьте ссылку другу, забрать его сами вы не можете."
+        case "no_wallet", "claim_failed":
+            return "Не получилось забрать подарок. Откройте ссылку ещё раз через минуту — подарок никуда не денется."
+        case "anonymous_not_allowed": return "Войдите в аккаунт, чтобы забрать подарок."
+        case "app_check_failed": return "Обновите приложение, чтобы забрать подарок."
+        default: return "Этот подарок уже забрали или ссылка недействительна"
+        }
+    }
+
     /// Если есть отложенный подарок из ссылки и пользователь вошёл — забираем.
     public func claimPendingGift(into coupons: CouponStore) {
-        guard !isGuest else { return }
         let d = UserDefaults.standard
         guard let code = d.string(forKey: DeepLinks.pendingGiftKey), !code.isEmpty else { return }
+        // Гостю подарок не выдаём, но и не молчим: код остаётся отложенным и
+        // будет забран после входа. Подсказка — один раз на код, а не на каждый
+        // возврат в приложение.
+        guard !isGuest else {
+            if guestGiftPromptShownFor != code {
+                guestGiftPromptShownFor = code
+                toastMessage = Self.giftSignInMessage
+            }
+            return
+        }
         d.removeObject(forKey: DeepLinks.pendingGiftKey)
         claimGift(code: code, into: coupons)
     }
@@ -602,13 +657,27 @@ public final class AppStore: ObservableObject {
     }
 
     /// Отзыв текущего пользователя для заведения в целом (без объекта).
+    ///
+    /// Отзыв «о заведении» хранится без `itemID` (или с пустым) — сравниваем
+    /// через `ReviewIdentity.normalizedItemID`, а не `== nil`.
     public func myReview(for venue: Venue) -> Review? {
-        reviews.first { $0.venueID == venue.id && $0.authorID == currentUserID && $0.itemID == nil }
+        myReview(venueID: venue.id, itemID: nil)
     }
 
     /// Отзыв текущего пользователя для конкретного объекта (или заведения, если itemID == nil).
     public func myReview(venueID: String, itemID: String?) -> Review? {
-        reviews.first { $0.venueID == venueID && $0.authorID == currentUserID && $0.itemID == itemID }
+        let wanted = ReviewIdentity.normalizedItemID(itemID)
+        return reviews.first {
+            $0.venueID == venueID && $0.authorID == currentUserID
+                && ReviewIdentity.normalizedItemID($0.itemID) == wanted
+        }
+    }
+
+    /// Заведение для правки своего отзыва — в том числе снятое с витрины
+    /// (пауза, модерация). `venue(id:)` таких не отдаёт, и правка из профиля
+    /// открывала пустой лист. nil — заведения больше нет вовсе.
+    public func venueForReview(id: String) -> Venue? {
+        venue(id: id) ?? feed.state.catalog.value?.venues.first { $0.id == id }
     }
 
     public var myReviews: [Review] {
@@ -635,32 +704,84 @@ public final class AppStore: ObservableObject {
 
     /// Создать или обновить отзыв. Один отзыв на (пользователь, заведение, объект).
     /// itemID == nil — отзыв о заведении в целом.
+    ///
+    /// Возвращает причину отказа (`ContentFilter`) — тогда ничего не сохранено,
+    /// экран показывает сообщение. nil — отзыв принят (публикация в фоне;
+    /// провал записи откатывает его и показывает тост).
+    ///
+    /// Новый отзыв получает детерминированный id `{uid}_{venueID}_{itemID|venue}`
+    /// (`ReviewIdentity`) — того требуют правила Firestore, и он же не даёт
+    /// второму отзыву на тот же объект лечь рядом с первым, если первый не
+    /// успел загрузиться в кэш. Правка сохраняет прежний id.
+    ///
+    /// `verifiedVisit` клиент больше не ставит: отметку визита правила
+    /// разрешают только серверу, а сервер её пока не выставляет — локальная
+    /// отметка показывала автору бейдж, которого не видел никто другой.
+    @discardableResult
     public func saveReview(venueID: String, rating: Int, text: String, photos: [String],
-                    itemID: String? = nil, itemName: String? = nil) {
-        guard !isGuest else { return }
-        let verified = hasVisited(venueID)
-        let existing = reviews.first {
-            $0.venueID == venueID && $0.authorID == currentUserID && $0.itemID == itemID
-        }
+                    itemID: String? = nil, itemName: String? = nil) -> ContentFilter.Violation? {
+        guard !isGuest else { return nil }
+        if let violation = ContentFilter.check(text) { return violation }
+        // Пределы правил Firestore (`reviewFieldsValid`): текст ≤ 2000, имя ≤ 60.
+        let text = String(text.prefix(2000))
+        let authorName = String(currentUserName.prefix(60))
+        let item = ReviewIdentity.normalizedItemID(itemID)
+        let existing = myReview(venueID: venueID, itemID: item)
         var saved = existing ?? Review(
-            id: "ur_\(UUID().uuidString.prefix(8))", venueID: venueID,
-            authorID: currentUserID, authorName: currentUserName,
+            id: ReviewIdentity.documentID(authorID: currentUserID, venueID: venueID, itemID: item),
+            venueID: venueID,
+            authorID: currentUserID, authorName: authorName,
             rating: rating, text: text, photoEmojis: [],
             createdAt: clock.now, updatedAt: clock.now, hostReply: nil,
-            itemID: itemID, itemName: itemName, photos: photos,
-            verifiedVisit: verified)
+            itemID: item, itemName: itemName, photos: photos)
         saved.rating = rating
         saved.text = text
         saved.photos = photos        // URL-фото
-        saved.itemName = itemName
-        saved.verifiedVisit = verified
+        saved.itemName = item == nil ? nil : itemName
         saved.updatedAt = clock.now
         feed.upsertUserReview(saved)
 
-        AnalyticsLog.log(.reviewPosted, ["venue_id": venueID, "rating": rating,
-                                         "verified": verified])
-        // Публикуем отзыв в Firestore — виден всем и хосту.
-        Task { try? await repository.saveReview(saved) }
+        AnalyticsLog.log(.reviewPosted, ["venue_id": venueID, "rating": rating])
+        // Публикуем отзыв в Firestore — виден всем и хосту. Провал больше не
+        // глотается: иначе автор видел отзыв, которого на сервере нет.
+        Task {
+            do {
+                try await repository.saveReview(saved)
+            } catch {
+                if let existing { feed.upsertUserReview(existing) }
+                else { feed.removeReview(id: saved.id) }
+                toastMessage = "Не удалось опубликовать отзыв. Проверьте соединение и попробуйте ещё раз."
+            }
+        }
+        return nil
+    }
+
+    // MARK: Скрытые авторы (Guidelines 1.2 — блокировка пользователя)
+
+    public var blockedAuthorIDs: Set<String> { profile.blockedAuthorIDs }
+
+    /// Скрыть все отзывы автора — у этого пользователя, на всех экранах.
+    public func blockAuthor(of review: Review) {
+        guard review.authorID != currentUserID else { return }
+        profile.blockAuthor(id: review.authorID, name: review.authorName)
+        AnalyticsLog.log(.reviewReported, ["venue_id": review.venueID, "reason": "block_author"])
+    }
+
+    public func unblockAuthor(id: String) { profile.unblockAuthor(id: id) }
+
+    /// Жалоба на фото из галереи заведения. Раньше кнопка только показывала
+    /// «Спасибо, жалоба отправлена» — никуда ничего не уходило.
+    ///
+    /// Фото из отзыва привязывается к отзыву; фото заведения (обложка, меню) —
+    /// к самому заведению (`reviewID` пустой).
+    public func reportPhoto(_ photoURL: String, venueID: String, reason: ReviewReportReason) {
+        let reporterID = profile.state.userID
+        guard !reporterID.isEmpty, let reporter = repository as? PhotoReporting else { return }
+        let review = feed.reviews.first { $0.venueID == venueID && $0.photos.contains(photoURL) }
+        let report = PhotoReport(reviewID: review?.id ?? "", venueID: venueID, photoURL: photoURL,
+                                 reporterID: reporterID, reason: reason, now: clock.now)
+        AnalyticsLog.log(.reviewReported, ["venue_id": venueID, "reason": "photo_\(reason.rawValue)"])
+        Task { try? await reporter.reportPhoto(report) }
     }
 
     public func deleteReview(_ review: Review) {

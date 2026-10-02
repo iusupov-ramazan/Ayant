@@ -25,6 +25,15 @@ enum AyantStores {
         AnalyticsLog.backend = AppConfig.makeProductAnalytics()
     }
 
+    /// Один источник удалённых настроек на приложение. Ленивый: первое
+    /// обращение — в `SANApp.init` уже после `FirebaseApp.configure()`,
+    /// раньше SDK Remote Config не создать.
+    static let remoteConfig: RemoteConfigService = AppConfig.makeRemoteConfigService()
+
+    static func remoteSettings() -> RemoteSettingsStore {
+        RemoteSettingsStore(service: remoteConfig, currentVersion: AppConfig.appVersion)
+    }
+
     static func app() -> AppStore {
         AppStore(
             repository: AppConfig.makeDataRepository(),

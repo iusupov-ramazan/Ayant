@@ -25,21 +25,29 @@ public final class FirebasePointsRepository: PointsRepository {
     }
 
     public func cards(userID: String) -> AsyncStream<Result<[VenuePointsCard], AppError>> {
+        liveCards(userID: userID).mapped { $0.map(\.value) }
+    }
+
+    /// `includeMetadataChanges: true` — иначе снимок «из кэша → с сервера» с
+    /// теми же данными не приходит вовсе, и стор не узнал бы, что данные
+    /// подтверждены сервером (точка отсчёта «Начислено» не появилась бы).
+    public func liveCards(userID: String) -> AsyncStream<Result<LiveSnapshot<[VenuePointsCard]>, AppError>> {
         AsyncStream { continuation in
             guard !userID.isEmpty else {
-                continuation.yield(.success([]))
+                continuation.yield(.success(LiveSnapshot(value: [], isFromCache: false)))
                 continuation.finish()
                 return
             }
             let registration = db.collection(FS.Collection.venuePoints)
                 .whereField(FS.VenuePointsDoc.userID, isEqualTo: userID)
-                .addSnapshotListener { snapshot, error in
+                .addSnapshotListener(includeMetadataChanges: true) { snapshot, error in
                     if let error {
                         continuation.yield(.failure(AppError(firestore: error)))
                         return
                     }
                     let cards = snapshot?.documents.map { VenuePointsCard(firestore: $0.data()) } ?? []
-                    continuation.yield(.success(cards))
+                    continuation.yield(.success(LiveSnapshot(
+                        value: cards, isFromCache: snapshot?.metadata.isFromCache ?? true)))
                 }
             continuation.onTermination = { _ in registration.remove() }
         }
@@ -56,7 +64,8 @@ public final class FirebasePointsRepository: PointsRepository {
             guard out.ok else { return .failure(.server(code: out.errorCode ?? "redeem_failed")) }
             return .success(RedeemReceipt(redeemed: out.redeemed, balance: out.balance,
                                           rewardTitle: out.rewardTitle, somOff: out.somOff,
-                                          replayed: out.replayed))
+                                          replayed: out.replayed,
+                                          receiptCode: out.receiptCode, redeemedAt: out.redeemedAt))
         } catch {
             return .failure(.network)
         }

@@ -141,7 +141,7 @@ struct HostVenueSettingsView: View {
             let places = v.locations.filter { !$0.address.isEmpty }
             if places.isEmpty { return LS("Не указан") }
             if places.count == 1 { return places[0].address }
-            return "\(places.count) \(Plural.ru(places.count, "адрес", "адреса", "адресов"))"
+            return LF("%lld адресов", places.count)
         case .hours:
             // Часы сегодняшнего дня: «Сегодня …» не помещалось в строку.
             return v.asVenue.todayHours.label

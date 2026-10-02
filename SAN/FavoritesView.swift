@@ -90,8 +90,8 @@ struct SavedView: View {
     @ViewBuilder
     private var savedVenues: some View {
         if store.savedVenues.isEmpty {
-            emptyNote("Сохраняй любимые места",
-                      "Они появятся здесь — нажми закладку на любом заведении.")
+            emptyNote("Сохраняйте любимые места",
+                      "Они появятся здесь — нажмите закладку на любом заведении.")
         } else {
             LazyVGrid(columns: columns, spacing: 12) {
                 ForEach(Array(store.savedVenues.enumerated()), id: \.element.id) { index, venue in
@@ -114,8 +114,8 @@ struct SavedView: View {
     @ViewBuilder
     private var savedDeals: some View {
         if store.favoriteDeals.isEmpty {
-            emptyNote("Сохраняй предложения",
-                      "Нажми закладку на любом предложении, чтобы сохранить его сюда.")
+            emptyNote("Сохраняйте предложения",
+                      "Нажмите закладку на любом предложении, чтобы сохранить его сюда.")
         } else {
             LazyVGrid(columns: columns, spacing: 12) {
                 ForEach(Array(store.favoriteDeals.enumerated()), id: \.element.id) { index, deal in

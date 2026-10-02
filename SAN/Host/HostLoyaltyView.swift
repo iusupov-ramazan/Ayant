@@ -187,7 +187,7 @@ struct HostLoyaltyView: View {
             if stamps.enabled && draft.enabled {
                 oneMechanicNote
             } else if stamps.enabled {
-                Text("Гость получает штамп за визит: сотрудник сканирует QR его карты и, если карт несколько, выбирает нужную.")
+                Text("Гость получает штамп за визит: сотрудник сканирует «Мой QR» гостя и, если карт несколько, выбирает нужную.")
                     .font(.golos(12.5)).foregroundStyle(Color.sanInkSoft)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -234,6 +234,12 @@ struct HostLoyaltyView: View {
         }
     }
 
+    /// Число из поля черновика — для plural-ключей «%lld баллов» (строковый
+    /// `%@` не склонялся: «1 баллов», «2 баллов»).
+    private static func count(_ field: String) -> Int {
+        Int(field.trimmingCharacters(in: .whitespaces)) ?? 0
+    }
+
     private var accrualSummary: String {
         switch draft.mode {
         case "cashback":
@@ -243,7 +249,7 @@ struct HostLoyaltyView: View {
                 ? LS("Диапазоны не заданы")
                 : draft.bands.map { LF("до %@ сом → %@", $0.maxAmount, $0.points) }.joined(separator: "\n")
         default:
-            return LF("%@ баллов за визит", draft.flat.isEmpty ? "0" : draft.flat)
+            return LF("%lld баллов за визит", Self.count(draft.flat))
         }
     }
 
@@ -279,7 +285,7 @@ struct HostLoyaltyView: View {
             }
             Spacer(minLength: 8)
             VStack(alignment: .trailing, spacing: 3) {
-                Text(verbatim: r.type == "money" ? LF("от %@ баллов", r.cost) : LF("%@ баллов", r.cost))
+                Text(verbatim: r.type == "money" ? LF("от %lld баллов", Self.count(r.cost)) : LF("%lld баллов", Self.count(r.cost)))
                     .font(.golos(14, .semibold)).foregroundStyle(Color.sanInk)
                 if !r.active {
                     Text("выключена").font(.golos(11.5)).foregroundStyle(Color.sanInkSoft)
@@ -398,7 +404,7 @@ struct HostLoyaltyView: View {
         switch mode {
         case "bands": return LS("Диапазоны")
         case "cashback": return LS("Кэшбэк")
-        default: return LS("Фикс")
+        default: return LS("За визит")
         }
     }
 
@@ -474,6 +480,20 @@ struct HostLoyaltyView: View {
         }
     }
 
+    /// Подсказка к курсу: в режиме кэшбэка курс ограничен сверху, иначе
+    /// процент × курс обходил бы потолок 20% (`PointsMath.effectiveRatio`).
+    private var ratioHint: LocalizedStringKey {
+        let fields = draft.fields
+        guard fields.pointsMode == "cashback", fields.cashbackPercent > 0 else {
+            return "Не меньше 1 сома за балл"
+        }
+        let pct = min(fields.cashbackPercent, PointsMath.maxCashbackPercent)
+        let maxRatio = PointsMath.maxMoneyRatio(cashbackPercent: pct).sanPercentText
+        // Ключ каталога: «От 1 до %@ сом за балл: при кэшбэке %@%% …» —
+        // интерполяция LocalizedStringKey сама удваивает знак процента.
+        return "От 1 до \(maxRatio) сом за балл: при кэшбэке \(pct.sanPercentText)% больший курс превысил бы скидку 20%"
+    }
+
     private func rewardCard(_ reward: Binding<PointsDraft.RewardRow>) -> some View {
         let isMoney = reward.wrappedValue.type == "money"
         return SanFieldCard {
@@ -494,7 +514,7 @@ struct HostLoyaltyView: View {
             }
             if isMoney {
                 SanHairline(leading: 16)
-                SanFieldRow(label: "Курс", hint: "Не меньше 1 сома за балл") {
+                SanFieldRow(label: "Курс", hint: ratioHint) {
                     HStack(spacing: 8) {
                         caption("1 балл =")
                         SanFieldInput(placeholder: "1", text: reward.ratio, keyboard: .decimalPad)
@@ -610,7 +630,7 @@ struct HostLoyaltyView: View {
                 } else {
                     Text(isDirty ? "Новые правила применяются к следующим сканам сразу после сохранения."
                                  : "Изменений нет.")
-                        .foregroundStyle(Color(hex: 0x9A9188))
+                        .foregroundStyle(Color.sanInkSoft)
                         .font(.golos(11.5, .semibold))
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
@@ -626,7 +646,7 @@ struct HostLoyaltyView: View {
                             .foregroundStyle(Color.sanOpen)
                     } else {
                         Text("Настройки применяются к следующим сканам сразу после сохранения.")
-                            .foregroundStyle(Color(hex: 0x9A9188))
+                            .foregroundStyle(Color.sanInkSoft)
                     }
                 }
                 .font(.golos(11.5, .semibold))

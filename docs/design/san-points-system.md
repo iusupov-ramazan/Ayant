@@ -142,7 +142,14 @@ In `docs/admin/` (and host app): a "Бонусы САН" section on the venue ed
 toggle `pointsEnabled`, pick mode, set rate(s), edit reward catalog rows, set expiry + redeem mode.
 Client-side hints + server-side validation enforce guardrails.
 
-## 9. Retiring the old BonusEngine
+## 9. Retiring the old BonusEngine — ⚠️ SUPERSEDED
+
+> **Status 2026-10-01:** not done, and no longer planned. The global wallet was kept
+> (see §10 step 4 and «Two-wallet summary»), moved to the server (`bonusWallets`,
+> `earnBonus`/`buyCoupon`/`claimGift`), and its spend side became venue-funded
+> `couponOffers`. Referral/welcome credit it as server grants. The text below is the
+> original plan, kept for history.
+
 **Remove**: `SAN/Bonus/BonusEngine.swift`, `ActivityTracker`, 30-min active-time earning,
 `dailyGameplayCap` mini-game earning, `CouponStore.catalog` (the −10%/coffee/dessert/VIP
 hardcoded rewards bought with global points), and the "earn by using the app" UI in `BonusHubView`.
@@ -172,9 +179,9 @@ it's gone. Per-venue points is NOT their home (they aren't tied to a venue). Opt
 
 ## Two-wallet summary
 - **Баллы САН** (per venue): business-funded, earned by scanning at that venue, spent on that venue's rewards. The real loyalty product. Cannot be earned by playing games.
-- **Global wallet** (`BonusEngine`): platform-wide, earns near-zero (Snake + active-time + referral/welcome), spent on the global coupon catalog + gifting. Kept small on purpose — it's engagement, not a money sink. ⚠️ The catalog coupons (free coffee, etc.) are still a small platform-funded liability; near-zero earning is the mitigation. Tune/fund deliberately.
+- **Global wallet** (`BonusEngine` ↔ server `bonusWallets`): platform-wide, earned by four mini-games, active time and referral/welcome grants; spent on venue coupons (`couponOffers`, priced by the venue) and the catalog. *Updated 2026-10-01:* games no longer have a client daily cap — the price is set by `GameEconomy.minutesPerBonus` and every rate is remote-configurable (`GameRates`, Remote Config). The server caps earning at `BONUS_DAILY_EARN_CAP` (200/day), `time` at `BONUS_TIME_DAILY_CAP` (4), Diamond at 30, and accepts only known sources. See CLAUDE.md «Купоны» for the full rules.
 
 ## 11. Open items
-- Growth payouts decision (§9).
+- ~~Growth payouts decision (§9).~~ Resolved: referral/welcome pay into the server global wallet as `bonusGrants`, with anti-farm checks in `rewardReferral` (real accounts only, invitee < 30 days, transactional cap of 20).
 - Do venues run points **and** stamps simultaneously, or pick one? (deferred — stamp card is its own system.)
 - Warning-push copy + timing final wording.

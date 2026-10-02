@@ -126,6 +126,39 @@ final class PointsFixtureTests: XCTestCase {
     }
 }
 
+extension PointsFixtureTests {
+    /// Страховка курса денежной награды (`redeemRatio`): тот же расчёт, что у
+    /// сервера (`effectiveMoneyRatio`), — через `somOff(…pointsMode:cashbackPercent:)`.
+    func testRedeemRatioCases() {
+        XCTAssertFalse(fixtureRedeemRatio.isEmpty, "В фикстуре нет кейсов redeemRatio")
+        for c in fixtureRedeemRatio {
+            guard case .success(let reward) = PointsMath.findReward(in: c.rewards, id: c.rewardId) else {
+                XCTFail("«\(c.name)»: награда не найдена"); continue
+            }
+            guard case .success(let cost) = PointsMath.redeemCost(reward: reward, pointsToSpend: c.pointsToSpend,
+                                                                   balance: c.balance) else {
+                XCTFail("«\(c.name)»: ожидалось списание"); continue
+            }
+            XCTAssertEqual(cost, c.expect.cost, "«\(c.name)»: неверное списание")
+            XCTAssertEqual(c.balance - cost, c.expect.newBalance, "«\(c.name)»: неверный остаток")
+            let som = PointsMath.somOff(reward: reward, cost: cost,
+                                        pointsMode: c.venue?.pointsMode ?? "flat",
+                                        cashbackPercent: c.venue?.cashbackPercent ?? 0)
+            XCTAssertEqual(som, c.expect.somOff, "«\(c.name)»: неверная скидка в сомах")
+        }
+    }
+
+    private var fixtureRedeemRatio: [RedeemCase] {
+        guard let data = try? Data(contentsOf: Self.fixtureURL),
+              let parsed = try? JSONDecoder().decode(RedeemRatioFixture.self, from: data) else { return [] }
+        return parsed.redeemRatio
+    }
+}
+
+private struct RedeemRatioFixture: Decodable {
+    let redeemRatio: [RedeemCase]
+}
+
 // MARK: - Разбор фикстура
 
 /// Ключи с `$` (комментарии внутри JSON) декодер игнорирует как неизвестные.
@@ -206,4 +239,11 @@ private struct RedeemCase: Decodable {
     let pointsToSpend: Int
     let balance: Int
     let expect: ExpectJSON
+    /// Только в `redeemRatio`: поля документа заведения.
+    let venue: RedeemVenueJSON?
+}
+
+private struct RedeemVenueJSON: Decodable {
+    let pointsMode: String?
+    let cashbackPercent: Double?
 }

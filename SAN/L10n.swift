@@ -57,11 +57,14 @@ func LS(_ key: String) -> String {
     let lang = AppLanguage.current
     guard let path = Bundle.main.path(forResource: lang, ofType: "lproj"),
           let bundle = Bundle(path: path) else {
-        // Язык-источник (ru) в отдельный `.lproj` не компилируется — его текст
-        // и есть ключ. Раньше здесь был `NSLocalizedString`, который на
-        // английском устройстве отдавал английскую строку при выбранном русском.
+        // Без `.lproj` текст и есть ключ. Раньше здесь был `NSLocalizedString`,
+        // который на английском устройстве отдавал английскую строку при
+        // выбранном русском.
         return key
     }
+    // `ru.lproj` у языка-источника есть только ради plural-вариантов
+    // (Localizable.stringsdict): прочие русские ключи там не лежат, и
+    // `value: key` возвращает сам ключ — он и есть русский текст.
     return bundle.localizedString(forKey: key, value: key, table: nil)
 }
 
@@ -69,8 +72,15 @@ func LS(_ key: String) -> String {
 /// Ключ пишется с теми же спецификаторами, что генерирует Xcode для
 /// интерполяций (`%lld` для Int, `%@` для String), чтобы переводы можно было
 /// переиспользовать между `Text("…\(n)…")` и `LF`.
+///
+/// Счётные ключи («%lld бонусов») несут в каталоге plural-варианты: «1 бонус /
+/// 3 бонуса / 5 бонусов», «1 bonus / 5 bonuses». Форму выбирает правило ЯЗЫКА,
+/// переданного в `locale:`, — без него Foundation берёт язык процесса (системы),
+/// и на английском телефоне с русским интерфейсом выходило «5 бонуса». Поэтому
+/// локаль — всегда язык приложения. Числа `%lld` локаль не группирует, а `%.1f`
+/// получает свой десятичный разделитель («1,5 км» / «1.5 km»).
 func LF(_ key: String, _ args: CVarArg...) -> String {
-    String(format: LS(key), arguments: args)
+    String(format: LS(key), locale: AppLanguage.locale, arguments: args)
 }
 
 extension VenueCategory {

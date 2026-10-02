@@ -3,26 +3,33 @@
  *
  * До серверного кошелька (2026-10-01) купоны создавал клиент: награды
  * глобального кошелька, купоны акций, подарки — в том числе те, что нельзя
- * погасить. Скрипт удаляет купоны, созданные ДО отсечки, из `coupons`
- * (и, по флагу, незабранные подарки из `giftCoupons`).
+ * погасить. Скрипт убирает из `coupons` старые купоны, которые гостю больше
+ * не нужны (и, по флагу, незабранные подарки из `giftCoupons`).
+ *
+ * Действующий купон, привязанный к заведению, НЕ удаляется никогда — ни
+ * флагом, ни по умолчанию: награды карт штампов гость заработал визитами,
+ * купоны акций `scanCoupon` по-прежнему гасит. Раньше по умолчанию скрипт
+ * удалял всё до отсечки, включая их (аудит 2026-10-01).
  *
  * Запуск (из корня проекта, нужен serviceAccountKey.json):
  *   node scripts/purge-legacy-coupons.js                 # СУХОЙ прогон: только считает
  *   node scripts/purge-legacy-coupons.js --apply         # бэкап + удаление
  *
- * Флаги:
- *   --before=2026-10-01T00:00:00+06:00   отсечка (по умолчанию — запуск кошелька)
- *   --keep-loyalty    не трогать купоны-награды карт штампов (kind "loyalty") —
- *                     их гость заработал визитами, и сервер создал их сам
- *   --keep-used       не трогать уже погашенные (для истории/аналитики)
+ * Что удаляется (только созданное до отсечки):
+ *   по умолчанию      уже погашенные купоны
+ *   --drop-unbound    плюс НЕпогашенные купоны БЕЗ заведения — их нельзя
+ *                     погасить у стойки (wrong_venue), но гость видит их в
+ *                     приложении и может «применить» сам; решите осознанно
+ *   --keep-used       не трогать погашенные (для истории/аналитики)
  *   --gifts           также удалить незабранные подарки из giftCoupons
+ *   --before=2026-10-01T00:00:00+06:00   отсечка (по умолчанию — запуск кошелька)
  *
  * Перед удалением пишет backup-coupons-<время>.json — восстановить можно
  * вручную из него. Удаление необратимо; сначала запустите без --apply и
  * посмотрите, что попадёт под удаление.
  *
- * Купоны на телефонах чистит само приложение (одноразовая очистка кэша в
- * `CouponStore`): после этого скрипта синк больше не вернёт их с сервера.
+ * Погашенные купоны на телефонах убирает само приложение (одноразовая
+ * очистка в `CouponStore`, то же правило: действующие не трогает).
  */
 const { initializeApp, cert } = require("firebase-admin/app");
 const { getFirestore } = require("firebase-admin/firestore");
@@ -41,7 +48,7 @@ const has = (name) => process.argv.includes(`--${name}`);
 
 const APPLY = has("apply");
 const CUTOFF = new Date(arg("before", "2026-10-01T00:00:00+06:00"));
-const KEEP_LOYALTY = has("keep-loyalty");
+const DROP_UNBOUND = has("drop-unbound");
 const KEEP_USED = has("keep-used");
 const GIFTS = has("gifts");
 
@@ -83,8 +90,14 @@ async function main() {
   }
   console.log(`Отсечка: ${CUTOFF.toISOString()}${APPLY ? "" : "  (СУХОЙ ПРОГОН — ничего не удаляется)"}`);
 
-  const coupons = await collect("coupons", (c) =>
-    (KEEP_LOYALTY && c.kind === "loyalty") || (KEEP_USED && c.used === true));
+  // keep(c) === true — купон остаётся.
+  const coupons = await collect("coupons", (c) => {
+    const used = c.used === true;
+    const bound = String(c.venueID || "") !== "";
+    if (used) return KEEP_USED;
+    if (bound) return true;             // действующий купон заведения — никогда
+    return !DROP_UNBOUND;
+  });
   const gifts = GIFTS ? await collect("giftCoupons", (g) => g.claimed === true) : [];
 
   const byKind = {};

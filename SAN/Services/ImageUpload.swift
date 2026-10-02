@@ -2,32 +2,93 @@ import SwiftUI
 import PhotosUI
 import UIKit
 import UniformTypeIdentifiers
+import AyantData
 
-// MARK: - Загрузка изображений в Cloudinary (unsigned upload)
+// MARK: - Загрузка изображений в Cloudinary
 
+/// Сначала — подписанная загрузка: функция `signCloudinaryUpload` (ID-токен +
+/// App Check) выдаёт подпись, и Cloudinary принимает файл только с ней. Пока
+/// владелец не завёл секрет на сервере (503 `not_configured`), нет сети до
+/// функции или пользователь — гость без токена, грузим по-старому через
+/// unsigned-пресет: до настройки сервера ничего не ломается. Когда пресет
+/// отключат в Cloudinary, останется только подписанный путь.
 enum ImageUploader {
     static let cloudName = "dsb14gwxw"
     static let uploadPreset = "Ayta_ios"
+    /// Папки, о которых знает `signCloudinaryUpload` (список — на сервере).
+    static let imageFolder = "ayant/images"
+    static let documentFolder = "ayant/documents"
 
     enum UploadError: LocalizedError {
         case badResponse
         var errorDescription: String? { LS("Не удалось загрузить изображение") }
     }
 
+    /// Ответ `signCloudinaryUpload`.
+    struct Signature: Decodable {
+        let cloudName: String
+        let apiKey: String
+        let timestamp: Int
+        let signature: String
+        let folder: String
+    }
+
     /// Грузит файл в Cloudinary и возвращает secure_url.
     static func upload(_ fileData: Data, filename: String = "image.jpg",
-                       mime: String = "image/jpeg", resourceType: String = "image") async throws -> String {
-        let url = URL(string: "https://api.cloudinary.com/v1_1/\(cloudName)/\(resourceType)/upload")!
+                       mime: String = "image/jpeg", resourceType: String = "image",
+                       folder: String = imageFolder) async throws -> String {
+        if let sig = await signature(folder: folder, resourceType: resourceType) {
+            return try await post(fileData, filename: filename, mime: mime,
+                                  cloudName: sig.cloudName, resourceType: resourceType,
+                                  fields: [("api_key", sig.apiKey),
+                                           ("timestamp", String(sig.timestamp)),
+                                           ("signature", sig.signature),
+                                           ("folder", sig.folder)])
+        }
+        return try await post(fileData, filename: filename, mime: mime,
+                              cloudName: cloudName, resourceType: resourceType,
+                              fields: [("upload_preset", uploadPreset)])
+    }
+
+    /// Подпись или `nil`, если подписанный путь сейчас недоступен (гость,
+    /// сервер не настроен, нет сети) — тогда вызывающий грузит без подписи.
+    private static func signature(folder: String, resourceType: String) async -> Signature? {
+        guard AppConfig.useFirebase,
+              let url = URL(string: AppConfig.functionURL("signCloudinaryUpload")),
+              let token = await AppConfig.makeAuthService().idToken(), !token.isEmpty
+        else { return nil }
+        var req = URLRequest(url: url, timeoutInterval: 15)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        await req.attachAppCheck()
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["folder": folder,
+                                                                   "resourceType": resourceType])
+        guard let (data, resp) = try? await URLSession.shared.data(for: req),
+              let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode),
+              let sig = try? JSONDecoder().decode(Signature.self, from: data),
+              !sig.signature.isEmpty, !sig.apiKey.isEmpty
+        else { return nil }
+        return sig
+    }
+
+    private static func post(_ fileData: Data, filename: String, mime: String,
+                             cloudName: String, resourceType: String,
+                             fields: [(String, String)]) async throws -> String {
+        guard let url = URL(string: "https://api.cloudinary.com/v1_1/\(cloudName)/\(resourceType)/upload")
+        else { throw UploadError.badResponse }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         let boundary = "Boundary-\(UUID().uuidString)"
         req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
 
         var body = Data()
-        func append(_ s: String) { body.append(s.data(using: .utf8)!) }
-        append("--\(boundary)\r\n")
-        append("Content-Disposition: form-data; name=\"upload_preset\"\r\n\r\n")
-        append("\(uploadPreset)\r\n")
+        func append(_ s: String) { body.append(Data(s.utf8)) }
+        for (name, value) in fields {
+            append("--\(boundary)\r\n")
+            append("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n")
+            append("\(value)\r\n")
+        }
         append("--\(boundary)\r\n")
         append("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n")
         append("Content-Type: \(mime)\r\n\r\n")
@@ -44,7 +105,8 @@ enum ImageUploader {
 
     /// Грузит PDF (прайс-лист / каталог) через /auto/upload.
     static func uploadPDF(_ data: Data) async throws -> String {
-        try await upload(data, filename: "catalog.pdf", mime: "application/pdf", resourceType: "auto")
+        try await upload(data, filename: "catalog.pdf", mime: "application/pdf",
+                         resourceType: "auto", folder: documentFolder)
     }
 }
 
@@ -82,7 +144,10 @@ struct PDFPickerField: View {
                 let access = url.startAccessingSecurityScopedResource()
                 defer { if access { url.stopAccessingSecurityScopedResource() } }
                 do {
-                    let data = try Data(contentsOf: url)
+                    // Чтение файла — не на главном потоке: каталог бывает на десятки МБ.
+                    let data = try await Task.detached(priority: .userInitiated) {
+                        try Data(contentsOf: url, options: .mappedIfSafe)
+                    }.value
                     urlString = try await ImageUploader.uploadPDF(data)
                 } catch { self.error = LS("Не удалось загрузить PDF") }
                 uploading = false
@@ -92,13 +157,20 @@ struct PDFPickerField: View {
 }
 
 extension UIImage {
-    /// Уменьшает до maxDimension по большей стороне (экономия трафика/места).
+    /// Уменьшает до maxDimension ПИКСЕЛЕЙ по большей стороне.
+    ///
+    /// `format.scale = 1`: формат по умолчанию берёт масштаб экрана, и
+    /// «1200» превращались в 3600 px на @3x. Для фото из галереи используйте
+    /// `ImageDownsampler` — он не декодирует оригинал целиком.
     func downscaled(maxDimension: CGFloat = 1200) -> UIImage {
-        let maxSide = max(size.width, size.height)
+        let pixelW = size.width * scale, pixelH = size.height * scale
+        let maxSide = max(pixelW, pixelH)
         guard maxSide > maxDimension else { return self }
-        let scale = maxDimension / maxSide
-        let newSize = CGSize(width: size.width * scale, height: size.height * scale)
-        let renderer = UIGraphicsImageRenderer(size: newSize)
+        let k = maxDimension / maxSide
+        let newSize = CGSize(width: (pixelW * k).rounded(), height: (pixelH * k).rounded())
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        let renderer = UIGraphicsImageRenderer(size: newSize, format: format)
         return renderer.image { _ in draw(in: CGRect(origin: .zero, size: newSize)) }
     }
 }
@@ -114,7 +186,7 @@ struct ImagePickerField: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if !imageURL.isEmpty, let url = URL(string: imageURL) {
-                AsyncImage(url: url) { img in
+                AsyncImage(url: CloudinaryURL.sized(imageURL, points: 400) ?? url) { img in
                     Color.clear.overlay { img.resizable().scaledToFill() }
                 } placeholder: { Color(.systemGray6) }
                 .frame(height: 140).frame(maxWidth: .infinity)
@@ -146,8 +218,7 @@ struct ImagePickerField: View {
                 uploading = true; error = nil
                 do {
                     if let data = try await newItem.loadTransferable(type: Data.self),
-                       let ui = UIImage(data: data),
-                       let jpeg = ui.downscaled().jpegData(compressionQuality: 0.8) {
+                       let jpeg = await ImageDownsampler.jpegOffMain(from: data) {
                         imageURL = try await ImageUploader.upload(jpeg)
                     } else {
                         error = LS("Не удалось прочитать фото")
@@ -176,7 +247,7 @@ struct MultiImagePickerField: View {
                     HStack(spacing: 8) {
                         ForEach(urls, id: \.self) { u in
                             ZStack(alignment: .topTrailing) {
-                                AsyncImage(url: URL(string: u)) { img in
+                                AsyncImage(url: CloudinaryURL.sized(u, points: 72)) { img in
                                     Color.clear.overlay { img.resizable().scaledToFill() }
                                 } placeholder: { Color(.systemGray6) }
                                 .frame(width: 72, height: 72)
@@ -205,11 +276,12 @@ struct MultiImagePickerField: View {
             guard !newItems.isEmpty else { return }
             Task {
                 uploading = true
+                // По одному: три оригинала по 12 Мп в памяти разом — сотни МБ.
+                // Каждый уменьшается вне главного потока и отпускается до следующего.
                 for it in newItems {
                     if urls.count >= maxCount { break }
-                    if let data = try? await it.loadTransferable(type: Data.self),
-                       let ui = UIImage(data: data),
-                       let jpeg = ui.downscaled().jpegData(compressionQuality: 0.8),
+                    guard let data = try? await it.loadTransferable(type: Data.self) else { continue }
+                    if let jpeg = await ImageDownsampler.jpegOffMain(from: data),
                        let url = try? await ImageUploader.upload(jpeg) {
                         urls.append(url)
                     }
@@ -226,10 +298,12 @@ struct MultiImagePickerField: View {
 struct GalleryImage: View {
     let value: String
     var emojiSize: CGFloat = 40
+    /// Ширина ячейки в точках — для размера, запрашиваемого у Cloudinary.
+    var points: CGFloat = 200
 
     var body: some View {
         if value.hasPrefix("http"), let url = URL(string: value) {
-            AsyncImage(url: url) { img in
+            AsyncImage(url: CloudinaryURL.sized(value, points: points) ?? url) { img in
                 // Размер — от контейнера, не от снимка (см. `VenuePhoto`).
                 Color.clear.overlay { img.resizable().scaledToFill() }
             } placeholder: { Color(.systemGray6) }

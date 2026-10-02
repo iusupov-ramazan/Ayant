@@ -25,6 +25,9 @@ struct Game2048View: View {
     /// Сколько бонусов РЕАЛЬНО начислил `BonusEngine`: дневной лимит может
     /// урезать до нуля, и врать «+N» нельзя.
     @State private var awarded = 0
+    /// Курс на эту партию (Remote Config): снимок в начале партии.
+    @State private var partyRates: GameRates?
+    private var rates: GameRates { partyRates ?? bonus.gameRates }
     @State private var banner: Milestone?
     @State private var nudge: Game2048.Direction?
     /// Номер партии. Ход проигрывается в отдельной задаче со сном между
@@ -33,6 +36,9 @@ struct Game2048View: View {
     /// (пауза короткая, но ждать её неприятно): задача сама проверяет, что
     /// партия ещё та же, и молча уходит, если нет.
     @State private var generation = 0
+    /// «Заново» посреди партии — спросить: одно случайное касание стирало
+    /// поле, на которое ушло полчаса.
+    @State private var confirmRestart = false
 
     private let spacing: CGFloat = 8
 
@@ -51,14 +57,28 @@ struct Game2048View: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .sanScreenBackground()
             .navigationTitle("2048")
+            .bonusPausedNotice(.game2048)
+            .onChange(of: state.isOver) { _, over in
+                if over { AnalyticsLog.log(.gamePlayed, ["game": BonusGame.game2048.rawValue]) }
+            }
+            .onAppear { if partyRates == nil { partyRates = bonus.gameRates } }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Заново") { restart() }.font(.golos(16, .semibold))
+                    Button("Заново") {
+                        // Пустую или законченную партию терять нечего.
+                        if state.isOver || state.score == 0 { restart() } else { confirmRestart = true }
+                    }
+                    .font(.golos(16, .semibold))
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Готово") { dismiss() }.font(.golos(16, .semibold))
                 }
+            }
+            .confirmationDialog("Начать заново? Прогресс партии пропадёт.",
+                                isPresented: $confirmRestart, titleVisibility: .visible) {
+                Button("Начать заново", role: .destructive) { restart() }
+                Button("Отмена", role: .cancel) {}
             }
         }
     }
@@ -112,9 +132,9 @@ struct Game2048View: View {
     /// Начисляет бонусы за НОВЫЕ ступени: одна плитка от `bonusFromValue` —
     /// один бонус, дневной лимит держит `BonusEngine`.
     private func award(bestBefore: Int) {
-        let earned = state.bonuses
+        let earned = state.bonuses(from: rates.game2048FirstTile)
         guard earned > credited else { return }
-        let granted = bonus.awardGameplay(earned - credited, source: "game:2048")
+        let granted = bonus.awardGameplay(earned - credited, source: BonusGame.game2048.source)
         credited = earned
         withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
             awarded += granted
@@ -122,6 +142,7 @@ struct Game2048View: View {
                                won: state.hasWon && bestBefore < Game2048.winningValue)
         }
         SanHaptics.success()
+        if granted > 0 { announceBonus(awarded) }
         Task {
             try? await Task.sleep(for: .seconds(1.5))
             withAnimation(.easeOut(duration: 0.3)) { banner = nil }
@@ -134,6 +155,7 @@ struct Game2048View: View {
         busy = false
         credited = 0
         awarded = 0
+        partyRates = bonus.gameRates
         banner = nil
         withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
             state = Game2048.start(seed: UInt64(Date().timeIntervalSince1970))
@@ -145,22 +167,22 @@ struct Game2048View: View {
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("\(state.score)")
-                    .font(.golos(22, .heavy)).tracking(-0.6)
+                Text("Счёт: \(state.score)")
+                    .font(.golos(17, .bold))
                     .foregroundStyle(Color.sanInk)
                     .contentTransition(.numericText())
-                Text("+\(awarded) \(bonusWord(awarded))")
+                Text("+\(awarded) бонусов")
                     .font(.golos(12.5)).foregroundStyle(Color.sanInkSoft)
                     .contentTransition(.numericText())
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
-                Text("лучшая \(state.bestTile)")
+                Text("Лучшая: \(state.bestTile)")
                     .font(.golos(15, .bold)).foregroundStyle(Color.sanInk)
                     .contentTransition(.numericText())
                 // Следующая ступень — единственная цель, которую игрок может
                 // держать в голове. Без неё бонус выглядит случайной наградой.
-                Text("плитка \(state.nextBonusValue) — бонус")
+                Text("плитка \(state.nextBonusValue(from: rates.game2048FirstTile)) — бонус")
                     .font(.golos(12.5, .semibold))
                     .foregroundStyle(Color.sanInkSoft)
                     .contentTransition(.numericText())
@@ -245,7 +267,7 @@ struct Game2048View: View {
                 // Дневной лимит мог срезать начисление до нуля — тогда ступень
                 // всё равно событие, но обещать бонус нельзя.
                 Text(banner.bonus > 0
-                     ? "+\(banner.bonus) \(bonusWord(banner.bonus))"
+                     ? "+\(banner.bonus) бонусов"
                      : "лимит бонусов на сегодня")
                     .font(.golos(14, .semibold)).foregroundStyle(.white.opacity(0.9))
             }
@@ -262,7 +284,7 @@ struct Game2048View: View {
     private var hint: some View {
         VStack(spacing: 2) {
             Text("Свайп сдвигает поле, одинаковые плитки сливаются")
-            Text("Каждая новая плитка от \(Game2048.bonusFromValue) = 1 бонус")
+            Text("Плитка от \(rates.game2048FirstTile) = 1 бонус")
         }
         .font(.caption)
         .multilineTextAlignment(.center)
@@ -271,13 +293,18 @@ struct Game2048View: View {
 
     private var gameOverOverlay: some View {
         VStack(spacing: 12) {
-            Text("Ходов больше нет").font(.golos(20, .heavy)).foregroundStyle(.white)
-            Text("Лучшая плитка \(state.bestTile), очков: \(state.score) → +\(awarded) \(bonusWord(awarded))")
+            // Заголовок — как в остальных играх; причина — строкой ниже.
+            Text("Игра окончена").font(.golos(20, .heavy)).foregroundStyle(.white)
+            Text("Ходов больше нет")
+                .font(.golos(14, .semibold)).foregroundStyle(.white.opacity(0.85))
+            Text("Лучшая плитка \(state.bestTile), очков: \(state.score)")
                 .font(.golos(14)).foregroundStyle(.white.opacity(0.85))
                 .multilineTextAlignment(.center)
+            Text("+\(awarded) бонусов")
+                .font(.golos(14, .bold)).foregroundStyle(.white)
             Button("Ещё раз") { restart() }
                 .font(.golos(15, .bold)).foregroundStyle(Color.sanInk)
-                .padding(.horizontal, 20).frame(height: 44)
+                .padding(.horizontal, 20).frame(minHeight: 44)
                 .background(Color.white, in: Capsule())
                 .buttonStyle(.sanPress(0.94))
         }
@@ -285,18 +312,6 @@ struct Game2048View: View {
         .background(Color.black.opacity(0.55),
                     in: RoundedRectangle(cornerRadius: SanRadius.hero, style: .continuous))
         .transition(.opacity.combined(with: .scale(scale: 1.05)))
-    }
-
-    /// «1 бонус», «2 бонуса», «5 бонусов» — русский счёт, а не «1 бонусов»:
-    /// 11…14 всегда «бонусов», дальше решает последняя цифра.
-    private func bonusWord(_ count: Int) -> String {
-        let n = abs(count)
-        if (11...14).contains(n % 100) { return "бонусов" }
-        switch n % 10 {
-        case 1: return "бонус"
-        case 2...4: return "бонуса"
-        default: return "бонусов"
-        }
     }
 
     /// Взятая ступень: что показать в баннере и начислили ли за неё бонус.

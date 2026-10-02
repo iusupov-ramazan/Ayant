@@ -4,7 +4,7 @@ import PackageDescription
 /// AyantData — слой данных: реализации доменных контрактов.
 ///
 /// Единственный модуль, которому разрешён Firebase SDK: зависимости на
-/// Firestore / Auth / Messaging / Analytics объявлены здесь и **не** попадают
+/// Firestore / Auth / Messaging / Analytics / Remote Config объявлены здесь и **не** попадают
 /// ни в `AyantFeatures`, ни в приложение. Поэтому обращение к Firestore из
 /// экрана или стора — ошибка компоновки, а не замечание на ревью.
 ///
@@ -31,11 +31,13 @@ let package = Package(
             name: "AyantData",
             dependencies: [
                 .product(name: "AyantDomain", package: "AyantDomain"),
+                .product(name: "FirebaseAppCheck", package: "firebase-ios-sdk"),
                 .product(name: "FirebaseAuth", package: "firebase-ios-sdk"),
                 .product(name: "FirebaseCore", package: "firebase-ios-sdk"),
                 .product(name: "FirebaseFirestore", package: "firebase-ios-sdk"),
                 .product(name: "FirebaseMessaging", package: "firebase-ios-sdk"),
                 .product(name: "FirebaseAnalytics", package: "firebase-ios-sdk"),
+                .product(name: "FirebaseRemoteConfig", package: "firebase-ios-sdk"),
                 .product(name: "GoogleSignIn", package: "GoogleSignIn-iOS"),
             ]
         ),

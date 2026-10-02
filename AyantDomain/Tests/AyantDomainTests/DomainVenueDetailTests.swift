@@ -24,11 +24,44 @@ final class DomainVenueDetailTests: XCTestCase {
         XCTAssertEqual(state.aggregate.count, 213)
     }
 
-    func testLiveReviewsOverrideSeedRating() {
+    /// Загружена одна страница из 213 отзывов: заголовок — серверный агрегат,
+    /// а не среднее двух последних (раньше было наоборот).
+    func testPartialPageDoesNotOverrideServerAggregate() {
         let state = VenueDetailState(venue: venue(rating: 4.6, reviews: 213),
+                                     reviews: [review("a", rating: 2), review("b", rating: 4)])
+        XCTAssertEqual(state.aggregate.rating, 4.6, accuracy: 1e-9)
+        XCTAssertEqual(state.aggregate.count, 213)
+        XCTAssertTrue(state.ratingBreakdownIsPartial)
+    }
+
+    /// Загружен весь набор, и он свежее серверного счётчика (функция ещё не
+    /// учла новый отзыв) — считаем живьём.
+    func testCompleteFresherSetIsComputedLive() {
+        let state = VenueDetailState(venue: venue(rating: 2.0, reviews: 1),
                                      reviews: [review("a", rating: 2), review("b", rating: 4)])
         XCTAssertEqual(state.aggregate.rating, 3.0, accuracy: 1e-9)
         XCTAssertEqual(state.aggregate.count, 2)
+        XCTAssertFalse(state.ratingBreakdownIsPartial)
+    }
+
+    /// Ровно страница (50) — набор может быть неполным: серверный агрегат.
+    func testFullPageFallsBackToServer() {
+        let page = (0..<VenueDetailState.reviewPageSize).map { review("r\($0)", rating: 1, author: "a\($0)") }
+        let state = VenueDetailState(venue: venue(rating: 4.2, reviews: 10), reviews: page)
+        XCTAssertEqual(state.aggregate.rating, 4.2, accuracy: 1e-9)
+        XCTAssertEqual(state.aggregate.count, 10)
+    }
+
+    func testReviewDocumentID() {
+        XCTAssertEqual(ReviewIdentity.documentID(authorID: "u1", venueID: "v1", itemID: nil), "u1_v1_venue")
+        XCTAssertEqual(ReviewIdentity.documentID(authorID: "u1", venueID: "v1", itemID: ""), "u1_v1_venue")
+        XCTAssertEqual(ReviewIdentity.documentID(authorID: "u1", venueID: "v1", itemID: "dish"), "u1_v1_dish")
+    }
+
+    func testVenueLevelReviewMatchesEmptyItemID() {
+        let state = VenueDetailState(venue: venue(), reviews: [review("x", rating: 5, itemID: "")],
+                                     currentUserID: "me", isGuest: false)
+        XCTAssertEqual(state.myReview()?.id, "x")
     }
 
     func testRatingBreakdownAlwaysHasAllFiveKeys() {

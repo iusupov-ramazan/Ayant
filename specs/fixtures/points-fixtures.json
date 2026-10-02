@@ -10,7 +10,13 @@
     "Этот файл существует, чтобы предсказание и расчёт не разъехались молча:",
     "имена полей ниже — ровно те, что пишет админка в документ venues/{id}.",
     "",
-    "Правило: НОВЫЙ КЕЙС ДОБАВЛЯЕТСЯ СЮДА, а не в тесты одной платформы."
+    "Правило: НОВЫЙ КЕЙС ДОБАВЛЯЕТСЯ СЮДА, а не в тесты одной платформы.",
+    "",
+    "Исключение — redeemRatio (страховка курса денежной награды в режиме cashback):",
+    "её исполняют только iOS и Functions. В Android-порте effectiveRatio ещё нет,",
+    "поэтому кейсы лежат под отдельным ключом, который Android-раннер не читает",
+    "(ignoreUnknownKeys). Портируете effectiveRatio в PointsMath.kt — подключите",
+    "redeemRatio и в PointsFixtureTest.kt."
   ],
 
   "version": 1,
@@ -309,6 +315,64 @@
       "rewards": [{ "id": "m1", "type": "money", "title": "Скидка баллами", "cost": 1, "ratio": 2.5, "active": true }],
       "rewardId": "m1", "pointsToSpend": 3, "balance": 10,
       "expect": { "cost": 3, "newBalance": 7, "somOff": 8 }
+    }
+  ],
+
+  "$redeemRatio": [
+    "Списание денежной награды с учётом режима заведения (venue.pointsMode / cashbackPercent):",
+    "в cashback курс не выше max(1, 20 / процент) — иначе «20% + курс 5» давал скидку 100%.",
+    "Сервер — effectiveMoneyRatio (functions/src/index.ts), iOS — PointsMath.effectiveRatio.",
+    "Форма кейса — как в redeem, плюс venue = поля документа заведения."
+  ],
+  "redeemRatio": [
+    {
+      "name": "cashback 20%, курс 5 → курс прижат к 1: скидка = списанному",
+      "venue": { "pointsMode": "cashback", "cashbackPercent": 20 },
+      "rewards": [{ "id": "m1", "type": "money", "title": "Скидка баллами", "cost": 50, "ratio": 5, "active": true }],
+      "rewardId": "m1", "pointsToSpend": 100, "balance": 500,
+      "expect": { "cost": 100, "newBalance": 400, "somOff": 100 }
+    },
+    {
+      "name": "cashback 5%, курс 10 → курс прижат к 4 (20 / 5)",
+      "venue": { "pointsMode": "cashback", "cashbackPercent": 5 },
+      "rewards": [{ "id": "m1", "type": "money", "title": "Скидка баллами", "cost": 50, "ratio": 10, "active": true }],
+      "rewardId": "m1", "pointsToSpend": 100, "balance": 500,
+      "expect": { "cost": 100, "newBalance": 400, "somOff": 400 }
+    },
+    {
+      "name": "cashback 10%, курс 1.5 → под потолком (2), не режется",
+      "venue": { "pointsMode": "cashback", "cashbackPercent": 10 },
+      "rewards": [{ "id": "m1", "type": "money", "title": "Скидка баллами", "cost": 10, "ratio": 1.5, "active": true }],
+      "rewardId": "m1", "pointsToSpend": 50, "balance": 100,
+      "expect": { "cost": 50, "newBalance": 50, "somOff": 75 }
+    },
+    {
+      "name": "cashback 40% (сверх потолка) считается как 20% → курс 1",
+      "venue": { "pointsMode": "cashback", "cashbackPercent": 40 },
+      "rewards": [{ "id": "m1", "type": "money", "title": "Скидка баллами", "cost": 50, "ratio": 5, "active": true }],
+      "rewardId": "m1", "pointsToSpend": 100, "balance": 500,
+      "expect": { "cost": 100, "newBalance": 400, "somOff": 100 }
+    },
+    {
+      "name": "cashback 0% → страховки нет, курс как есть",
+      "venue": { "pointsMode": "cashback", "cashbackPercent": 0 },
+      "rewards": [{ "id": "m1", "type": "money", "title": "Скидка баллами", "cost": 10, "ratio": 3, "active": true }],
+      "rewardId": "m1", "pointsToSpend": 50, "balance": 100,
+      "expect": { "cost": 50, "newBalance": 50, "somOff": 150 }
+    },
+    {
+      "name": "flat, курс 10 → не режется (курс — масштаб баллов за визит)",
+      "venue": { "pointsMode": "flat" },
+      "rewards": [{ "id": "m1", "type": "money", "title": "Скидка баллами", "cost": 50, "ratio": 10, "active": true }],
+      "rewardId": "m1", "pointsToSpend": 100, "balance": 500,
+      "expect": { "cost": 100, "newBalance": 400, "somOff": 1000 }
+    },
+    {
+      "name": "bands, курс 10 → не режется",
+      "venue": { "pointsMode": "bands" },
+      "rewards": [{ "id": "m1", "type": "money", "title": "Скидка баллами", "cost": 50, "ratio": 10, "active": true }],
+      "rewardId": "m1", "pointsToSpend": 100, "balance": 500,
+      "expect": { "cost": 100, "newBalance": 400, "somOff": 1000 }
     }
   ]
 }

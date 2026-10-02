@@ -339,6 +339,9 @@ struct HostAnalyticsView: View {
     @State private var stats: [String: [String: Int]] = [:]       // venueID → метрики
     @State private var series: [Int] = []                          // столбики графика
     @State private var loading = false
+    /// Загрузка не удалась (хоть по одному заведению). Отдельно от «данных
+    /// пока нет»: раньше ошибка сети выглядела как честные нули.
+    @State private var loadFailed = false
 
     private let days = [7, 30, 90]
 
@@ -353,6 +356,7 @@ struct HostAnalyticsView: View {
                     if host.state.venues.isEmpty {
                         emptyState
                     } else {
+                        if loadFailed { loadErrorBanner }
                         heroCard
                         statGrid
                         perVenueSection
@@ -504,34 +508,48 @@ struct HostAnalyticsView: View {
         .frame(maxWidth: .infinity).padding(24).padding(.top, 40)
     }
 
-    private func load() async {
-        loading = true
-        var result: [String: [String: Int]] = [:]
-        var daily: [String: Int] = [:]     // день → просмотры по всем заведениям
-        for v in host.state.venues {
-            result[v.id] = await store.analyticsStats(venueID: v.id, days: period)
-            for (day, metrics) in await store.analyticsDaily(venueID: v.id, days: period) {
-                daily[day, default: 0] += metrics[AnalyticsMetric.views] ?? 0
-            }
+    /// Ошибка загрузки — отдельной плашкой с повтором, поверх последних цифр.
+    private var loadErrorBanner: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "wifi.exclamationmark").foregroundStyle(Color.sanAccentText)
+            Text("Не удалось загрузить статистику. Цифры ниже могут быть неполными.")
+                .font(.golos(13.5, .semibold)).foregroundStyle(Color.sanInk)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 4)
+            Button("Повторить") { Task { await load() } }
+                .font(.golos(13.5, .bold))
         }
-        stats = result
-        series = Self.buckets(daily: daily, period: period)
-        loading = false
+        .padding(14)
+        .sanCard(padding: 0, radius: SanRadius.card)
     }
 
-    /// Ряд по дням → столбики: 7 дней = 7 столбиков, иначе 12 равных корзин.
-    /// Пустой ряд возвращает пустой массив — график тогда не рисуется вовсе.
-    static func buckets(daily: [String: Int], period: Int) -> [Int] {
-        guard !daily.isEmpty else { return [] }
-        let ordered = daily.keys.sorted().map { daily[$0] ?? 0 }
-        let count = period <= 7 ? min(7, ordered.count) : 12
-        guard ordered.count > count else { return ordered }
-        let size = Double(ordered.count) / Double(count)
-        return (0..<count).map { i in
-            let lo = Int((Double(i) * size).rounded(.down))
-            let hi = min(ordered.count, Int((Double(i + 1) * size).rounded(.down)))
-            return ordered[lo..<max(hi, lo + 1)].reduce(0, +)
+    /// Один запрос на заведение (ряд по дням); суммы считаются из него же —
+    /// раньше каждое заведение читалось дважды. Ключи дней — серверные (UTC),
+    /// пустые дни входят в график нулями (`HostAnalyticsSeries`).
+    private func load() async {
+        loading = true
+        let keys = HostAnalyticsSeries.dayKeys(days: period, now: .now)
+        var result: [String: [String: Int]] = [:]
+        var dailyViews = Array(repeating: 0, count: keys.count)   // просмотры по всем заведениям
+        var failed = false
+        await withTaskGroup(of: (String, [String: [String: Int]]?).self) { group in
+            for v in host.state.venues {
+                group.addTask { @MainActor in
+                    (v.id, try? await store.analyticsDailyOrThrow(venueID: v.id, days: period))
+                }
+            }
+            for await (venueID, daily) in group {
+                guard let daily else { failed = true; continue }
+                result[venueID] = HostAnalyticsSeries.totals(daily: daily, keys: keys)
+                let views = HostAnalyticsSeries.values(daily: daily, keys: keys, metric: AnalyticsMetric.views)
+                for i in views.indices { dailyViews[i] += views[i] }
+            }
         }
+        // Провал не обнуляет то, что уже было на экране.
+        if !failed || stats.isEmpty { stats = result }
+        series = HostAnalyticsSeries.buckets(dailyViews, period: period)
+        loadFailed = failed
+        loading = false
     }
 
     private func total(_ metric: String) -> Int {
@@ -887,7 +905,7 @@ struct HostPromoteCreateView: View {
 
     private var durationCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("\(duration) \(Self.daysWord(duration))")
+            Text(duration == 0 ? LS("бессрочно") : LF("%lld дней", duration))
                 .sanText(34, .heavy, tracking: -1.6)
                 .foregroundStyle(Color.sanInk)
             HStack(spacing: 8) {
@@ -957,10 +975,6 @@ struct HostPromoteCreateView: View {
         .sanSandPanel(radius: SanRadius.hero)
     }
 
-    private static func daysWord(_ n: Int) -> String {
-        if n == 0 { return LS("бессрочно") }
-        return LPlural(n, "день", "дня", "дней")
-    }
 
     private func launch() {
         // Бессрочно (duration == 0) → дата далеко в будущем.
@@ -971,7 +985,9 @@ struct HostPromoteCreateView: View {
                            status: kind == .push ? .sent : .active, startAt: .now, endAt: end,
                            impressions: 0, taps: 0, spend: kind == .boost ? price(duration) : 100)
         host.send(.addCampaign(c))
-        // Буст в ленте: помечаем заведение boostedUntil — оно поднимется вверх с меткой «Реклама».
+        // Буст в ленте: `boostedUntil` клиент записать не может (правила), стор
+        // этот интент игнорирует — буст должна включать серверная функция после
+        // оплаты. Экран спрятан `ReleaseFlags.promote`, пока её нет.
         if kind == .boost {
             host.send(.boostVenue(id: selectedVenue, until: end))
         }
@@ -1039,7 +1055,6 @@ struct HostProfileView: View {
     @EnvironmentObject private var store: AppStore
     @EnvironmentObject private var session: SessionStore
     @AppStorage("san.hostMode") private var hostMode = false
-    @AppStorage("san.host.notify") private var notify = true
     @AppStorage(HostSelection.venueKey) private var selectedVenueID = ""
     @State private var showSignOutConfirm = false
     @State private var showVerifyConfirm = false
@@ -1060,7 +1075,6 @@ struct HostProfileView: View {
                     headerCard
                     venuesGroup
                     businessGroup
-                    settingsGroup
                     guestModeCard
                     actionsCard
                 }
@@ -1214,31 +1228,9 @@ struct HostProfileView: View {
         return p.phone.isEmpty ? LS("Заполнить") : p.phone
     }
 
-    // MARK: Настройки
-
-    private var settingsGroup: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            SanSectionHeader("Настройки")
-            VStack(spacing: 0) {
-                HStack(spacing: 12) {
-                    SanIconTile(systemName: "bell.fill", size: 34)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text("Уведомления").font(.golos(16, .medium)).foregroundStyle(Color.sanInk)
-                        Text("Новые отзывы и статусы кампаний")
-                            .font(.golos(12.5)).foregroundStyle(Color.sanInkSoft)
-                    }
-                    Spacer()
-                    Toggle("", isOn: $notify).labelsHidden().tint(.sanAccent)
-                }
-                .padding(.horizontal, 14).padding(.vertical, 11)
-                SanHairline(leading: 60)
-                // Оплаты ещё нет — строка честно говорит «скоро», а не делает
-                // вид, что Payme/Click уже подключены.
-                row(icon: "creditcard.fill", title: "Оплата", detail: LS("Скоро"), chevron: false)
-            }
-            .sanGroupCard()
-        }
-    }
+    // Группа «Настройки» убрана перед релизом: переключатель «Уведомления»
+    // ничего не делал (ключ `san.host.notify` никто не читал), а строка
+    // «Оплата — Скоро» обещала функцию, которой нет (App Review 2.1/2.3).
 
     // MARK: Режим пользователя
 

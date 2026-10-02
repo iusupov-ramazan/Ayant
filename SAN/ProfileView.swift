@@ -13,6 +13,11 @@ struct ProfileView: View {
     @EnvironmentObject private var coupons: CouponStore
     @AppStorage("san.hostMode") private var hostMode = false
     @AppStorage("san.language") private var language = "ru"
+    /// «Новости и акции заведений» — согласие на рекламные push (4.5.4).
+    @AppStorage(MarketingPush.defaultsKey) private var marketingPush = true
+    /// Разрешены ли уведомления системой — для подсказки под переключателем.
+    @State private var notificationsAuthorized = true
+    @Environment(\.openURL) private var openURL
 
     @State private var activeSheet: ProfileSheet?
     /// Один диалог на карточку аккаунта вместо двух.
@@ -37,6 +42,7 @@ struct ProfileView: View {
                 VStack(alignment: .leading, spacing: 22) {
                     SanScreenTitle("Профиль")
                     profileCard
+                    EmailVerificationBanner()
                     couponsCard
                     settingsGroup
                     hostModeCard
@@ -59,8 +65,12 @@ struct ProfileView: View {
             .sheet(item: $activeSheet) { sheet in
                 switch sheet {
                 case .editReview(let review):
-                    if let venue = store.venue(id: review.venueID) {
+                    // Заведение может быть на паузе или снято с модерации — тогда
+                    // его нет в ленте, но свой отзыв гость всё равно правит.
+                    if let venue = store.venueForReview(id: review.venueID) {
                         WriteReviewView(venue: venue, existing: review)
+                    } else {
+                        ReviewVenueUnavailableView()
                     }
                 case .hostMode:
                     HostOnboardingView { hostMode = true }
@@ -177,8 +187,61 @@ struct ProfileView: View {
                         }
                     } label: { menuValue(LS(themeStore.theme.title)) }
                 }
+                SanHairline(leading: 60)
+                marketingPushRow
+                SanHairline(leading: 60)
+                // Скрытые авторы отзывов (Guideline 1.2) — здесь их можно вернуть.
+                NavigationLink { BlockedAuthorsView() } label: {
+                    settingRow(icon: "eye.slash.fill", title: "Скрытые авторы") {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Color.sanInkSoft)
+                    }
+                }
+                .buttonStyle(.plain)
             }
             .sanGroupCard()
+        }
+        .task { notificationsAuthorized = await MarketingPush.isAuthorized() }
+    }
+
+    /// Согласие на рассылки заведений. Выключено — устройство отписано от
+    /// топиков `all_users`/`city_*`; включено — подписано, если система
+    /// разрешила уведомления. Если разрешения нет, включение спрашивает его
+    /// (первый раз — системным диалогом, дальше — через Настройки iOS).
+    private var marketingPushRow: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 12) {
+                SanIconTile(systemName: "bell.badge.fill", size: 34)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Новости и акции заведений").font(.golos(16, .medium)).foregroundStyle(Color.sanInk)
+                    Text("Push-уведомления о новых акциях")
+                        .font(.golos(12.5)).foregroundStyle(Color.sanInkSoft)
+                }
+                Spacer()
+                Toggle("", isOn: $marketingPush).labelsHidden().tint(.sanAccent)
+            }
+            .padding(.horizontal, 14).padding(.vertical, 11)
+            if marketingPush && !notificationsAuthorized {
+                Button {
+                    if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+                } label: {
+                    Text("Уведомления выключены в настройках iPhone. Открыть настройки")
+                        .font(.golos(12.5, .medium)).foregroundStyle(Color.sanAccentText)
+                        .multilineTextAlignment(.leading)
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 14).padding(.bottom, 11)
+            }
+        }
+        .onChange(of: marketingPush) { _, on in
+            Task {
+                if on, !(await MarketingPush.isAuthorized()) {
+                    await NotificationManager.requestAuthorization()
+                }
+                notificationsAuthorized = await MarketingPush.isAuthorized()
+                await MarketingPush.sync(city: store.selectedCitySlug)
+            }
         }
     }
 
@@ -305,9 +368,9 @@ struct ProfileView: View {
                         }
                     }
                     .simultaneousGesture(TapGesture().onEnded {
-                        AnalyticsLog.log(.referralInvite, ["user_id": store.referralCode])
+                        AnalyticsLog.log(.referralInvite)
                     })
-                    Text("Друг получит приветственные бонусы, а ты — за каждого, кто присоединится.")
+                    Text("Друг получит приветственные бонусы, а вы — бонусы за каждого, кто присоединится по вашей ссылке.")
                         .font(.golos(13, .regular)).foregroundStyle(Color.sanInkSoft)
                 }
                 .padding(14).sanGroupCard()
@@ -381,7 +444,8 @@ struct ProfileView: View {
             get: { deleteError != nil }, set: { if !$0 { deleteError = nil } })) {
             Button("Ок") { deleteError = nil }
         } message: {
-            Text(deleteError ?? "")
+            // Тексты ошибок — русские строки пакета; переводит каталог.
+            Text(LS(deleteError ?? ""))
         }
         .sanGroupCard()
         // Выход тоже спрашиваем: у гостя он безвозвратный — анонимная запись
@@ -420,7 +484,11 @@ struct ProfileView: View {
                      ? "Гостевой аккаунт нельзя восстановить: бонусы и купоны этой сессии будут удалены."
                      : "Вы вернётесь на экран входа. Данные аккаунта сохранятся.")
             case .delete:
-                Text("Это действие необратимо. Все отзывы, сохранённое, баллы и купоны будут удалены.")
+                if host.state.hasAccount {
+                    Text("Это действие необратимо. Все отзывы, сохранённое, баллы и купоны будут удалены, а ваши заведения — сняты с публикации.")
+                } else {
+                    Text("Это действие необратимо. Все отзывы, сохранённое, баллы и купоны будут удалены.")
+                }
             }
         }
     }

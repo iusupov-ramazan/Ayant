@@ -52,13 +52,23 @@ public struct Coupon: Identifiable, Codable, Hashable, Sendable {
     public var venueName: String = ""
     public var kind: String = "bonus"      // bonus | loyalty | deal | gift
     public var dealID: String = ""
+    /// До какого момента купон гасится (переносится с `CouponOffer.expiresAt`
+    /// при покупке; сервер отказывает в погашении после него —
+    /// `coupon_expired`). `nil` — бессрочный.
+    public var expiresAt: Date? = nil
 
     /// Сканируется ли купон у заведения (даёт штамп): только привязанные к venue.
     public var isVenueBound: Bool { !venueID.isEmpty }
 
+    public func isExpired(at now: Date) -> Bool {
+        guard let expiresAt else { return false }
+        return expiresAt < now
+    }
+
     public init(
         id: String, title: String, code: String, createdAt: Date, used: Bool = false,
-        venueID: String = "", venueName: String = "", kind: String = "bonus", dealID: String = ""
+        venueID: String = "", venueName: String = "", kind: String = "bonus", dealID: String = "",
+        expiresAt: Date? = nil
     ) {
         self.id = id
         self.title = title
@@ -69,6 +79,7 @@ public struct Coupon: Identifiable, Codable, Hashable, Sendable {
         self.venueName = venueName
         self.kind = kind
         self.dealID = dealID
+        self.expiresAt = expiresAt
     }
 }
 

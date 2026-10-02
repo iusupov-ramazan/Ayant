@@ -79,6 +79,12 @@ struct HostScannerView: View {
                     onDone: { receipt = nil; if showsBack { dismiss() } else { resetScan() } })
             }
             .onAppear { venueID = fixedVenueID ?? venues.first?.id ?? "" }
+            // Свежие настройки лояльности перед сканами: режим баллов, карты
+            // штампов и их вкл/выкл правятся и из админ-панели, а маршрут скана
+            // (экран суммы, выбор карты) строится по кэшу кабинета. Один синк
+            // на открытие сканера — дёшево, а устаревший кэш иначе вёл бы к
+            // лишнему вводу суммы или отказу сервера.
+            .task { await host.sync() }
         }
     }
 
@@ -93,7 +99,7 @@ struct HostScannerView: View {
                     Color.clear.frame(width: 40, height: 40)
                 }
                 Spacer()
-                Text("Сканер купонов")
+                Text("Сканер QR гостя")
                     .font(.golos(16, .bold)).foregroundStyle(.white)
                 Spacer()
                 Color.clear.frame(width: 40, height: 40)
@@ -210,7 +216,7 @@ struct HostScannerView: View {
                 .foregroundStyle(.white.opacity(0.75))
             TextField("", text: $manualCode,
                       prompt: Text("AYANT-XXXXXX").foregroundColor(.white.opacity(0.55)))
-                .textInputAutocapitalization(.characters)
+                .textInputAutocapitalization(.never)   // uid в QR гостя чувствителен к регистру; код купона поднимет normalizedManualCode
                 .autocorrectionDisabled()
                 .multilineTextAlignment(.center)
                 .font(.golos(15, .semibold))
@@ -220,7 +226,7 @@ struct HostScannerView: View {
                 .frame(maxWidth: .infinity)
                 .background(.white.opacity(0.2), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             Button {
-                handle(manualCode.trimmingCharacters(in: .whitespaces).uppercased())
+                handle(Self.normalizedManualCode(manualCode))
             } label: {
                 Text("Проверить код")
                     .font(.golos(16, .bold))
@@ -262,18 +268,30 @@ struct HostScannerView: View {
                 guestRow(pending).padding(.horizontal, 20).padding(.top, 16)
 
                 if pending.mode == "cashback" {
-                    Spacer(minLength: 8)
-                    VStack(spacing: 6) {
-                        Text(amount > 0 ? amount.sanThousands : "0")
-                            .sanText(64, .heavy, tracking: -3.2, lineHeight: 1)
-                            .foregroundStyle(.white)
-                            .contentTransition(.numericText())
-                            .animation(.snappy, value: amount)
-                        Text("сом").font(.golos(14)).foregroundStyle(.white.opacity(0.8))
+                    // Сумма и клавиатура прокручиваются, кнопка закреплена снизу:
+                    // на маленьком экране с крупным шрифтом она уходила за край,
+                    // и начислить было нечем.
+                    GeometryReader { geo in
+                        ScrollView {
+                            VStack(spacing: 0) {
+                                Spacer(minLength: 8)
+                                VStack(spacing: 6) {
+                                    Text(amount > 0 ? amount.sanThousands : "0")
+                                        .sanText(64, .heavy, tracking: -3.2, lineHeight: 1)
+                                        .foregroundStyle(.white)
+                                        .contentTransition(.numericText())
+                                        .animation(.snappy, value: amount)
+                                        .lineLimit(1).minimumScaleFactor(0.5)
+                                    Text("сом").font(.golos(14)).foregroundStyle(.white.opacity(0.8))
+                                }
+                                earnPreview(preview).padding(.top, 16)
+                                Spacer(minLength: 12)
+                                HostAmountKeypad(text: $billText).padding(.horizontal, 20)
+                            }
+                            .frame(minHeight: geo.size.height)
+                        }
+                        .scrollBounceBehavior(.basedOnSize)
                     }
-                    earnPreview(preview).padding(.top, 16)
-                    Spacer(minLength: 12)
-                    HostAmountKeypad(text: $billText).padding(.horizontal, 20)
                     Button {
                         pendingEarn = nil
                         submitScan(code: pending.code, billAmount: amount, bandIndex: nil,
@@ -313,7 +331,7 @@ struct HostScannerView: View {
                                 .buttonStyle(.sanPress(0.97))
                             }
                             if bands.isEmpty {
-                                Text("Диапазоны не настроены в админ-панели.")
+                                Text("Диапазоны не настроены — задайте их во вкладке «Лояльность».")
                                     .font(.golos(14)).foregroundStyle(.white.opacity(0.85))
                                     .multilineTextAlignment(.center)
                                     .padding(.top, 20)
@@ -334,11 +352,15 @@ struct HostScannerView: View {
                     .font(.system(size: 16, weight: .semibold)).foregroundStyle(.white))
             VStack(alignment: .leading, spacing: 2) {
                 Text("Гость").font(.golos(14, .bold)).foregroundStyle(.white)
-                Text(pending.userID.isEmpty ? "QR распознан" : "ID \(pending.userID.prefix(8))")
-                    .font(.golos(11.5)).foregroundStyle(.white.opacity(0.8))
+                // «QR распознан» уже написано на бейдже справа — не повторяем.
+                if !pending.userID.isEmpty {
+                    Text("ID \(pending.userID.prefix(8))")
+                        .font(.golos(11.5)).foregroundStyle(.white.opacity(0.8))
+                }
             }
             Spacer(minLength: 8)
-            Text("QR верный")
+            // Сервер код ещё не проверял — распознан, а не «верный».
+            Text("QR распознан")
                 .font(.golos(12, .bold)).foregroundStyle(Color.sanOpen)
                 .lineLimit(1).fixedSize()
                 .padding(.horizontal, 11).padding(.vertical, 6)
@@ -381,8 +403,11 @@ struct HostScannerView: View {
                 ProgressView().tint(Color.sanAccent)
                 Text("Проверяем код…").font(.golos(16, .semibold)).foregroundStyle(Color.sanInk)
             } else if let result {
-                Image(systemName: result.ok ? "checkmark.seal.fill" : "xmark.octagon.fill")
-                    .font(.system(size: 44)).foregroundStyle(result.ok ? Color.sanOpen : Color(hex: 0xE8556B))
+                Image(systemName: result.isWarning ? "exclamationmark.triangle.fill"
+                                      : result.ok ? "checkmark.seal.fill" : "xmark.octagon.fill")
+                    .font(.system(size: 44))
+                    .foregroundStyle(result.isWarning ? Color(hex: 0xE0A100)
+                                     : result.ok ? Color.sanOpen : Color(hex: 0xE8556B))
                 Text(result.title).font(.golos(18, .bold)).foregroundStyle(Color.sanInk)
                     .multilineTextAlignment(.center)
                 if let sub = result.subtitle {
@@ -420,19 +445,32 @@ struct HostScannerView: View {
 
     // MARK: Логика
 
-    private func handle(_ code: String) {
-        let code = code.trimmingCharacters(in: .whitespaces)
+    private func handle(_ raw: String) {
+        let raw = raw.trimmingCharacters(in: .whitespaces)
         guard !processing, result == nil, pendingEarn == nil, pendingCardPick == nil,
-              !code.isEmpty, code != lastCode else { return }
+              !raw.isEmpty, raw != lastCode else { return }
         guard !venueID.isEmpty else { result = .error(LS("Выберите заведение")); return }
 
         // Ключ на распознанный QR — один, и он переживёт переход на экран суммы
         // и повторные тапы по кнопке начисления.
-        lastCode = code
+        lastCode = raw
         scanKey = UUID().uuidString
 
+        // Один QR гостя: «Мой QR» у заведения со штампами — это штамп, QR карты
+        // у заведения с баллами — баллы. Так же решает сервер; здесь — чтобы
+        // сразу показать нужный экран (сумма чека или выбор карты).
+        let code = GuestQR.route(raw, venueID: venueID,
+                                 pointsEnabled: currentVenue?.pointsEnabled ?? false,
+                                 loyaltyEnabled: currentVenue?.loyaltyEnabled ?? false)
+
         if code.hasPrefix("AYANT-PTS:") {
-            let mode = currentVenue?.pointsMode ?? "flat"
+            // `pointsMode` значим только при включённых баллах: у заведения,
+            // которое их выключило, в документе остаётся старый режим, и сканер
+            // просил бы сумму чека за начисление, которое сервер всё равно
+            // отклонит (`points_off`). Тогда код уходит на сервер как есть —
+            // ответ скажет, что включить.
+            let pointsOn = currentVenue?.pointsEnabled == true
+            let mode = pointsOn ? (currentVenue?.pointsMode ?? "flat") : "flat"
             if mode == "cashback" || mode == "bands" {
                 let userID = code.split(separator: ":").dropFirst().first.map(String.init) ?? ""
                 pendingEarn = PendingEarn(code: code, mode: mode, userID: userID)
@@ -441,7 +479,7 @@ struct HostScannerView: View {
             submitScan(code: code, billAmount: nil, bandIndex: nil, billForReceipt: nil)
             return
         }
-        if code.hasPrefix("AYANT-RDM:") {
+        if code.hasPrefix(RedeemQR.prefix) || code.hasPrefix(RedeemQR.tokenPrefix) {
             submitRedeem(code: code)
             return
         }
@@ -535,8 +573,12 @@ struct HostScannerView: View {
                                               replayed: out.replayed)
                         host.send(.noteScanSucceeded)
                     } else {
-                        result = out.ok ? .success(out) : .error(Self.message(for: out.errorCode))
+                        result = out.ok ? .success(out)
+                            : .error(Self.message(for: out.errorCode, retryAfterSec: out.retryAfterSec))
                         if out.ok { host.send(.noteScanSucceeded) }
+                        // Отказ из-за устаревших настроек в кэше — подтягиваем
+                        // свежие, чтобы следующий скан пошёл верным путём.
+                        if !out.ok, Self.isStaleConfig(out.errorCode) { host.send(.sync) }
                     }
                 }
             } catch {
@@ -552,12 +594,18 @@ struct HostScannerView: View {
         }
     }
 
-    /// Списание баллов на награду. Код: AYANT-RDM:userID:rewardId[:points].
+    /// Списание баллов на награду. Новый QR — `AYANT-RDT:<token>` (только
+    /// одноразовый токен), старый — `AYANT-RDM:userID:rewardId[:points[:nonce]]`.
+    /// Оба разбирает `RedeemQR` (домен), здесь своего парсера нет.
     private func submitRedeem(code: String) {
-        let parts = code.split(separator: ":").map(String.init)
-        guard parts.count >= 3 else { result = .error(LS("Неверный код награды.")); return }
-        let userID = parts[1], rewardId = parts[2]
-        let pts = parts.count >= 4 ? (Int(parts[3]) ?? 0) : 0    // для money-награды
+        guard let scanned = RedeemQR.scan(code) else { result = .error(LS("Неверный код награды.")); return }
+        if case .token(let redeemToken) = scanned {
+            submitTokenRedeem(code: code, token: redeemToken)
+            return
+        }
+        guard let qr = RedeemQR.parse(code) else { result = .error(LS("Неверный код награды.")); return }
+        let userID = qr.userID, rewardId = qr.rewardID
+        let pts = qr.points    // для money-награды; у item-награды 0
         processing = true
         result = nil
         retryAction = nil
@@ -568,13 +616,45 @@ struct HostScannerView: View {
             let outcome: ScanResultUI
             var networkFailed = false
             do {
-                // Ключ идемпотентности на один разобранный QR: если запрос
-                // придётся повторить (таймаут), сервер вернёт первый результат,
-                // а не спишет баллы второй раз.
+                // Ключ идемпотентности: `nonce` из QR гостя — сервер делает
+                // из него `rdm_<nonce>`, и ПОВТОРНЫЙ скан того же QR (второй
+                // сотрудник, второй тап, скриншот) воспроизводит первое
+                // списание, а не списывает ещё раз. Ключ на скан (`key`) —
+                // запасной для старых QR без nonce: он спасает только от
+                // ретрая после таймаута.
                 let out = try await couponService.redeemVenuePoints(venueID: vID, userID: userID,
                                                                     rewardId: rewardId, pointsToSpend: pts,
                                                                     idToken: token,
-                                                                    idempotencyKey: key)
+                                                                    idempotencyKey: key,
+                                                                    nonce: qr.nonce)
+                outcome = out.ok ? .redeemed(out) : .error(Self.message(for: out.errorCode))
+                if out.ok { host.send(.noteScanSucceeded) }
+            } catch {
+                outcome = .error(LS("Ошибка сети. Попробуйте ещё раз."))
+                networkFailed = true
+            }
+            await MainActor.run {
+                processing = false
+                result = outcome
+                if networkFailed { retryAction = { submitRedeem(code: code) } }
+            }
+        }
+    }
+
+    /// Списание по токену: чья карта и какая награда — знает только сервер.
+    /// Повтор (сеть, второй сотрудник, тот же QR) сервер воспроизводит по
+    /// `rdm_<token>` — ответ придёт с `replayed`, баллы дважды не спишутся.
+    private func submitTokenRedeem(code: String, token redeemToken: String) {
+        processing = true
+        result = nil
+        retryAction = nil
+        let vID = venueID
+        Task {
+            let idToken = await authService.idToken() ?? ""
+            let outcome: ScanResultUI
+            var networkFailed = false
+            do {
+                let out = try await couponService.redeemVenuePoints(venueID: vID, token: redeemToken, idToken: idToken)
                 outcome = out.ok ? .redeemed(out) : .error(Self.message(for: out.errorCode))
                 if out.ok { host.send(.noteScanSucceeded) }
             } catch {
@@ -604,25 +684,41 @@ struct HostScannerView: View {
 
     // Тексты — через `LS`, а не литералами: функция возвращает `String`, и
     // `Text(String)` каталог не смотрит. Ключи добавлены в каталог руками.
+    /// Отказ сервера человеческим языком. Для `cooldown` — сколько ждать:
+    /// сервер присылает `retryAfterSec`, и «попробуйте позже» без срока
+    /// заставляло сотрудника сканировать наугад.
+    private static func message(for code: String?, retryAfterSec: Int?) -> String {
+        if code == "cooldown", let sec = retryAfterSec, sec > 0 {
+            let minutes = max(1, Int((Double(sec) / 60).rounded(.up)))
+            return LF("Этому гостю уже начисляли недавно. Следующее начисление — через %lld мин.", minutes)
+        }
+        return message(for: code)
+    }
+
     private static func message(for code: String?) -> String {
         switch code {
         case "coupon_not_found": return LS("Купон не найден.")
         case "wrong_venue":      return LS("Этот код — для другого заведения.")
-        case "loyalty_off":      return LS("Карта лояльности у заведения выключена.")
-        case "card_not_found":   return LS("Эта карта штампов выключена или удалена. Обновите настройки и попробуйте снова.")
-        case "loyalty_is_points": return LS("Это заведение начисляет баллы, а не штампы — попросите гостя показать QR «Мой QR».")
+        case "loyalty_off":      return LS("Карта штампов выключена — включите её во вкладке «Лояльность».")
+        case "card_not_found":   return LS("Эта карта штампов выключена или удалена. Настройки обновлены — отсканируйте QR гостя ещё раз.")
+        case "loyalty_is_points": return LS("Настройки лояльности изменились — мы их обновили. Отсканируйте QR гостя ещё раз.")
         case "already_used":     return LS("Купон уже был использован.")
+        case "coupon_expired":   return LS("Срок купона истёк — погасить его нельзя.")
         case "not_owner":        return LS("У вас нет прав на это заведение.")
         case "venue_not_found":  return LS("Заведение не найдено.")
         case "no_token", "bad_token": return LS("Требуется вход в аккаунт заведения.")
         case "missing_params":   return LS("Пустой код купона.")
         // Баллы САН
-        case "points_off":       return LS("Баллы САН у заведения выключены.")
-        // Один код и для штампов, и для баллов — формулировка общая. Сервер
-        // присылает `retryAfterSec`, но клиент его пока не разбирает.
+        // Тот же код приходит на «Мой QR» у заведения без лояльности вовсе.
+        case "points_off":       return LS("У заведения не включены ни баллы, ни карта штампов. Включите их во вкладке «Лояльность».")
+        // Один код и для штампов, и для баллов — формулировка общая. Если
+        // сервер прислал `retryAfterSec`, срок добавляет перегрузка выше.
         case "cooldown":         return LS("Этому гостю уже начисляли недавно, попробуйте позже.")
-        case "missing_amount":   return LS("Введите сумму чека.")
-        case "bad_band":         return LS("Выберите диапазон суммы.")
+        // Сканер не спросил сумму/диапазон, а сервер их ждёт (или диапазонов
+        // теперь меньше) — значит, кэш настроек устарел; его подтягивает
+        // `isStaleConfig`, и повторный скан пойдёт верным путём.
+        case "missing_amount", "bad_band":
+            return LS("Настройки лояльности изменились — мы их обновили. Отсканируйте QR гостя ещё раз.")
         case "no_points":        return LS("Начислять нечего (0 баллов).")
         case "bad_code":         return LS("Неверный QR-код.")
         case "insufficient":     return LS("У гостя недостаточно баллов.")
@@ -632,10 +728,32 @@ struct HostScannerView: View {
         case "missing_user":     return LS("Не удалось определить гостя.")
         case "key_reused":       return LS("Этот код уже обрабатывался с другим запросом. Отсканируйте QR заново.")
         case "bad_reward":       return LS("Награда указана неверно. Попросите гостя обновить QR.")
+        // Токен списания (QR AYANT-RDT)
+        case "token_not_found":  return LS("QR не найден. Попросите гостя открыть награду заново.")
+        case "token_expired":    return LS("QR устарел. Попросите гостя открыть награду заново — код обновится.")
+        case "token_used":       return LS("Этот QR уже погашен.")
+        case "token_required":   return LS("Старый QR больше не принимается. Попросите гостя обновить приложение.")
         case "internal":         return LS("Ошибка на сервере. Попробуйте ещё раз через минуту.")
         case "app_check_failed": return LS("Приложение не прошло проверку. Обновите его из App Store.")
         default:                 return LS("Не удалось отсканировать код.")
         }
+    }
+
+    /// Отказы, которые означают «кэш настроек заведения устарел»: после них
+    /// сканер подтягивает свежие настройки (`host.send(.sync)`).
+    static func isStaleConfig(_ code: String?) -> Bool {
+        ["loyalty_is_points", "card_not_found", "missing_amount", "bad_band"].contains(code ?? "")
+    }
+
+    /// Ручной ввод. Код купона (`AYANT-XXXXXX`) регистронезависим — его
+    /// приводим к верхнему регистру, чтобы набрать с телефона было проще. А в
+    /// QR гостя (`AYANT-PTS:` / `AYANT-CARD:` / `AYANT-RDM:`) стоят uid и nonce,
+    /// где регистр значим: прежний `uppercased()` портил их, и сервер не
+    /// находил гостя.
+    static func normalizedManualCode(_ raw: String) -> String {
+        let code = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let colon = code.firstIndex(of: ":") else { return code.uppercased() }
+        return code[..<colon].uppercased() + code[colon...]
     }
 }
 
@@ -666,6 +784,15 @@ enum ScanResultUI {
 
     var ok: Bool { if case .error = self { return false }; return true }
 
+    /// Повторный скан уже погашенного QR награды (тот же nonce → сервер
+    /// воспроизвёл прежнее списание). Баллы второй раз не списаны, но
+    /// «Награда выдана ✓» здесь — приглашение выдать её ещё раз по
+    /// скриншоту. Поэтому — предупреждение, а не успех.
+    var isWarning: Bool {
+        if case .redeemed(let r) = self { return r.replayed }
+        return false
+    }
+
     var title: String {
         switch self {
         case .success(let o):
@@ -677,6 +804,7 @@ enum ScanResultUI {
             }
             return o.title.isEmpty ? LS("Купон погашен ✓") : "«\(o.title)» ✓"
         case .redeemed(let r):
+            if r.replayed { return LS("Эта награда уже выдана") }
             return r.rewardTitle.isEmpty ? LS("Награда выдана ✓") : "«\(r.rewardTitle)» ✓"
         case .error(let m): return m
         }
@@ -685,16 +813,41 @@ enum ScanResultUI {
         switch self {
         case .success(let o):
             if o.points { return LF("Начислено %lld. Баланс гостя: %lld баллов.", o.awarded, o.balance) }
-            guard o.loyalty else { return LS("Купон погашен.") }
+            // Купон: заголовок уже сказал «погашен» — здесь то, что делать
+            // сотруднику. Повтор того же скана (сеть) списанием не был.
+            guard o.loyalty else {
+                return o.replayed ? LS("Этот скан уже был засчитан — повторно купон не погашен.")
+                                  : LS("Выдайте гостю то, что указано в купоне.")
+            }
             if o.rewardIssued { return LF("🎉 Карта заполнена! Гостю выдан купон «%@» — он уже в «Мои купоны»; погасить можно сразу или в следующий визит.", o.rewardTitle) }
             // Итог — второй строкой: «2 из 6» — это всего на карте, не за скан.
             let total = LF("Всего на карте: %lld из %lld.", o.stamps, o.goal)
             return o.title.isEmpty ? total : LF("Купон «%@» погашен. %@", o.title, total)
         case .redeemed(let r):
+            if r.replayed { return Self.replayedRedeemSubtitle(r) }
             if let som = r.somOff { return LF("Списано %lld баллов (−%lld сом). Остаток: %lld.", r.redeemed, som, r.balance) }
             return LF("Списано %lld баллов. Остаток: %lld. Выдайте награду гостю.", r.redeemed, r.balance)
         case .error: return nil
         }
+    }
+
+    /// «Списано 14:05 · чек K7Q2M9. Не выдавайте награду повторно.» —
+    /// время и код чека из ПЕРВОГО списания, которое сервер воспроизвёл:
+    /// по ним сотрудник сверится с тем, кто выдал награду.
+    static func replayedRedeemSubtitle(_ r: RedeemOutcome) -> String {
+        var parts: [String] = []
+        if !r.rewardTitle.isEmpty { parts.append("«\(r.rewardTitle)»") }
+        let when = r.redeemedAt.map {
+            $0.formatted(Date.FormatStyle(locale: AppLanguage.locale).day().month(.abbreviated).hour().minute())
+        }
+        switch (when, r.receiptCode.isEmpty ? nil : r.receiptCode) {
+        case let (w?, code?): parts.append(LF("Списано %@ · чек %@", w, code))
+        case let (w?, nil):   parts.append(LF("Списано %@", w))
+        case let (nil, code?): parts.append(LF("Чек %@", code))
+        case (nil, nil): break
+        }
+        parts.append(LS("Не выдавайте награду повторно."))
+        return parts.joined(separator: "\n")
     }
 }
 

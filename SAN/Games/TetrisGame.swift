@@ -2,7 +2,7 @@ import SwiftUI
 import AyantDomain
 import AyantFeatures
 
-/// Тетрис. Правила — в `Tetris` (домен), здесь только отрисовка сетки и ввод.
+/// «Блоки» (в коде — Tetris). Правила — в `Tetris` (домен), здесь только отрисовка сетки и ввод.
 ///
 /// Никакого SpriteKit, в отличие от прошлой версии: поле — это сетка
 /// прямоугольников, поэтому у экрана есть 1:1 пара в Compose и порт стоит
@@ -14,6 +14,10 @@ struct TetrisGameView: View {
 
     @State private var state = Tetris.start(seed: UInt64(Date().timeIntervalSince1970))
     @State private var awarded = 0
+    /// Курс на эту партию (Remote Config): снимок в начале, чтобы смена курса
+    /// посреди партии не пересчитала уже набранные линии.
+    @State private var partyRates: GameRates?
+    private var rates: GameRates { partyRates ?? bonus.gameRates }
     /// Скорость падения растёт с числом линий — иначе игра не кончается.
     private var tickInterval: Double { max(0.16, 0.6 - Double(state.lines) * 0.02) }
 
@@ -24,12 +28,13 @@ struct TetrisGameView: View {
                 board
                     .overlay { if state.isOver { gameOverOverlay } }
                 controls
-                Text("\(Tetris.linesPerBonus) линий = 1 бонус")
+                Text("\(rates.linesPerBonus) линий = 1 бонус")
                     .font(.caption).foregroundStyle(.secondary)
             }
             .padding()
             .sanScreenBackground()
-            .navigationTitle("Тетрис")
+            .navigationTitle("Блоки")
+            .bonusPausedNotice(.tetris)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -38,6 +43,10 @@ struct TetrisGameView: View {
             }
         }
         .task(id: state.isOver) { await run() }
+        .onChange(of: state.isOver) { _, over in
+            if over { AnalyticsLog.log(.gamePlayed, ["game": BonusGame.tetris.rawValue]) }
+        }
+        .onAppear { if partyRates == nil { partyRates = bonus.gameRates } }
     }
 
     // MARK: Игровой цикл
@@ -58,11 +67,14 @@ struct TetrisGameView: View {
     /// игр (`GameEconomy`), и линии копятся — остаток от предыдущего бонуса не
     /// сгорает.
     private func step(_ transform: (Tetris.State) -> Tetris.State) {
-        let before = state.bonuses
+        let perBonus = rates.linesPerBonus
+        let before = state.bonuses(linesPerBonus: perBonus)
         state = transform(state)
-        let gained = state.bonuses - before
+        let gained = state.bonuses(linesPerBonus: perBonus) - before
         if gained > 0 {
-            awarded += bonus.awardGameplay(gained, source: "game:tetris")
+            let granted = bonus.awardGameplay(gained, source: BonusGame.tetris.source)
+            awarded += granted
+            if granted > 0 { announceBonus(awarded) }
             SanHaptics.selection()
         }
     }
@@ -87,7 +99,7 @@ struct TetrisGameView: View {
     private var nextPreview: some View {
         VStack(spacing: 4) {
             Text("Дальше").textCase(.uppercase).sanEyebrowText()
-                .foregroundStyle(Color(hex: 0x9A9188))
+                .foregroundStyle(Color.sanInkSoft)
             let cells = Tetris.cells(state.next, rotation: 0)
             Grid(horizontalSpacing: 2, verticalSpacing: 2) {
                 ForEach(0..<2, id: \.self) { y in
@@ -156,14 +168,15 @@ struct TetrisGameView: View {
 
     private var controls: some View {
         HStack(spacing: 10) {
-            controlButton("arrow.left") { step { Tetris.move($0, dx: -1) } }
-            controlButton("arrow.clockwise") { step { Tetris.rotate($0) } }
-            controlButton("arrow.right") { step { Tetris.move($0, dx: 1) } }
-            controlButton("arrow.down.to.line") { step { Tetris.hardDrop($0) } }
+            controlButton("arrow.left", label: "Влево") { step { Tetris.move($0, dx: -1) } }
+            controlButton("arrow.clockwise", label: "Повернуть") { step { Tetris.rotate($0) } }
+            controlButton("arrow.right", label: "Вправо") { step { Tetris.move($0, dx: 1) } }
+            controlButton("arrow.down.to.line", label: "Сбросить вниз") { step { Tetris.hardDrop($0) } }
         }
     }
 
-    private func controlButton(_ systemName: String, action: @escaping () -> Void) -> some View {
+    private func controlButton(_ systemName: String, label: LocalizedStringKey,
+                               action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemName)
                 .font(.system(size: 20, weight: .bold))
@@ -173,19 +186,24 @@ struct TetrisGameView: View {
         }
         .buttonStyle(.sanPress(0.94))
         .disabled(state.isOver)
+        // Иконка-стрелка VoiceOver читал как «кнопка» без смысла.
+        .accessibilityLabel(label)
     }
 
     private var gameOverOverlay: some View {
         VStack(spacing: 12) {
             Text("Игра окончена").font(.golos(20, .heavy)).foregroundStyle(.white)
-            Text("Линий: \(state.lines) → +\(awarded) бонусов")
+            Text("Линий: \(state.lines)")
                 .font(.golos(14)).foregroundStyle(.white.opacity(0.85))
+            Text("+\(awarded) бонусов")
+                .font(.golos(14, .bold)).foregroundStyle(.white)
             Button("Ещё раз") {
                 awarded = 0
+                partyRates = bonus.gameRates
                 state = Tetris.start(seed: UInt64(Date().timeIntervalSince1970))
             }
             .font(.golos(15, .bold)).foregroundStyle(Color.sanInk)
-            .padding(.horizontal, 20).frame(height: 44)
+            .padding(.horizontal, 20).frame(minHeight: 44)
             .background(Color.white, in: Capsule())
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

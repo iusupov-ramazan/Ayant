@@ -2,7 +2,7 @@ import SwiftUI
 import AyantDomain
 import AyantFeatures
 
-/// 3-шаговый онбординг (по спецификации). Показывается один раз до ленты.
+/// Онбординг: бонусы и баллы, геолокация, уведомления. Показывается один раз до ленты.
 /// Выбор города обязателен — без него лента не работает.
 struct OnboardingView: View {
     @EnvironmentObject private var store: AppStore
@@ -14,15 +14,17 @@ struct OnboardingView: View {
     /// не раньше, чем диалог закроется.
     @State private var awaitingLocationAnswer = false
 
-    // Пока доступен только Бишкек — выбор города отключён (2 шага).
-    private let stepCount = 2
+    // Пока доступен только Бишкек — выбор города отключён. Шаги: бонусы и
+    // баллы (0), геолокация (1), уведомления (2).
+    private let stepCount = 3
 
     var body: some View {
         VStack(spacing: 0) {
             progressDots
             TabView(selection: $step) {
-                locationStep.tag(0)
-                notificationStep.tag(1)
+                walletsStep.tag(0)
+                locationStep.tag(1)
+                notificationStep.tag(2)
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
             .animation(.easeInOut, value: step)
@@ -35,7 +37,7 @@ struct OnboardingView: View {
         .onChange(of: location.authorizationStatus) { _, _ in
             guard awaitingLocationAnswer else { return }
             awaitingLocationAnswer = false
-            withAnimation { step = 1 }
+            withAnimation { step = 2 }
         }
     }
 
@@ -50,6 +52,24 @@ struct OnboardingView: View {
         .padding(.top, 16)
     }
 
+    // MARK: Шаг 0 — Бонусы и баллы
+    //
+    // В приложении два разных кошелька, и путают их постоянно: бонусы (общие,
+    // за игры, тратятся на купоны) и баллы САН (у каждого заведения свои).
+    // Одна фраза до первого экрана снимает половину вопросов в поддержку.
+
+    private var walletsStep: some View {
+        prePrompt(
+            icon: "star.circle.fill",
+            title: "Бонусы и баллы",
+            subtitle: "Бонусы — общие: их приносят игры в приложении, а тратятся они на купоны заведений. Баллы у каждого заведения свои: покажите на кассе «Мой QR», и заведение начислит баллы, которые тратятся только у него.",
+            primary: "Понятно",
+            secondary: nil
+        ) {
+            withAnimation { step = 1 }
+        }
+    }
+
     // MARK: Шаг 1 — Геолокация
     //
     // Кнопка названа нейтрально, и мимо системного запроса пути нет — это
@@ -61,8 +81,8 @@ struct OnboardingView: View {
     private var locationStep: some View {
         prePrompt(
             icon: "location.circle.fill",
-            title: "Включи геолокацию",
-            subtitle: "Разреши доступ к локации, чтобы видеть, как далеко заведения от тебя. Без неё всё работает — просто без расстояний.",
+            title: "Включите геолокацию",
+            subtitle: "Разрешите доступ к локации, чтобы видеть, как далеко заведения от вас. Без неё всё работает — просто без расстояний.",
             primary: "Продолжить",
             secondary: nil
         ) {
@@ -71,7 +91,7 @@ struct OnboardingView: View {
             // он не появится и делегат промолчит — тогда уходим дальше сами,
             // иначе шаг стал бы тупиком без единственной кнопки.
             guard location.authorizationStatus == .notDetermined else {
-                withAnimation { step = 1 }
+                withAnimation { step = 2 }
                 return
             }
             awaitingLocationAnswer = true
@@ -80,28 +100,40 @@ struct OnboardingView: View {
     }
 
     // MARK: Шаг 2 — Уведомления
+    //
+    // Та же правка, что у геолокации (5.1.1(iv), отклонение 15.09.2026): одна
+    // нейтральная кнопка «Продолжить», и она ВСЕГДА ведёт в системный диалог.
+    // Было «Включить уведомления» + «Позже» — «Позже» позволяло обойти
+    // системный запрос, за что сборку и отклонили. Решает сам пользователь —
+    // в системном окне.
 
     private var notificationStep: some View {
         prePrompt(
             icon: "bell.badge.fill",
-            title: "Не пропусти новые акции",
-            subtitle: "Уведомим, когда сохранённые заведения опубликуют новое предложение. Включить можно позже в настройках.",
-            primary: "Включить уведомления",
-            secondary: "Позже"
+            title: "Не пропустите новые акции",
+            // Обещаем только то, что приложение действительно присылает: напоминания
+            // про бонусы (`NotificationManager`) и новости заведений.
+            subtitle: "Напомним про бонусы и расскажем о новых акциях заведений. Отключить можно в настройках.",
+            primary: "Продолжить",
+            secondary: nil
         ) {
             Task {
+                // Если ответ уже дан, система диалог не покажет и вызов вернётся
+                // сразу — шаг не становится тупиком.
                 await NotificationManager.requestAuthorization()
+                // Рекламные топики — только при выданном разрешении и включённой
+                // настройке «Новости и акции заведений» (по умолчанию включена).
+                await MarketingPush.sync()
+                AnalyticsLog.log(.onboardingComplete)
                 onFinished()
             }
-        } onSkip: {
-            onFinished()
         }
     }
 
     // MARK: Переиспользуемый pre-prompt
 
-    /// `secondary`/`onSkip` — опциональные: у шага геолокации кнопки «мимо»
-    /// быть не должно (см. комментарий к `locationStep`).
+    /// `secondary`/`onSkip` — опциональные: у шагов-разрешений (геолокация,
+    /// уведомления) кнопки «мимо» быть не должно (см. `locationStep`).
     ///
     /// Ключи каталога, а не `String`: `Text(String)` ничего не переводит, и
     /// онбординг оставался русским даже в английской сборке.

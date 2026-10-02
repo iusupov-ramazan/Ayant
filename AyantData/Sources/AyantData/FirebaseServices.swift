@@ -93,6 +93,10 @@ public final class FirebaseAuthService: AuthService {
             let change = user.createProfileChangeRequest()
             change.displayName = cleanName
             try await change.commitChanges()
+            // Письмо подтверждения — сразу после регистрации: без подтверждённой
+            // почты денежные функции отвечают `email_not_verified`. Сбой письма
+            // регистрацию не отменяет — его можно отправить ещё раз из профиля.
+            try? await user.sendEmailVerification()
             return SANUser(id: user.uid, name: cleanName, email: clean, provider: .email)
         }
     }
@@ -172,7 +176,8 @@ public final class FirebaseAuthService: AuthService {
 
     /// Полное удаление аккаунта. Каскад по Firestore делает Cloud Function
     /// (клиенту правила запрещают чистить `venuePoints`/`coupons`), затем она же
-    /// удаляет запись в Firebase Auth — поэтому локально остаётся только выйти.
+    /// удаляет запись в Firebase Auth. Локальный выход делает вызывающий
+    /// (`SessionStore`) — после отзыва гранта Apple.
     public func deleteAccount() async throws {
         guard let user = Auth.auth().currentUser else { return }
         // Анонимную запись сервером чистить нечего — удаляем на месте.
@@ -186,17 +191,27 @@ public final class FirebaseAuthService: AuthService {
         req.httpMethod = "POST"
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        await req.attachAppCheck()
         req.httpBody = Data("{}".utf8)
         let (_, response) = try await URLSession.shared.data(for: req)
         let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+        // На 200 НЕ выходим: запись Auth уже удалена сервером, но локальная
+        // сессия (и её свежий ID-токен) ещё нужна `SessionStore` для отзыва
+        // гранта Apple ПОСЛЕ успешного удаления. Выход делает стор.
+        //
+        // Тексты — ключи каталога (`SessionStore`/экран прогоняют их через
+        // перевод), поэтому без кода в строке: код пишем в лог.
+        if code != 200 { print("deleteAccount HTTP \(code)") }
         switch code {
-        case 200: signOut()
+        case 200: return
         case 401: throw AuthError.requiresRecentLogin
+        // Старый сервер ещё отвечает 409 владельцу заведений; новый снимает
+        // их с публикации и удаляет аккаунт.
         case 409: throw AuthError.unknown("Аккаунт управляет заведениями. Напишите в поддержку, чтобы передать их, — после этого удалим аккаунт.")
         // 404 = функция ещё не развёрнута (`firebase deploy --only functions`),
         // 503 = недоступна. Для пользователя это одно и то же: сервер молчит.
-        case 404, 503, 0: throw AuthError.unknown("Сервис удаления недоступен. Попробуйте позже или напишите в поддержку (код \(code)).")
-        default: throw AuthError.unknown("Не удалось удалить аккаунт (код \(code)). Попробуйте позже.")
+        case 404, 503, 0: throw AuthError.unknown("Сервис удаления недоступен. Попробуйте позже или напишите в поддержку.")
+        default: throw AuthError.unknown("Не удалось удалить аккаунт. Попробуйте позже.")
         }
     }
 
@@ -214,22 +229,57 @@ public final class FirebaseAuthService: AuthService {
         try? await user.delete()
     }
 
+    // MARK: Подтверждение почты
+
+    public func needsEmailVerification() -> Bool {
+        guard let u = Auth.auth().currentUser, !u.isAnonymous else { return false }
+        return EmailVerificationPolicy.isRequired(
+            isPasswordAccount: u.providerData.contains { $0.providerID == "password" },
+            isVerified: u.isEmailVerified,
+            createdAt: u.metadata.creationDate)
+    }
+
+    public func sendEmailVerification() async throws {
+        guard let user = Auth.auth().currentUser else { return }
+        try await Self.translating { try await user.sendEmailVerification() }
+    }
+
+    public func reloadEmailVerification() async throws -> Bool {
+        guard let user = Auth.auth().currentUser else { return false }
+        try await Self.translating { try await user.reload() }
+        let fresh = Auth.auth().currentUser ?? user
+        guard fresh.isEmailVerified else { return false }
+        // Старый ID-токен несёт `email_verified: false` ещё до часа — сервер
+        // увидит подтверждение только с новым.
+        _ = try? await fresh.getIDTokenResult(forcingRefresh: true)
+        return true
+    }
+
     /// Вход по внешнему провайдеру поверх гостевого сеанса.
     ///
     /// Сначала пробуем привязать (`link`) — тогда гость сохраняет uid и всё,
     /// что успел накопить. Если такой аккаунт уже существует, привязка невозможна
     /// (`credentialAlreadyInUse`) — входим обычным способом, гостевая запись
     /// остаётся анонимной и без данных: писать что-либо гостю уже запрещено.
+    ///
+    /// Учётные данные Apple — ОДНОРАЗОВЫЕ (nonce): после неудачного `link` их
+    /// нельзя предъявить повторно, и гость с уже существующим Apple-аккаунтом
+    /// получал ошибку вместо входа. Firebase кладёт в ошибку свежие данные
+    /// (`AuthErrorUserInfoUpdatedCredentialKey`) — входим с ними.
     private func signInLinkingGuest(with credential: AuthCredential) async throws -> User {
+        var signInCredential = credential
         if let guest = Auth.auth().currentUser, guest.isAnonymous {
             do { return try await guest.link(with: credential).user }
             catch let error as NSError where
                 error.code == AuthErrorCode.credentialAlreadyInUse.rawValue ||
                 error.code == AuthErrorCode.emailAlreadyInUse.rawValue {
                 // Падаем в обычный вход ниже.
+                if let updated = error.userInfo[AuthErrorUserInfoUpdatedCredentialKey] as? AuthCredential {
+                    signInCredential = updated
+                }
             }
         }
-        return try await Auth.auth().signIn(with: credential).user
+        return try await Auth.auth().signIn(with: signInCredential).user
     }
 
     private func map(_ u: User, provider: AuthProvider) -> SANUser {
@@ -289,7 +339,7 @@ public final class FirebaseAuthService: AuthService {
 
 // MARK: - Firestore
 
-public final class FirebaseDataRepository: DataRepository {
+public final class FirebaseDataRepository: DataRepository, UserLibrarySyncing, PhotoReporting {
     /// Пустой инициализатор нужен явно: синтезированный — internal.
     public init() {}
 
@@ -297,10 +347,13 @@ public final class FirebaseDataRepository: DataRepository {
 
     public func fetchVenues() async throws -> [Venue] {
         let snap = try await db.collection(FS.Collection.venues).getDocuments()
-        print("🔥 venues snap: \(snap.documents.count) docs")
+        // Без печати документов: в релизе `print` целиком выводил данные
+        // заведений (телефоны, владельцев) в системный лог устройства.
         return snap.documents.compactMap { doc -> Venue? in
             let v = Venue(firestore: doc.data(), id: doc.documentID)
-            if v == nil { print("⚠️ venue mapping failed [\(doc.documentID)]: \(doc.data())") }
+            #if DEBUG
+            if v == nil { debugPrint("venue mapping failed:", doc.documentID) }
+            #endif
             return v
         }
     }
@@ -309,10 +362,11 @@ public final class FirebaseDataRepository: DataRepository {
         let snap = try await db.collection(FS.Collection.deals)
             .whereField(FS.DealDoc.validUntil, isGreaterThan: Timestamp(date: .now))
             .getDocuments()
-        print("🔥 deals snap: \(snap.documents.count) docs")
         return snap.documents.compactMap { doc -> Deal? in
             let d = Deal(firestore: doc.data(), id: doc.documentID)
-            if d == nil { print("⚠️ deal mapping failed [\(doc.documentID)]: \(doc.data())") }
+            #if DEBUG
+            if d == nil { debugPrint("deal mapping failed:", doc.documentID) }
+            #endif
             return d
         }
     }
@@ -381,6 +435,25 @@ public final class FirebaseDataRepository: DataRepository {
     public func reportReview(_ report: ReviewReport) async throws {
         try await db.collection(FS.Collection.reviewReports).document(report.id)
             .setData(report.firestoreData, merge: true)
+    }
+
+    // Жалоба на фото — та же очередь, детерминированный id (одна на фото и человека).
+    public func reportPhoto(_ report: PhotoReport) async throws {
+        try await db.collection(FS.Collection.reviewReports).document(report.id)
+            .setData(report.firestoreData, merge: true)
+    }
+
+    // Личная библиотека `userLibraries/{uid}` — читает и пишет только владелец.
+    public func fetchUserLibrary(userID: String) async throws -> UserLibrary? {
+        let snap = try await db.collection(FS.Collection.userLibraries).document(userID).getDocument()
+        guard snap.exists, let data = snap.data() else { return nil }
+        return UserLibrary(firestore: data)
+    }
+
+    public func saveUserLibrary(_ library: UserLibrary, userID: String) async throws {
+        // Полная замена, а не merge: удаление из списка должно доехать до сервера.
+        try await db.collection(FS.Collection.userLibraries).document(userID)
+            .setData(library.firestoreData)
     }
 
     // Погашение купона: детерминированный id ⇒ повторно не дублируется.
@@ -535,12 +608,11 @@ public final class FirebaseAnalyticsService: AnalyticsService {
         return byDay
     }
 
+    /// Ключ дня — по UTC, как у сервера (`dayKey()` в функциях пишет
+    /// `toISOString().slice(0, 10)`). Раньше здесь был локальный день телефона:
+    /// в Бишкеке до 06:00 граница периода съезжала на сутки.
     static func dayKey(daysAgo: Int = 0) -> String {
-        let d = Calendar.current.date(byAdding: .day, value: -daysAgo, to: .now) ?? .now
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "yyyy-MM-dd"
-        return f.string(from: d)
+        HostAnalyticsSeries.cutoffKey(days: daysAgo + 1, now: .now)
     }
 }
 
@@ -609,9 +681,32 @@ public final class FirebaseHostRepository: HostRepository {
 
     private let db = Firestore.firestore()
 
+    /// Документ есть — `updateData` без `status`/`isVerified`/`boostedUntil`;
+    /// нет — создание с модерацией (`status: pending`). Так устаревшая копия
+    /// кабинета не перетирает решения админа и сервера.
+    ///
+    /// Сначала читаем документ, как `saveProfile`: прежний путь «updateData,
+    /// а при `notFound` — create» не детерминирован — для несуществующего
+    /// документа правила могут ответить `PERMISSION_DENIED` (запрос оценён как
+    /// create без `status: pending`) раньше, чем `NOT_FOUND`, и новое
+    /// заведение не сохранялось вовсе.
+    ///
+    /// `allowCreate: false` (заведение сервер уже отдавал) и документа нет —
+    /// его удалили; бросаем `AppError.notFound` вместо воскрешения из кэша.
+    public func saveVenue(_ dto: HostVenueDTO, ownerID: String, allowCreate: Bool) async throws {
+        let ref = db.collection(FS.Collection.venues).document(dto.id)
+        let snap = try await ref.getDocument()
+        if snap.exists {
+            try await ref.updateData(dto.firestoreData(ownerID: ownerID))
+        } else if allowCreate {
+            try await ref.setData(dto.firestoreData(ownerID: ownerID, isNew: true), merge: true)
+        } else {
+            throw AppError.notFound
+        }
+    }
+
     public func saveVenue(_ dto: HostVenueDTO, ownerID: String) async throws {
-        try await db.collection(FS.Collection.venues).document(dto.id)
-            .setData(dto.firestoreData(ownerID: ownerID), merge: true)
+        try await saveVenue(dto, ownerID: ownerID, allowCreate: true)
     }
 
     public func deleteVenue(id: String) async throws {
@@ -643,9 +738,14 @@ public final class FirebaseHostRepository: HostRepository {
         return snap.documents.compactMap { HostDealDTO(firestore: $0.data(), id: $0.documentID) }
     }
 
+    /// Статус решается по документу на сервере, а не по кэшу кабинета — см.
+    /// `HostForms.couponStatusToWrite`. Поэтому сначала читаем документ.
     public func saveCouponOffer(_ offer: CouponOffer, ownerID: String) async throws {
-        try await db.collection(FS.Collection.couponOffers).document(offer.id)
-            .setData(offer.firestoreData(ownerID: ownerID), merge: true)
+        let ref = db.collection(FS.Collection.couponOffers).document(offer.id)
+        let snap = try await ref.getDocument()
+        let server = snap.data().flatMap { CouponOffer(firestore: $0, id: snap.documentID) }
+        let status = HostForms.couponStatusToWrite(server: snap.exists ? server : nil, edited: offer)
+        try await ref.setData(offer.firestoreData(ownerID: ownerID, status: status), merge: true)
     }
 
     public func deleteCouponOffer(id: String) async throws {
@@ -658,9 +758,35 @@ public final class FirebaseHostRepository: HostRepository {
         return snap.documents.compactMap { CouponOffer(firestore: $0.data(), id: $0.documentID) }
     }
 
+    /// Профиль пишется без `verification` (merge) — так устаревшая копия не
+    /// перетирает «verified» и не отзывает проверку, а запись без сети
+    /// встаёт в очередь SDK, как раньше.
+    ///
+    /// Заявка на проверку (`pending`) — отдельной транзакцией: статус ставится,
+    /// только если на сервере СЕЙЧАС `none`/`rejected`. Прежний путь «прочитать,
+    /// потом записать» без транзакции мог затереть решение админа, принятое
+    /// между чтением и записью, а без сети и кэша падал на чтении целиком.
     public func saveProfile(_ profile: HostProfile, ownerID: String) async throws {
-        try await db.collection(FS.Collection.hosts).document(ownerID)
-            .setData(profile.firestoreData, merge: true)
+        let ref = db.collection(FS.Collection.hosts).document(ownerID)
+        async let base: Void = ref.setData(profile.firestoreData(isNew: false), merge: true)
+        if profile.verification == .pending {
+            let requestable = [VerificationStatus.none.rawValue, VerificationStatus.rejected.rawValue]
+            _ = try await db.runTransaction { txn, errorPointer -> Any? in
+                let snap: DocumentSnapshot
+                do { snap = try txn.getDocument(ref) } catch {
+                    errorPointer?.pointee = error as NSError
+                    return nil
+                }
+                let serverStatus = snap.data()?[FS.HostDoc.verification] as? String
+                    ?? VerificationStatus.none.rawValue
+                if requestable.contains(serverStatus) {
+                    txn.setData([FS.HostDoc.verification: VerificationStatus.pending.rawValue],
+                                forDocument: ref, merge: true)
+                }
+                return nil
+            }
+        }
+        try await base
     }
 
     public func fetchProfile(ownerID: String) async throws -> HostProfile? {
@@ -734,6 +860,7 @@ public final class FirebaseCouponService: CouponService {
     private let db = Firestore.firestore()
     private let scanURL = AyantBackend.functionURL("scanCoupon")
     private let redeemURL = AyantBackend.functionURL("redeemVenuePoints")
+    private let redeemTokenURL = AyantBackend.functionURL("issueRedeemToken")
 
     public func saveCoupon(_ c: Coupon, userID: String) async throws {
         try await db.collection(FS.Collection.coupons).document(c.id)
@@ -782,14 +909,21 @@ public final class FirebaseCouponService: CouponService {
     /// первый снимок уходит, когда ответили оба — иначе «Начислено» сработало
     /// бы на карты второй коллекции как на новые.
     public func loyaltyCards(userID: String) -> AsyncStream<[LoyaltyCard]> {
+        liveLoyaltyCards(userID: userID).mapped(\.value)
+    }
+
+    /// Снимок «из кэша», если из кэша хотя бы одна из двух коллекций.
+    /// `includeMetadataChanges: true` — см. `FirebasePointsRepository.liveCards`.
+    public func liveLoyaltyCards(userID: String) -> AsyncStream<LiveSnapshot<[LoyaltyCard]>> {
         AsyncStream { continuation in
             guard !userID.isEmpty else { continuation.finish(); return }
             let lock = NSLock()
             var parts: [String: [LoyaltyCard]] = [:]
+            var fromCache: [String: Bool] = [:]
             let registrations = Self.loyaltyCollections.map { name in
                 db.collection(name)
                     .whereField(FS.LoyaltyCardDoc.userID, isEqualTo: userID)
-                    .addSnapshotListener { snapshot, error in
+                    .addSnapshotListener(includeMetadataChanges: true) { snapshot, error in
                         lock.lock()
                         if error != nil {
                             // Листенер после ошибки не оживает. Для второй коллекции
@@ -798,13 +932,16 @@ public final class FirebaseCouponService: CouponService {
                             // состояние, как раньше.
                             guard parts[name] == nil else { lock.unlock(); return }
                             parts[name] = []
+                            fromCache[name] = false
                         } else {
                             parts[name] = snapshot?.documents.map { LoyaltyCard(firestore: $0.data()) } ?? []
+                            fromCache[name] = snapshot?.metadata.isFromCache ?? true
                         }
                         let ready = parts.count == Self.loyaltyCollections.count
                         let merged = Self.loyaltyCollections.flatMap { parts[$0] ?? [] }
+                        let cached = fromCache.values.contains(true)
                         lock.unlock()
-                        if ready { continuation.yield(merged) }
+                        if ready { continuation.yield(LiveSnapshot(value: merged, isFromCache: cached)) }
                     }
             }
             continuation.onTermination = { _ in registrations.forEach { $0.remove() } }
@@ -825,16 +962,24 @@ public final class FirebaseCouponService: CouponService {
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+        await req.attachAppCheck()
         var body: [String: Any] = [FS.ScanResponse.code: code, FS.ScanResponse.venueID: venueID]
         if let billAmount { body[FS.ScanResponse.billAmount] = billAmount }
         if let bandIndex { body[FS.ScanResponse.bandIndex] = bandIndex }
         if !idempotencyKey.isEmpty { body[FS.ScanResponse.idempotencyKey] = idempotencyKey }
         if let cardID, !cardID.isEmpty { body[FS.ScanResponse.cardID] = cardID }
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
-        let (data, _) = try await URLSession.shared.data(for: req)
+        let (data, response) = try await URLSession.shared.data(for: req)
+        // 5xx — как обрыв сети (см. `redeemVenuePoints`): штамп/баллы могли
+        // начислиться до сбоя. Ошибка сети даёт сканеру «Повторить» С ТЕМ ЖЕ
+        // ключом; окончательная ошибка отправила бы сотрудника сканировать
+        // заново — с новым ключом, то есть вторым начислением при cooldown 0.
+        if let http = response as? HTTPURLResponse, http.statusCode >= 500 {
+            throw URLError(.badServerResponse)
+        }
         let j = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
         let ok = j.bool(FS.ScanResponse.ok) ?? false
-        return ScanOutcome(
+        var outcome = ScanOutcome(
             ok: ok,
             title: j.string(FS.ScanResponse.title) ?? "",
             loyalty: j.bool(FS.ScanResponse.loyalty) ?? false,
@@ -849,16 +994,19 @@ public final class FirebaseCouponService: CouponService {
             replayed: j.bool(FS.ScanResponse.replayed) ?? false,
             cardTitle: j.string(FS.ScanResponse.cardTitle) ?? ""
         )
+        outcome.retryAfterSec = j.int(FS.ScanResponse.retryAfterSec)
+        return outcome
     }
 
     public func redeemVenuePoints(venueID: String, userID: String, rewardId: String,
                            pointsToSpend: Int, idToken: String,
-                           idempotencyKey: String) async throws -> RedeemOutcome {
+                           idempotencyKey: String, nonce: String?) async throws -> RedeemOutcome {
         guard let url = URL(string: redeemURL) else { throw URLError(.badURL) }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+        await req.attachAppCheck()
         var body: [String: Any] = [
             FS.RedeemResponse.venueID: venueID,
             FS.RedeemResponse.rewardId: rewardId,
@@ -866,8 +1014,15 @@ public final class FirebaseCouponService: CouponService {
         if !userID.isEmpty { body[FS.RedeemResponse.userID] = userID }
         if pointsToSpend > 0 { body[FS.RedeemResponse.pointsToSpend] = pointsToSpend }
         if !idempotencyKey.isEmpty { body[FS.RedeemResponse.idempotencyKey] = idempotencyKey }
+        if let nonce, !nonce.isEmpty { body[FS.RedeemResponse.nonce] = nonce }
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
-        let (data, _) = try await URLSession.shared.data(for: req)
+        let (data, response) = try await URLSession.shared.data(for: req)
+        // Любой 5xx (с телом `redeem_failed` или без) — как обрыв сети: списание
+        // могло пройти до сбоя, поэтому вызывающий повторяет С ТЕМ ЖЕ ключом,
+        // а не показывает окончательную ошибку и не начинает новую попытку.
+        if let http = response as? HTTPURLResponse, http.statusCode >= 500 {
+            throw URLError(.badServerResponse)
+        }
         let j = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
         let ok = j.bool(FS.RedeemResponse.ok) ?? false
         return RedeemOutcome(
@@ -877,7 +1032,72 @@ public final class FirebaseCouponService: CouponService {
             rewardTitle: j.string(FS.RedeemResponse.rewardTitle) ?? "",
             somOff: j.int(FS.RedeemResponse.somOff),
             errorCode: ok ? nil : (j.string(FS.RedeemResponse.error) ?? "redeem_failed"),
-            replayed: j.bool(FS.RedeemResponse.replayed) ?? false
+            replayed: j.bool(FS.RedeemResponse.replayed) ?? false,
+            receiptCode: j.string(FS.RedeemResponse.receiptCode) ?? "",
+            redeemedAt: j.int(FS.RedeemResponse.redeemedAt).flatMap {
+                $0 > 0 ? Date(timeIntervalSince1970: TimeInterval($0) / 1000) : nil }
+        )
+    }
+
+    /// Токен списания для QR гостя. 404 без кода ошибки в теле — функции ещё
+    /// нет на сервере (`not_deployed`): экран гостя тогда показывает старый QR.
+    public func issueRedeemToken(venueID: String, rewardId: String, pointsToSpend: Int,
+                                 idToken: String) async throws -> RedeemToken {
+        guard let url = URL(string: redeemTokenURL) else { throw URLError(.badURL) }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+        await req.attachAppCheck()
+        var body: [String: Any] = [
+            FS.RedeemTokenResponse.venueID: venueID,
+            FS.RedeemTokenResponse.rewardId: rewardId,
+        ]
+        if pointsToSpend > 0 { body[FS.RedeemTokenResponse.pointsToSpend] = pointsToSpend }
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let data: Data, response: URLResponse
+        do { (data, response) = try await URLSession.shared.data(for: req) } catch { throw AppError.network }
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        if status >= 500 { throw AppError.network }
+        let j = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
+        if status == 200, let token = j.string(FS.RedeemTokenResponse.token),
+           let ms = j.int(FS.RedeemTokenResponse.expiresAt) {
+            return RedeemToken(token: token, expiresAt: Date(timeIntervalSince1970: TimeInterval(ms) / 1000),
+                               cost: j.int(FS.RedeemTokenResponse.cost) ?? pointsToSpend)
+        }
+        if let code = j.string(FS.RedeemTokenResponse.error) { throw AppError.server(code: code) }
+        throw AppError.server(code: status == 404 ? "not_deployed" : "issue_failed")
+    }
+
+    /// Списание по токену из QR `AYANT-RDT:` — гасит сотрудник.
+    public func redeemVenuePoints(venueID: String, token: String, idToken: String) async throws -> RedeemOutcome {
+        guard let url = URL(string: redeemURL) else { throw URLError(.badURL) }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+        await req.attachAppCheck()
+        let body: [String: Any] = [FS.RedeemResponse.venueID: venueID, FS.RedeemResponse.token: token]
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, response) = try await URLSession.shared.data(for: req)
+        // 5xx — как обрыв сети: списание могло пройти; повтор с тем же токеном
+        // сервер воспроизведёт (`rdm_<token>`), второго списания не будет.
+        if let http = response as? HTTPURLResponse, http.statusCode >= 500 {
+            throw URLError(.badServerResponse)
+        }
+        let j = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
+        let ok = j.bool(FS.RedeemResponse.ok) ?? false
+        return RedeemOutcome(
+            ok: ok,
+            redeemed: j.int(FS.RedeemResponse.redeemed) ?? 0,
+            balance: j.int(FS.RedeemResponse.balance) ?? 0,
+            rewardTitle: j.string(FS.RedeemResponse.rewardTitle) ?? "",
+            somOff: j.int(FS.RedeemResponse.somOff),
+            errorCode: ok ? nil : (j.string(FS.RedeemResponse.error) ?? "redeem_failed"),
+            replayed: j.bool(FS.RedeemResponse.replayed) ?? false,
+            receiptCode: j.string(FS.RedeemResponse.receiptCode) ?? "",
+            redeemedAt: j.int(FS.RedeemResponse.redeemedAt).flatMap {
+                $0 > 0 ? Date(timeIntervalSince1970: TimeInterval($0) / 1000) : nil }
         )
     }
 }

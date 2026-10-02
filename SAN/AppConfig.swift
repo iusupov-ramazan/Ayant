@@ -66,6 +66,28 @@ enum AppConfig {
         useFirebase ? FirebaseRankingEventService() : MockRankingEventService()
     }
 
+    /// Удалённые выключатели и минимальная версия. В отладке ходим за
+    /// значениями без задержки, чтобы правку в консоли было видно сразу.
+    static func makeRemoteConfigService() -> RemoteConfigService {
+        guard useFirebase else { return MockRemoteConfigService() }
+        #if DEBUG
+        return FirebaseRemoteConfigService(minimumFetchInterval: 0)
+        #else
+        return FirebaseRemoteConfigService(minimumFetchInterval: 3600)
+        #endif
+    }
+
+    /// Версия сборки для сравнения с `ios_min_version`.
+    static var appVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+    }
+
+    /// Куда вести «Обновить», если `ios_update_url` в Remote Config пуст:
+    /// поиск в App Store. Поставьте ссылку на страницу приложения
+    /// (`https://apps.apple.com/app/id…`) в консоли, когда появится id.
+    static let appStoreFallbackURL =
+        "itms-apps://search.itunes.apple.com/WebObjects/MZSearch.woa/wa/search?media=software&term=Ayant"
+
     static func makePushService() -> PushService {
         useFirebase ? FirebasePushService() : MockPushService()
     }

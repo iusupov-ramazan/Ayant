@@ -19,6 +19,17 @@ public enum AnalyticsEvent: String {
     case referralJoin   = "referral_join"    // пришёл по чужой ссылке
     case couponClaim    = "coupon_claim"     // обменял бонусы на купон
     case loyaltyStamp   = "loyalty_stamp"    // штамп в карте лояльности
+
+    // Воронка запуска. Параметры — без персональных данных: никаких uid,
+    // почты, кодов приглашения; только `method` (apple|google|email|guest),
+    // `game` (snake|tetris|2048|diamond), `amount` и т. п.
+    case signUp             = "sign_up"              // создан аккаунт (method)
+    case login              = "login"                // вход в существующий (method)
+    case onboardingComplete = "onboarding_complete"  // пройден онбординг
+    case firstPointsEarned  = "first_points_earned"  // первые баллы САН на устройстве
+    case firstStamp         = "first_stamp"          // первый штамп на устройстве
+    case gamePlayed         = "game_played"          // партия мини-игры окончена (game)
+    case bonusEarned        = "bonus_earned"         // начислены бонусы (source, amount)
 }
 
 /// Куда уходят продуктовые события. Зеркалит `ProductAnalytics` на Android.

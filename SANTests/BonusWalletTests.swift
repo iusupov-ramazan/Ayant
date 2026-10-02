@@ -17,10 +17,20 @@ final class BonusWalletTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
+        purgeBonusUserDefaults()
         wallet = FakeBonusWallet()
         engine = BonusEngine(clock: FixedClock(Date(timeIntervalSince1970: 1_700_000_000)), wallet: wallet)
         // Кошелёк и очередь лежат в UserDefaults — начинаем с чистого.
         engine.resetForNewUser()
+    }
+
+    /// XCTest держит экземпляры тестов (а с ними движки) до конца набора:
+    /// без сброса отложенный повтор очереди старого движка писал бы в
+    /// `san.bonus.pendingEarns.u1` посреди следующего теста.
+    override func tearDown() {
+        engine.resetForNewUser()
+        purgeBonusUserDefaults()
+        super.tearDown()
     }
 
     private func waitUntil(_ condition: @autoclosure () -> Bool, timeout: TimeInterval = 2) async {
@@ -47,6 +57,24 @@ final class BonusWalletTests: XCTestCase {
         XCTAssertEqual(wallet.earnCalls.first?.amount, 5)
         XCTAssertEqual(wallet.earnCalls.first?.source, "game:snake")
         await waitUntil(self.engine.balance == 5 && self.wallet.serverBalance == 5)
+    }
+
+    /// Заработанное без сети видно в балансе, но потратить его нельзя, пока
+    /// сервер не подтвердил: иначе покупка получала «не хватает».
+    func testOfflineEarnsAreSyncingNotSpendable() async {
+        engine.attach(userID: "u1")
+        await waitUntil(self.wallet.hasWallet)
+        wallet.offline = true
+        engine.awardGameplay(7, source: "game:snake")
+        await waitUntil(self.wallet.earnCalls.isEmpty == false || self.engine.syncingAmount == 7)
+        XCTAssertEqual(engine.balance, 7)
+        XCTAssertEqual(engine.syncingAmount, 7)
+        XCTAssertEqual(engine.spendableBalance, 0)
+
+        wallet.offline = false
+        engine.retryPending()
+        await waitUntil(self.engine.syncingAmount == 0)
+        XCTAssertEqual(engine.spendableBalance, 7)
     }
 
     func testServerCapCorrectsOptimisticBalance() async {
@@ -99,25 +127,49 @@ final class BonusWalletTests: XCTestCase {
         XCTAssertEqual(store.coupons.first?.code, c.code)
     }
 
-    /// Старые купоны (до серверного кошелька) убираются с устройства один раз;
-    /// новые остаются.
-    func testLegacyCouponsArePurgedOnce() throws {
+    /// Уборка старых купонов (до серверного кошелька) — один раз и только
+    /// погашенных. Действующие — награды карт штампов, купоны акций — гость
+    /// заработал, и они остаются.
+    func testLegacyPurgeRemovesOnlyUsedCoupons() throws {
         let defaults = UserDefaults.standard
-        defaults.removeObject(forKey: "san.coupons.legacyPurged.v1")
-        let old = Coupon(id: "old", title: "Старый", code: "AYANT-OLD",
-                         createdAt: CouponStore.legacyCutoff.addingTimeInterval(-86_400))
+        defaults.removeObject(forKey: "san.coupons.legacyPurged.v2")
+        let before = CouponStore.legacyCutoff.addingTimeInterval(-86_400)
+        let oldUsed = Coupon(id: "old", title: "Старый", code: "AYANT-OLD", createdAt: before, used: true)
+        let oldStamp = Coupon(id: "stamp", title: "Кофе за штампы", code: "AYANT-STAMP", createdAt: before,
+                              venueID: "v1", kind: "loyalty")
+        let oldDeal = Coupon(id: "deal", title: "−20%", code: "AYANT-DEAL", createdAt: before,
+                             venueID: "v1", kind: "deal")
         let fresh = Coupon(id: "new", title: "Новый", code: "AYANT-NEW",
                            createdAt: CouponStore.legacyCutoff.addingTimeInterval(60))
-        defaults.set(try JSONEncoder().encode([old, fresh]), forKey: "san.coupons")
+        defaults.set(try JSONEncoder().encode([oldUsed, oldStamp, oldDeal, fresh]), forKey: "san.coupons")
 
         let store = CouponStore(backend: StubCouponService())
-        XCTAssertEqual(store.coupons.map(\.code), ["AYANT-NEW"])
+        XCTAssertEqual(Set(store.coupons.map(\.code)), ["AYANT-STAMP", "AYANT-DEAL", "AYANT-NEW"])
 
-        // Второй раз не чистит: купон, добавленный после очистки, остаётся.
-        defaults.set(try JSONEncoder().encode([old, fresh]), forKey: "san.coupons")
+        // Второй раз не чистит.
+        defaults.set(try JSONEncoder().encode([oldUsed, fresh]), forKey: "san.coupons")
         let again = CouponStore(backend: StubCouponService())
         XCTAssertEqual(again.coupons.count, 2)
         again.resetForNewUser()
+    }
+
+    /// «Использовать купон» (купон без заведения) переживает снапшот сервера:
+    /// сервер об этой отметке не знает и присылает `used: false`.
+    func testSelfMarkedUsedSurvivesServerSnapshot() async {
+        let backend = StubCouponService()
+        let store = CouponStore(backend: backend)
+        store.resetForNewUser()
+        let unbound = Coupon(id: "c9", title: "Десерт", code: "AYANT-SELF",
+                             createdAt: CouponStore.legacyCutoff.addingTimeInterval(60))
+        store.observe(userID: "u1")
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        backend.pushCoupons([unbound])
+        await waitUntil(store.coupons.first?.code == "AYANT-SELF")
+        store.markUsed(store.coupons[0])
+        backend.pushCoupons([unbound])                    // сервер всё ещё говорит «не использован»
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(store.coupons.first?.used, true)
+        store.resetForNewUser()
     }
 
     /// Сотрудник погасил купон (скан или ввод кода) — у гостя он становится
@@ -207,7 +259,9 @@ final class BonusWalletTests: XCTestCase {
 // MARK: - Фейки
 
 /// Кошелёк в памяти: ведёт баланс как сервер (перенос один раз, потолок
-/// начисления), умеет «терять сеть».
+/// начисления), умеет «терять сеть». `@MainActor` — чтобы вызовы движка не
+/// гонялись с проверками теста (см. `GatedBonusWallet`).
+@MainActor
 final class FakeBonusWallet: BonusWalletService {
     var serverBalance = 0
     var hasWallet = false
@@ -219,7 +273,7 @@ final class FakeBonusWallet: BonusWalletService {
     private(set) var buyCalls: [(purchase: BonusPurchase, key: String)] = []
     private var seenEarnKeys: Set<String> = []
 
-    func balance(userID: String) -> AsyncStream<Int> { AsyncStream { $0.finish() } }
+    nonisolated func balance(userID: String) -> AsyncStream<Int> { AsyncStream { $0.finish() } }
 
     func sync(localBalance: Int) async throws -> Int {
         if offline { throw URLError(.notConnectedToInternet) }
@@ -268,7 +322,12 @@ final class StubCouponService: CouponService {
     }
     func pushCoupons(_ list: [Coupon]) { couponStream?.yield(list) }
     func fetchLoyaltyCards(userID: String) async throws -> [LoyaltyCard] { [] }
-    func loyaltyCards(userID: String) -> AsyncStream<[LoyaltyCard]> { AsyncStream { $0.finish() } }
+    /// Живой поток карт штампов: тест «ставит штамп» через `pushLoyalty`.
+    private var loyaltyStream: AsyncStream<[LoyaltyCard]>.Continuation?
+    func loyaltyCards(userID: String) -> AsyncStream<[LoyaltyCard]> {
+        AsyncStream { self.loyaltyStream = $0 }
+    }
+    func pushLoyalty(_ list: [LoyaltyCard]) { loyaltyStream?.yield(list) }
     func fetchVenuePoints(userID: String) async throws -> [VenuePointsCard] { [] }
     func scanCoupon(code: String, venueID: String, idToken: String,
                     billAmount: Int?, bandIndex: Int?, idempotencyKey: String,
@@ -277,7 +336,7 @@ final class StubCouponService: CouponService {
     }
     func redeemVenuePoints(venueID: String, userID: String, rewardId: String,
                            pointsToSpend: Int, idToken: String,
-                           idempotencyKey: String) async throws -> RedeemOutcome {
+                           idempotencyKey: String, nonce: String?) async throws -> RedeemOutcome {
         throw URLError(.unsupportedURL)
     }
 }

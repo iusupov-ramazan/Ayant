@@ -46,7 +46,8 @@ struct VenueAvatar: View {
                 .fill(LinearGradient(colors: venue.gradientColors,
                                      startPoint: .topLeading,
                                      endPoint: .bottomTrailing))
-            if let urlString = venue.imageURL, !urlString.isEmpty, let url = URL(string: urlString) {
+            if let urlString = venue.imageURL, !urlString.isEmpty,
+               let url = CloudinaryURL.sized(urlString, points: size) {
                 AsyncImage(url: url) { phase in
                     switch phase {
                     case .success(let image):
@@ -70,6 +71,9 @@ struct VenueAvatar: View {
 struct VenuePhoto: View {
     let urlString: String?
     var gradient: [Color] = [.sanAccent, .orange]
+    /// Ширина в точках, под которую просим фото у Cloudinary (по умолчанию —
+    /// во всю ширину телефона).
+    var points: CGFloat = 400
 
     /// Касания — тоже контейнер: `scaledToFill` вылезает за рамку, а
     /// `clipped()` обрезает только картинку, не зону нажатия. Невидимый
@@ -82,7 +86,7 @@ struct VenuePhoto: View {
     var body: some View {
         ZStack {
             LinearGradient(colors: gradient, startPoint: .topLeading, endPoint: .bottomTrailing)
-            if let s = urlString, !s.isEmpty, let url = URL(string: s) {
+            if let s = urlString, !s.isEmpty, let url = CloudinaryURL.sized(s, points: points) {
                 AsyncImage(url: url) { phase in
                     switch phase {
                     case .success(let image):
@@ -149,11 +153,12 @@ struct CoverImage: View {
     let gradient: [Color]
     let emoji: String
     var emojiSize: CGFloat = 64
+    var points: CGFloat = 400
 
     var body: some View {
         ZStack {
             LinearGradient(colors: gradient, startPoint: .topLeading, endPoint: .bottomTrailing)
-            if let s = urlString, !s.isEmpty, let url = URL(string: s) {
+            if let s = urlString, !s.isEmpty, let url = CloudinaryURL.sized(s, points: points) {
                 AsyncImage(url: url) { phase in
                     switch phase {
                     case .success(let image):
@@ -182,13 +187,23 @@ struct CoverImage: View {
 final class DealImageLoader: ObservableObject {
     @Published var ui: UIImage?
     private var loadedURL: URL?
+    /// Больше этого карточка во всю ширину @3x не покажет.
+    static let maxPixel = 1200
 
+    /// Просит у Cloudinary уменьшенную копию и вдобавок уменьшает её через
+    /// ImageIO вне главного потока: `UIImage(data:)` с оригиналом 12 Мп —
+    /// это ~48 МБ битмапа на каждую карточку ленты.
     func load(_ url: URL) async {
         guard loadedURL != url else { return }
         loadedURL = url
-        if let (data, _) = try? await URLSession.shared.data(from: url) {
-            ui = UIImage(data: data)
-        }
+        let sized = CloudinaryURL.sized(url.absoluteString, width: Self.maxPixel) ?? url
+        guard let (data, _) = try? await URLSession.shared.data(from: sized) else { return }
+        let maxPixel = Self.maxPixel
+        let image = await Task.detached(priority: .userInitiated) { () -> UIImage? in
+            ImageDownsampler.cgImage(from: data, maxPixel: maxPixel).map { UIImage(cgImage: $0) }
+        }.value
+        guard loadedURL == url, !Task.isCancelled else { return }
+        ui = image
     }
 }
 
@@ -264,7 +279,7 @@ struct ItemThumb: View {
 
     var body: some View {
         Group {
-            if !item.imageURL.isEmpty, let url = URL(string: item.imageURL) {
+            if !item.imageURL.isEmpty, let url = CloudinaryURL.sized(item.imageURL, points: size) {
                 AsyncImage(url: url) { img in
                     Color.clear.overlay { img.resizable().scaledToFill() }
                 } placeholder: { Color(.systemGray6) }
@@ -278,6 +293,45 @@ struct ItemThumb: View {
         }
         .frame(width: size, height: size)
         .clipShape(RoundedRectangle(cornerRadius: 14))
+    }
+}
+
+// MARK: - Ряд штампов карты лояльности
+
+/// Сколько кружков штампов рисовать и как разбить их на строки.
+///
+/// Цель первой карты не ограничена сверху (Android и админка пишут любое
+/// число), и `ForEach(0..<goal)` с целью 500 строил 500 вью в одну строку —
+/// карта уезжала за экран, а отрицательная цель роняла приложение
+/// (`0..<-1` — недопустимый диапазон). Счётчик «N / goal» рядом показывает
+/// настоящую цель, кружков же — не больше `maxShown`.
+enum StampLayout {
+    static let maxShown = 30
+
+    static func shown(_ goal: Int) -> Int { min(max(goal, 0), maxShown) }
+
+    /// Индексы кружков, разбитые на строки по `perRow`.
+    static func rows(_ goal: Int, perRow: Int) -> [[Int]] {
+        let n = shown(goal), step = max(perRow, 1)
+        return stride(from: 0, to: n, by: step).map { Array($0..<min($0 + step, n)) }
+    }
+}
+
+/// Кружки штампов с переносом на следующую строку.
+struct StampRows<Cell: View>: View {
+    let goal: Int
+    var perRow: Int = 12
+    var spacing: CGFloat = 6
+    @ViewBuilder let cell: (Int) -> Cell
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: spacing) {
+            ForEach(StampLayout.rows(goal, perRow: perRow), id: \.self) { row in
+                HStack(spacing: spacing) {
+                    ForEach(row, id: \.self) { cell($0) }
+                }
+            }
+        }
     }
 }
 
@@ -556,7 +610,7 @@ struct VenueGridCard: View {
             // Color.clear задаёт пропорции — от фото размер не зависит.
             Color.clear
                 .aspectRatio(1.6, contentMode: .fit)
-                .overlay { VenuePhoto(urlString: venue.imageURL, gradient: venue.gradientColors) }
+                .overlay { VenuePhoto(urlString: venue.imageURL, gradient: venue.gradientColors, points: 200) }
                 .clipped()
 
             VStack(alignment: .leading, spacing: 7) {

@@ -639,7 +639,11 @@ public enum MenuPrice {
         for p in parts {
             let part = String(p)
             if part.range(of: #"^\d{1,3}[.,]\d{3}$"#, options: .regularExpression) != nil {
-                out.append(Int(part.filter(\.isNumber))!)             // 1.200 / 1,200 — тысячи
+                // 1.200 / 1,200 — тысячи. `\d` в регулярке — любые цифры Юникода
+                // («١٬٢٠٠»), а `Int(_:)` понимает только ASCII: раньше здесь
+                // было `!`, и такой токен ронял разбор меню.
+                guard let v = Int(part.filter(\.isNumber)) else { return nil }
+                out.append(v)
             } else if let m = part.range(of: #"^\d+([.,]\d{1,2})?$"#, options: .regularExpression), m == part.startIndex..<part.endIndex {
                 let whole = part.split(whereSeparator: { $0 == "." || $0 == "," }).first.map(String.init) ?? part
                 guard let v = Int(whole) else { return nil }

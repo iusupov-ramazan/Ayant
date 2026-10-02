@@ -29,7 +29,8 @@ final class FakeAnalyticsService: AnalyticsService {
 /// Авторизация: отвечает мгновенно и запоминает вызовы.
 ///
 /// `calls` — порядок вызовов денежно-чувствительных методов: тест удаления
-/// аккаунта проверяет, что отзыв гранта Apple идёт ДО удаления записи.
+/// аккаунта проверяет, что отзыв гранта Apple идёт только ПОСЛЕ успешного
+/// удаления записи на сервере.
 final class FakeAuth: AuthService {
     var stored: SANUser?
     var discardedGuest = false

@@ -307,10 +307,142 @@ extension View {
 // поддержка кириллицы и Dynamic Type «из коробки». Историческое имя `golos(_:_:)`
 // сохранено, чтобы не менять сотни вызовов по экранам — оно возвращает SF.
 
+//
+// DYNAMIC TYPE. `.system(size:)` — шрифт фиксированного размера: он не слышит
+// настройку «Размер текста», и до 2026-10 в приложении не масштабировалось
+// ничего. Теперь `golos` растёт по кривой ближайшего текстового стиля
+// (`UIFontMetrics`): при стандартной настройке (.large) размер ровно макетный,
+// дальше — как у системного текста того же стиля.
+//
+// Почему не `Font.custom(_:size:relativeTo:)`: у системного шрифта нет
+// публичного имени — `custom(".SFUI-Semibold")` и любое несуществующее имя
+// CoreText молча подменяет на Times New Roman / шрифт без начертаний
+// (проверено в `TypographyTests`). Значит, размер считаем сами.
+//
+// Оговорка: `Font.golos` — статическая функция, окружение SwiftUI ей не видно,
+// поэтому размер вычисляется из текущей настройки, когда SwiftUI пересчитывает
+// `body`. Смена настройки на лету подхватывается экранами по мере их
+// перерисовки (переход, смена состояния), полностью — при следующем открытии
+// экрана. Для нового кода есть модификатор `.golos(_:_:)` (View): он читает
+// `\.dynamicTypeSize` из окружения и перерисовывается сразу — так же, как
+// `sanText`. Обе дороги считают размер одной функцией `scaledSize`.
+//
+// Потолки. Обычный текст (< 30 pt) растёт по кривой своего стиля до
+// `maxContentSize` (AX2), но НЕ выше `displayFloor` (30 pt): раньше 29 pt шёл по
+// кривой .title и на AX2 становился ~44 pt, а 30-пунктовый заголовок оставался
+// 30 — иерархия переворачивалась. Теперь размер монотонен: больший макетный
+// размер никогда не даёт меньший экранный (`TypographyTests`). Крупные
+// «витринные» размеры (≥ 30 pt: герои, редакторские заголовки, цифры игр и
+// счётчиков) не масштабируются вовсе. Внутри рамок фиксированного размера
+// (плитки игр, бейджи на картинках) используйте `golosFixed`.
+
+/// Текущая настройка «Размер текста» для `Font.golos`, без MainActor-API в
+/// аргументе по умолчанию (раньше там стоял `UIApplication.shared`, который
+/// трогал главный актор из любого контекста).
+enum SanDynamicType {
+    static var current: UIContentSizeCategory {
+        if Thread.isMainThread {
+            return MainActor.assumeIsolated { UIApplication.shared.preferredContentSizeCategory }
+        }
+        return UITraitCollection.current.preferredContentSizeCategory
+    }
+}
+
 extension Font {
-    /// SF Pro заданного размера и начертания (Text/Display подбирается автоматически).
+    /// SF Pro заданного размера и начертания, масштабируемый Dynamic Type.
     static func golos(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
+        .system(size: scaledSize(size), weight: weight)
+    }
+
+    /// SF Pro фиксированного размера — НЕ масштабируется Dynamic Type. Только для
+    /// текста внутри рамок фиксированного размера (плитки игр, бейджи на картинках).
+    static func golosFixed(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
         .system(size: size, weight: weight)
+    }
+
+    /// Самая крупная настройка, до которой растёт текст `golos` (AX2).
+    static let maxContentSize = UIContentSizeCategory.accessibilityLarge
+
+    /// С этого макетного размера текст «витринный» и не масштабируется; он же —
+    /// потолок для масштабированного обычного текста.
+    static let displayFloor: CGFloat = 30
+
+    /// Макетный размер → размер на экране для данной настройки (по умолчанию —
+    /// текущей настройки пользователя), с потолками `maxContentSize` и
+    /// `displayFloor`. Монотонна по `size` при любой настройке.
+    static func scaledSize(_ size: CGFloat,
+                           category: UIContentSizeCategory = SanDynamicType.current) -> CGFloat {
+        guard sanTextStyle(for: size) != nil else { return size }
+        var capped = category == .unspecified ? .large : category
+        if capped > maxContentSize { capped = maxContentSize }
+        if capped == .large { return size }
+        let traits = UITraitCollection(preferredContentSizeCategory: capped)
+        func raw(_ s: CGFloat, _ style: Font.TextStyle) -> CGFloat {
+            UIFontMetrics(forTextStyle: style.uiKit).scaledValue(for: s, compatibleWith: traits)
+        }
+        // Кривые соседних стилей растут с разной скоростью, и на границе полос
+        // больший размер мог бы получиться мельче меньшего. Поэтому снизу
+        // подпираем максимумом всех предыдущих полос (их верхних краёв).
+        var floor: CGFloat = 0
+        var style = Font.TextStyle.caption2
+        for (upper, bandStyle) in textBands {
+            if size < upper { style = bandStyle; break }
+            floor = max(floor, raw(upper, bandStyle))
+        }
+        return min(displayFloor, max(floor, raw(size, style)))
+    }
+
+    /// Полосы макетных размеров: верхняя граница (не включая) → стиль, по кривой
+    /// которого растёт размер. Границы — середины между размерами стилей при
+    /// .large (11 · 12 · 13 · 15 · 16 · 17 · 20 · 22 · 28).
+    static let textBands: [(upper: CGFloat, style: Font.TextStyle)] = [
+        (11.5, .caption2), (12.5, .caption), (14, .footnote), (15.5, .subheadline),
+        (16.5, .callout), (18.5, .body), (21, .title3), (25, .title2), (displayFloor, .title),
+    ]
+
+    /// Текстовый стиль, по кривой которого растёт размер; `nil` — не масштабировать.
+    static func sanTextStyle(for size: CGFloat) -> Font.TextStyle? {
+        textBands.first { size < $0.upper }?.style
+    }
+}
+
+/// `.golos(size, weight)` для View: тот же размер, что у `Font.golos`, но из
+/// `\.dynamicTypeSize` окружения — экран перерисовывается сразу при смене
+/// настройки и согласован с `sanText`.
+struct SanScaledFont: ViewModifier {
+    let size: CGFloat
+    let weight: Font.Weight
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    func body(content: Content) -> some View {
+        content.font(.system(size: Font.scaledSize(size, category: UIContentSizeCategory(dynamicTypeSize)),
+                             weight: weight))
+    }
+}
+
+extension View {
+    /// SF Pro, масштабируемый Dynamic Type из окружения (см. `SanScaledFont`).
+    func golos(_ size: CGFloat, _ weight: Font.Weight = .regular) -> some View {
+        modifier(SanScaledFont(size: size, weight: weight))
+    }
+}
+
+extension Font.TextStyle {
+    /// Мост к UIKit — нужен, чтобы посчитать масштабированный размер (межстрочный).
+    var uiKit: UIFont.TextStyle {
+        switch self {
+        case .largeTitle:  return .largeTitle
+        case .title:       return .title1
+        case .title2:      return .title2
+        case .title3:      return .title3
+        case .headline:    return .headline
+        case .subheadline: return .subheadline
+        case .callout:     return .callout
+        case .footnote:    return .footnote
+        case .caption:     return .caption1
+        case .caption2:    return .caption2
+        default:           return .body
+        }
     }
 }
 
@@ -333,12 +465,16 @@ struct SanTextRole: ViewModifier {
     let weight: Font.Weight
     let tracking: CGFloat
     let lineHeightMultiple: CGFloat
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     func body(content: Content) -> some View {
-        let uiFont = UIFont.systemFont(ofSize: size, weight: weight.uiKit)
-        let delta = size * lineHeightMultiple - uiFont.lineHeight
+        // Межстрочный — от размера, который реально будет на экране (с учётом
+        // Dynamic Type), иначе на крупном тексте строки слипаются.
+        let shown = Font.scaledSize(size, category: UIContentSizeCategory(dynamicTypeSize))
+        let uiFont = UIFont.systemFont(ofSize: shown, weight: weight.uiKit)
+        let delta = shown * lineHeightMultiple - uiFont.lineHeight
         return content
-            .font(.golos(size, weight))
+            .font(.system(size: shown, weight: weight))
             .tracking(tracking)
             .lineSpacing(max(0, delta))
             .padding(.vertical, delta / 2)   // padding принимает отрицательные значения

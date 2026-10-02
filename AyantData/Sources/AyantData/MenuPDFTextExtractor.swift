@@ -20,6 +20,11 @@ public enum MenuPDFTextExtractor {
     /// распознавание — около секунды на страницу.
     public static let maxPages = 120
 
+    /// Сколько страниц БЕЗ текстового слоя распознаём. Распознавание — секунды
+    /// и десятки мегабайт битмапа на страницу; скан на 120 страниц на телефоне
+    /// — минуты и риск выгрузки по памяти. Страницы с текстом не считаются.
+    public static let maxRecognizedPages = 30
+
     public static func fragments(from data: Data,
                                  progress: ((Int, Int) -> Void)? = nil) throws -> [MenuTextFragment] {
         guard let document = PDFDocument(data: data) else {
@@ -28,11 +33,22 @@ public enum MenuPDFTextExtractor {
         if document.isLocked { throw AppError.server(code: "pdf_locked") }
         let count = min(document.pageCount, maxPages)
         var out: [MenuTextFragment] = []
+        var recognized = 0
         for index in 0..<count {
+            // Отмена (хозяин сбросил импорт / ушёл с экрана) — между страницами.
+            try Task.checkCancellation()
             progress?(index, count)
-            guard let page = document.page(at: index) else { continue }
-            let fromText = textLayer(page, index: index)
-            out += fromText.isEmpty ? recognize(page, index: index) : fromText
+            // Битмапы распознавания и строки PDFKit — autorelease-объекты:
+            // без пула они копились до конца всего файла.
+            let fragments: [MenuTextFragment] = autoreleasepool {
+                guard let page = document.page(at: index) else { return [] }
+                let fromText = textLayer(page, index: index)
+                guard fromText.isEmpty else { return fromText }
+                guard recognized < maxRecognizedPages else { return [] }
+                recognized += 1
+                return recognize(page, index: index)
+            }
+            out += fragments
         }
         return out
     }
@@ -76,15 +92,34 @@ public enum MenuPDFTextExtractor {
     /// ни один из двух проходов не ошибается одновременно с другим.
     static let passes: [(pixels: CGFloat, padding: CGFloat)] = [(3200, 0), (2400, 0.06)]
 
+    ///
+    /// Второй проход — только если первый «слабый» (`needsSecondPass`): пусто
+    /// или есть строка, начатая со строчной буквы — ровно так выглядит
+    /// потерянная первая буква. Страница, где все строки начаты с заглавной
+    /// или цифры, второй проход не улучшит, а стоит он столько же, сколько первый.
     static func recognize(_ page: PDFPage, index: Int) -> [MenuTextFragment] {
         var best: [MenuTextFragment] = []
         var bestLetters = -1
-        for pass in passes {
-            let fragments = recognize(page, index: index, pixels: pass.pixels, padding: pass.padding)
+        for (n, pass) in passes.enumerated() {
+            if n > 0, !needsSecondPass(best) { break }
+            if n > 0, Task.isCancelled { break }
+            let fragments = autoreleasepool {
+                recognize(page, index: index, pixels: pass.pixels, padding: pass.padding)
+            }
             let letters = fragments.reduce(0) { $0 + $1.text.filter(\.isLetter).count }
             if letters > bestLetters { best = fragments; bestLetters = letters }
         }
         return best
+    }
+
+    /// Первый проход мог потерять буквы: ничего не нашёл или какая-то строка
+    /// начинается со строчной буквы («hopped beef»).
+    static func needsSecondPass(_ fragments: [MenuTextFragment]) -> Bool {
+        guard !fragments.isEmpty else { return true }
+        return fragments.contains { f in
+            guard let first = f.text.first(where: { !$0.isWhitespace }) else { return false }
+            return first.isLetter && first.isLowercase
+        }
     }
 
     static func recognize(_ page: PDFPage, index: Int, pixels: CGFloat, padding: CGFloat) -> [MenuTextFragment] {

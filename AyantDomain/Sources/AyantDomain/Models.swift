@@ -468,20 +468,41 @@ public struct Venue: Identifiable, Hashable {
     /// времени, а `now` — абсолютный момент. Телефон в другом поясе больше не
     /// сдвигает открытие/закрытие на разницу часов.
     public func isOpen(at now: Date) -> Bool {
-        let d = todayHours(at: now)
-        guard !d.closed else { return false }
+        openShiftClose(at: now) != nil
+    }
+
+    /// Время закрытия (минуты от полуночи) смены, которая идёт в момент `now`,
+    /// или nil — закрыто.
+    ///
+    /// Смена «через полночь» принадлежит дню, в который НАЧАЛАСЬ: пятничная
+    /// 18:00–02:00 в субботу в 01:00 — это хвост пятницы. Раньше смотрели
+    /// только на часы текущего дня, и в субботу в 01:00 заведение было
+    /// «закрыто» (а если суббота — выходной, тем более), хотя пятничная смена
+    /// ещё шла. И наоборот, утренние часы субботы до её закрытия ошибочно
+    /// считались открытыми по субботней ночной смене, которая ещё не началась.
+    public func openShiftClose(at now: Date) -> Int? {
         let cal = City.calendar(forSlug: citySlug)
         let cur = cal.component(.hour, from: now) * 60 + cal.component(.minute, from: now)
-        if d.close > d.open { return cur >= d.open && cur < d.close }
-        return cur >= d.open || cur < d.close   // через полночь
+        let today = Venue.todayIndex(at: now, citySlug: citySlug)
+        let d = hours(for: today)
+        if !d.closed {
+            if d.close > d.open, cur >= d.open, cur < d.close { return d.close }
+            if d.close == d.open { return d.close }                 // круглосуточно
+            if d.close < d.open, cur >= d.open { return d.close }   // ночная смена началась сегодня
+        }
+        // Хвост вчерашней ночной смены.
+        let y = hours(for: (today + 6) % 7)
+        if !y.closed, y.close < y.open, cur < y.close { return y.close }
+        return nil
     }
     public var isOpenNow: Bool { isOpen(at: Date()) }
 
     /// «Открыто · до 22:00» / «Сегодня закрыто» / «Закрыто».
     public var hoursStatusText: String {
-        let d = todayHours(at: Date())
-        if d.closed { return "Сегодня выходной" }
-        return isOpenNow ? "Открыто · до \(DayHours.time(d.close))" : "Закрыто"
+        let now = Date()
+        // Хвост вчерашней ночной смены идёт и в «выходной» день.
+        if let close = openShiftClose(at: now) { return "Открыто · до \(DayHours.time(close))" }
+        return todayHours(at: now).closed ? "Сегодня выходной" : "Закрыто"
     }
 
     public var hasTodaySpecial: Bool {

@@ -23,6 +23,8 @@ public enum FS {
         public static let deals = "deals"
         public static let reviews = "reviews"
         public static let reviewReports = "reviewReports"
+        /// Личная библиотека: сохранённые места, избранное, скрытые авторы.
+        public static let userLibraries = "userLibraries"
         public static let hosts = "hosts"
         public static let categories = "categories"
         public static let coupons = "coupons"
@@ -180,6 +182,8 @@ public enum FS {
         public static let stock = "stock"
         public static let soldCount = "soldCount"
         public static let expiresAt = "expiresAt"
+        /// Лимит в одни руки; 0/нет поля — без лимита. Сервер: `buyCoupon`.
+        public static let perGuestLimit = "perGuestLimit"
         public static let status = "status"
         public static let isPaused = "isPaused"
         public static let ownerID = "ownerID"
@@ -215,6 +219,21 @@ public enum FS {
         public static let createdAt = "createdAt"
         /// "open" | "reviewed" — очередь разбора в админ-панели.
         public static let status = "status"
+        /// Жалоба на фото (`reason == "photo"`): само фото и что с ним не так.
+        public static let photoURL = "photoURL"
+        public static let photoReason = "photoReason"
+    }
+
+    // MARK: - userLibraries/{uid}
+
+    /// Личная библиотека пользователя. Пишет и читает только владелец
+    /// (`firestore.rules`), каждый список — не длиннее `UserLibrary.maxItems`.
+    public enum UserLibraryDoc {
+        public static let savedVenueIDs = "savedVenueIDs"
+        public static let favoriteDealIDs = "favoriteDealIDs"
+        public static let likedDealIDs = "likedDealIDs"
+        public static let blockedAuthorIDs = "blockedAuthorIDs"
+        public static let updatedAt = "updatedAt"
     }
 
     public enum ReviewDoc {
@@ -340,6 +359,8 @@ public enum FS {
         public static let dealID = "dealID"
         public static let used = "used"
         public static let createdAt = "createdAt"
+        /// Срок купона (ставит `buyCoupon` из `couponOffers.expiresAt`).
+        public static let expiresAt = "expiresAt"
     }
 
     public enum LoyaltyCardDoc {
@@ -457,6 +478,8 @@ public enum FS {
     // ключи заданы сервером в functions/src/index.ts и должны совпадать.
 
     public enum ScanResponse {
+        /// Для `429 cooldown`: секунд до следующего начисления этому гостю.
+        public static let retryAfterSec = "retryAfterSec"
         public static let ok = "ok"
         public static let title = "title"
         public static let loyalty = "loyalty"
@@ -495,6 +518,9 @@ public enum FS {
         public static let balance = "balance"
         public static let rewardTitle = "rewardTitle"
         public static let somOff = "somOff"
+        /// Код чека погашения (4 цифры) и время — для экрана «погашено».
+        public static let receiptCode = "receiptCode"
+        public static let redeemedAt = "redeemedAt"
         public static let error = "error"
         /// true — сервер распознал повтор по idempotencyKey и НЕ списал баллы снова.
         public static let replayed = "replayed"
@@ -502,6 +528,24 @@ public enum FS {
         // Поля запроса.
         public static let venueID = "venueID"
         public static let userID = "userID"
+        public static let rewardId = "rewardId"
+        public static let pointsToSpend = "pointsToSpend"
+        /// Nonce из QR гостя (`RedeemQR`): сервер делает ключ `rdm_<nonce>`.
+        public static let nonce = "nonce"
+        /// Токен из QR `AYANT-RDT:` (запрос): сервер делает ключ `rdm_<token>`.
+        public static let token = "token"
+    }
+
+    /// `issueRedeemToken` — токен списания для QR гостя (тело ответа).
+    public enum RedeemTokenResponse {
+        public static let ok = "ok"
+        public static let error = "error"
+        public static let token = "token"
+        /// Миллисекунды Unix.
+        public static let expiresAt = "expiresAt"
+        public static let cost = "cost"
+        // Поля запроса — те же, что у списания.
+        public static let venueID = "venueID"
         public static let rewardId = "rewardId"
         public static let pointsToSpend = "pointsToSpend"
     }
@@ -536,8 +580,16 @@ extension FS {
         public static let venueID = "venueID"
         public static let venueName = "venueName"
         public static let giftCode = "giftCode"
+        /// Срок купущенного купона, мс эпохи (нет — бессрочный).
+        public static let expiresAt = "expiresAt"
         public static let replayed = "replayed"
         public static let error = "error"
+        /// `earnBonus`: чей потолок урезал — "daily" | "source" | "per_call" | null.
+        public static let capReason = "capReason"
+        /// `earnBonus`: остаток общего дневного потолка.
+        public static let dailyLeft = "dailyLeft"
+        /// `earnBonus`: остаток потолка источника (null — потолка нет).
+        public static let sourceLeft = "sourceLeft"
     }
 }
 

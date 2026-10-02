@@ -65,19 +65,29 @@ struct PointsEarnedView: View {
     private var footnote: String {
         switch earned {
         case .points: return LS("Баллы копятся у этого заведения и тратятся у него же.")
-        case .stamp(_, let goal, let issued, let reward):
+        case .stamp(let stamps, let goal, let issued, let reward):
+            // Сколько ОСТАЛОСЬ, а не цель целиком: после 3-го штампа из 6
+            // раньше было «Ещё 6 штампов».
+            let left = max(0, goal - stamps)
             return issued ? LF("Купон «%@» уже в «Мои купоны» — покажите его сотруднику.", reward)
-                          : LF("Ещё %lld %@ — и «%@» в подарок.", goal, Self.stampsWord(goal), reward)
+                          : LF("Ещё %lld штампов — и «%@» в подарок.", left, reward)
         }
     }
     private var balanceLabel: String {
         switch earned {
         case .points: return LS("Новый баланс")
-        case .stamp(_, let goal, _, _): return LF("Штампов из %lld", goal)
+        case .stamp: return LS("Штампы")
+        }
+    }
+    /// Число справа на карточке баланса. Для штампов — «3 из 6»: раньше подпись
+    /// «Штампов из 6» и число «3» читались как «Штампов из 6 … 3».
+    private var balanceValue: String {
+        switch earned {
+        case .points: return shownBalance.sanThousands
+        case .stamp(_, let goal, _, _): return LF("%lld из %lld", shownBalance, goal)
         }
     }
 
-    private static func stampsWord(_ n: Int) -> String { LPlural(n, "штамп", "штампа", "штампов") }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var ringsRunning = false
@@ -113,37 +123,54 @@ struct PointsEarnedView: View {
         }
     }
 
+    /// Содержимое прокручивается, а кнопки прибиты к низу: на маленьком
+    /// телефоне с крупным шрифтом «Отлично» иначе уезжало за край экрана.
     private var content: some View {
-        VStack(spacing: 0) {
-            burst
-            Text("+\(shownDelta)")
-                .sanText(70, .heavy, tracking: -3.6, lineHeight: 1)
-                .foregroundStyle(LinearGradient.sanAccentGradient)
-                .contentTransition(.numericText())
-                .padding(.top, 28)
+        ScrollView {
+            VStack(spacing: 0) {
+                burst
+                Text(verbatim: "+" + shownDelta.sanThousands)
+                    .sanText(70, .heavy, tracking: -3.6, lineHeight: 1)
+                    .foregroundStyle(LinearGradient.sanAccentGradient)
+                    .contentTransition(.numericText())
+                    .minimumScaleFactor(0.5)
+                    .lineLimit(1)
+                    .padding(.top, 28)
 
-            Text(LocalizedStringKey(headline))
-                .sanText(24, .heavy, tracking: -1)
-                .foregroundStyle(Color.sanInk)
-                .padding(.top, 12)
+                Text(LocalizedStringKey(headline))
+                    .sanText(24, .heavy, tracking: -1)
+                    .foregroundStyle(Color.sanInk)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 12)
 
-            Text("\(venueName) · \(venueSubtitle)")
-                .font(.golos(14.5)).foregroundStyle(Color.sanInkSoft)
-                .padding(.top, 8)
+                Text("\(venueName) · \(venueSubtitle)")
+                    .font(.golos(14.5)).foregroundStyle(Color.sanInkSoft)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 8)
 
-            balanceCard.padding(.top, 26)
+                balanceCard.padding(.top, 26)
 
-            Text(LocalizedStringKey(footnote))
-                .font(.golos(13)).foregroundStyle(Color(hex: 0x9A9188))
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 280)
-                .padding(.top, 14)
-                .sanRise(4, stagger: 0.09, duration: 0.6)
+                Text(LocalizedStringKey(footnote))
+                    .font(.golos(13)).foregroundStyle(Color.sanInkSoft)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 280)
+                    .padding(.top, 14)
+                    .sanRise(4, stagger: 0.09, duration: 0.6)
+            }
+            .padding(.horizontal, 30)
+            .padding(.top, 30)
+            .padding(.bottom, 16)
+            .frame(maxWidth: .infinity)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .safeAreaInset(edge: .bottom) { actions }
+    }
 
+    private var actions: some View {
+        VStack(spacing: 12) {
             Button("Отлично", action: onDone)
                 .buttonStyle(SanPrimaryButton())
                 .frame(maxWidth: 300)
-                .padding(.top, 26)
                 .sanRise(5, stagger: 0.09, duration: 0.6)
 
             // Момент, когда гость доволен, — лучший для отзыва: он только что
@@ -153,11 +180,14 @@ struct PointsEarnedView: View {
                     Label("Оставить отзыв о заведении", systemImage: "star.bubble")
                 }
                 .buttonStyle(SanPillButton(accent: true))
-                .padding(.top, 12)
                 .sanRise(6, stagger: 0.09, duration: 0.6)
             }
         }
-        .padding(30)
+        .padding(.horizontal, 30)
+        .padding(.top, 12)
+        .padding(.bottom, 16)
+        .frame(maxWidth: .infinity)
+        .background(Color.sanCanvas)
     }
 
     // MARK: Кольца + галочка
@@ -198,7 +228,7 @@ struct PointsEarnedView: View {
             Text(LocalizedStringKey(balanceLabel))
                 .font(.golos(14, .semibold)).foregroundStyle(Color.sanInkSoft)
             Spacer(minLength: 12)
-            Text("\(shownBalance)")
+            Text(verbatim: balanceValue)
                 .font(.golos(24, .heavy)).tracking(-0.9)
                 .foregroundStyle(Color.sanInk)
                 .contentTransition(.numericText())

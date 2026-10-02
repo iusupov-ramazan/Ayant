@@ -405,12 +405,13 @@ struct SearchView: View {
                     .foregroundStyle(Color(hex: 0x9A9188))
                 TextField("", text: $query,
                           prompt: Text("Заведение, категория или акция")
-                            .foregroundColor(Color(hex: 0x9A9188)))
+                            .foregroundColor(Color.sanInkSoft))
                     .font(.golos(14.5, .medium))
                     .foregroundStyle(Color.sanInk)
                     .submitLabel(.search)
                     .onSubmit {
-                        AnalyticsLog.log(.search, ["query": query, "results": results.count])
+                        // Текст запроса не отправляем: в нём бывают имена и телефоны.
+                        AnalyticsLog.log(.search, ["results": results.count])
                     }
                 if !query.isEmpty {
                     Button { query = "" } label: {
@@ -418,6 +419,7 @@ struct SearchView: View {
                             .font(.system(size: 15)).foregroundStyle(Color(hex: 0x9A9188))
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("Очистить поиск")
                 }
         }
         .padding(.horizontal, 16).padding(.vertical, 13)
@@ -512,7 +514,7 @@ struct SearchView: View {
             if results.isEmpty {
                 if didComputeResults {
                     ContentUnavailableView("Ничего не нашлось", systemImage: "magnifyingglass",
-                        description: Text("Попробуй другое название или расширь расстояние."))
+                        description: Text("Попробуйте другое название или увеличьте расстояние."))
                         .padding(.top, 40)
                 }
                 Spacer(minLength: 0)
@@ -645,7 +647,7 @@ struct SearchView: View {
                     }
                     if let km = location.distanceKm(to: venue.latitude, venue.longitude) {
                         Text(km.distanceText)
-                            .font(.golos(12)).foregroundStyle(Color(hex: 0x9A9188))
+                            .font(.golos(12)).foregroundStyle(Color.sanInkSoft)
                     }
                 }
                 .padding(.top, 7)
@@ -723,7 +725,7 @@ struct SearchView: View {
             Text(title)
                 .textCase(.uppercase)
                 .sanEyebrowText()
-                .foregroundStyle(Color(hex: 0x9A9188))
+                .foregroundStyle(Color.sanInkSoft)
             content()
         }
     }

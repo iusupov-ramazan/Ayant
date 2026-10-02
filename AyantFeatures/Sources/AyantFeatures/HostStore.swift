@@ -103,9 +103,11 @@ public final class HostStore: ObservableObject {
         case .deleteDeal(let id):            deleteDeal(id: id)
 
         case .saveCouponOffer(let existing, let fields):
-            saveCouponOfferForm(existing: existing, fields: fields)
+            let change = applyCouponOffer(existing: existing, fields: fields)
+            Task { await pushCouponOffer(change.offer, previous: change.previous) }
         case .toggleCouponPause(let id):     toggleCouponPause(id: id)
-        case .deleteCouponOffer(let id):     deleteCouponOffer(id: id)
+        case .deleteCouponOffer(let id):
+            Task { await deleteCouponOffer(id: id) }
 
         case .addCampaign(let c):            addCampaign(c)
         case .launchPush(let headline, let body, let venueID, let dealID):
@@ -325,7 +327,7 @@ public final class HostStore: ObservableObject {
                 }
                 couponOffers = remoteOffers + unsent
                 persistCouponOffers()
-                for offer in unsent { remoteSaveCouponOffer(offer) }
+                for offer in unsent { Task { await pushCouponOffer(offer, previous: nil) } }
             }
             // Профиль (включая статус верификации, выставленный админом).
             if let remoteProfile = try await repo.fetchProfile(ownerID: ownerID) {
@@ -361,14 +363,53 @@ public final class HostStore: ObservableObject {
     /// отверг или которое не дошло без сети, показывалось как сохранённое, а
     /// жило только в кэше устройства. Теперь провал виден в `state.sync`, а
     /// `sync()` дозаливает всё, чего сервер не знает.
+    ///
+    /// Записи одного заведения идут СТРОГО по очереди. Раньше каждая правка
+    /// запускала свою `Task` (а реализация — `getDocument` + `updateData`),
+    /// и две быстрые правки подряд (пауза, затем часы) могли дойти до сервера
+    /// в обратном порядке: старая версия затирала новую. Теперь на заведение
+    /// одна запись в полёте; правки, пришедшие за это время, схлопываются в
+    /// последнюю — она и уйдёт следующей. Порядок записей = порядок правок.
     private func remoteSaveVenue(_ dto: HostVenueDTO) {
         guard !ownerID.isEmpty else { return }
-        let owner = ownerID
-        Task {
+        pendingVenueWrites[dto.id] = (dto, ownerID)
+        guard !venueWritesInFlight.contains(dto.id) else { return }
+        venueWritesInFlight.insert(dto.id)
+        Task { await drainVenueWrites(id: dto.id) }
+    }
+
+    /// Последняя ещё не отправленная версия заведения (+ владелец на момент правки).
+    private var pendingVenueWrites: [String: (dto: HostVenueDTO, owner: String)] = [:]
+    /// Заведения, у которых запись уже в полёте.
+    private var venueWritesInFlight: Set<String> = []
+
+    /// Есть ли неотправленные/летящие записи заведения (для тестов).
+    public var hasPendingVenueWrites: Bool { !venueWritesInFlight.isEmpty }
+
+    private func drainVenueWrites(id: String) async {
+        defer { venueWritesInFlight.remove(id) }
+        while let next = pendingVenueWrites.removeValue(forKey: id) {
+            // Владелец сменился (выход, другой аккаунт) — запись чужого кабинета
+            // под новым uid не отправляем.
+            guard next.owner == ownerID else { continue }
+            // Заведение, которое сервер уже отдавал, создавать заново нельзя: если
+            // его документа нет, его удалили (админ, другое устройство), и запись
+            // устаревшей копии воскресила бы его — с модерацией, но всё же.
+            let allowCreate = !knownVenueIDs.contains(id)
             do {
-                try await repo.saveVenue(dto, ownerID: owner)
-                knownVenueIDs.insert(dto.id); persistKnown()
-            } catch { reportRemoteFailure(error) }
+                try await repo.saveVenue(next.dto, ownerID: next.owner, allowCreate: allowCreate)
+                knownVenueIDs.insert(id); persistKnown()
+            } catch AppError.notFound {
+                // Документа нет — остальные правки в очереди тоже некуда писать.
+                pendingVenueWrites[id] = nil
+                // sync() уберёт заведение из кэша (известно, но на сервере нет);
+                // плашка — после него, иначе `.syncing` её сразу сотрёт.
+                await sync()
+                state.sync = .failed(.server(code: Self.venueDeletedOnServer))
+                return
+            } catch {
+                reportRemoteFailure(error)
+            }
         }
     }
     private func remoteSaveDeal(_ dto: HostDealDTO) {
@@ -603,38 +644,143 @@ public final class HostStore: ObservableObject {
 
     // MARK: Купоны заведения
 
-    private func saveCouponOfferForm(existing: CouponOffer?, fields: HostForms.CouponFields) {
+    /// Сохранение купона С ОТВЕТОМ сервера: форма ждёт его и закрывается только
+    /// после успеха. Раньше форма закрывалась сразу, а отказ правил (например,
+    /// правка одобренного купона без возврата на модерацию) жил только в
+    /// консоли — хозяин видел «сохранённый» купон, которого на сервере нет.
+    /// `nil` — сохранено (или владельца ещё нет и запись дождётся входа).
+    public func saveCouponOffer(existing: CouponOffer?,
+                                fields: HostForms.CouponFields) async -> AppError? {
+        let change = applyCouponOffer(existing: existing, fields: fields)
+        return await pushCouponOffer(change.offer, previous: change.previous)
+    }
+
+    /// Удаление купона с ответом сервера. Локально купон убирается сразу; если
+    /// сервер отказал — возвращается на место и ошибка видна хозяину (раньше
+    /// `try?` глотал её, и купон «удалялся», продолжая продаваться гостям).
+    @discardableResult
+    public func deleteCouponOffer(id: String) async -> AppError? {
+        guard let index = couponOffers.firstIndex(where: { $0.id == id }) else { return nil }
+        let removed = couponOffers.remove(at: index)
+        persistCouponOffers()
+        let repo = self.repo
+        return await trackCouponWrite({ try await repo.deleteCouponOffer(id: id) },
+                                      onFailure: { [weak self] app in
+            guard let self else { return }
+            if !self.couponOffers.contains(where: { $0.id == id }) {
+                self.couponOffers.insert(removed, at: min(index, self.couponOffers.count))
+                self.persistCouponOffers()
+            }
+            self.reportCouponFailure(app, deleting: true)
+        })
+    }
+
+    /// Сколько форма купона ждёт ответа сервера. Firestore без сети не
+    /// возвращает `setData`/`delete`, пока запись не дойдёт, — и форма висела
+    /// на «Сохраняем…» бесконечно. По таймауту запись остаётся в очереди SDK,
+    /// а форма закрывается с «Сохранится, когда появится сеть».
+    public var couponWriteTimeout: TimeInterval = 10
+
+    /// `AppError.server` с этим кодом — не ошибка: сервер не ответил за
+    /// `couponWriteTimeout`, запись ждёт сети. Форма закрывается.
+    public static let couponWriteQueued = "coupon_write_queued"
+
+    /// Ждёт запись купона не дольше `couponWriteTimeout`. Опоздавший ответ не
+    /// теряется: провал (`onFailure`) обрабатывается и после таймаута — откат
+    /// и плашка кабинета, просто без формы.
+    private func trackCouponWrite(_ write: @escaping @Sendable () async throws -> Void,
+                                  onFailure: @escaping @MainActor (AppError) -> Void) async -> AppError? {
+        let task = Task { () -> AppError? in
+            do { try await write(); return nil }
+            catch { return Self.appError(from: error) }
+        }
+        let gate = CouponWriteGate()
+        let first: AppError?? = await withCheckedContinuation { cont in
+            gate.install(cont)
+            Task { gate.resume(.some(await task.value)) }
+            let timeout = couponWriteTimeout
+            Task {
+                try? await Task.sleep(nanoseconds: UInt64(max(0, timeout) * 1_000_000_000))
+                gate.resume(.none)
+            }
+        }
+        switch first {
+        case .some(let result):
+            if let result { onFailure(result) }
+            return result
+        case .none:
+            let queued = AppError.server(code: Self.couponWriteQueued)
+            // Плашка кабинета «сохранится, когда появится сеть» — форма уже закрыта.
+            state.sync = .failed(queued)
+            Task { @MainActor [weak self] in
+                let late = await task.value
+                if let late { onFailure(late) }
+                else if let self, self.state.sync == .failed(queued) { self.state.sync = .idle }
+            }
+            return queued
+        }
+    }
+
+    /// Локальная часть сохранения: собрать купон формой и положить в кэш.
+    /// Возвращает и прежнюю версию — её восстанавливают, если сервер отказал.
+    private func applyCouponOffer(existing: CouponOffer?,
+                                  fields: HostForms.CouponFields) -> (offer: CouponOffer, previous: CouponOffer?) {
         let offer = HostForms.couponOffer(existing: existing, fields: fields,
                                           newID: "co_\(UUID().uuidString.prefix(8))")
+        let previous = couponOffers.first { $0.id == offer.id }
         if let i = couponOffers.firstIndex(where: { $0.id == offer.id }) { couponOffers[i] = offer }
         else { couponOffers.append(offer) }
         persistCouponOffers()
-        remoteSaveCouponOffer(offer)
+        return (offer, previous)
     }
 
     private func toggleCouponPause(id: String) {
         guard let i = couponOffers.firstIndex(where: { $0.id == id }) else { return }
+        let previous = couponOffers[i]
         couponOffers[i].isPaused.toggle()
         persistCouponOffers()
-        remoteSaveCouponOffer(couponOffers[i])
+        let offer = couponOffers[i]
+        Task { await pushCouponOffer(offer, previous: previous) }
     }
 
-    private func deleteCouponOffer(id: String) {
-        couponOffers.removeAll { $0.id == id }
-        persistCouponOffers()
-        Task { [repo] in try? await repo.deleteCouponOffer(id: id) }
-    }
-
-    private func remoteSaveCouponOffer(_ offer: CouponOffer) {
+    /// Запись купона на сервер. Отказ правил — не «нет сети»: повторять его
+    /// бессмысленно, поэтому локальная копия откатывается к прежней (новый
+    /// купон убирается), а не остаётся висеть как сохранённая. Сетевой сбой
+    /// оставляет её: новый купон дозальёт `sync()`.
+    @discardableResult
+    private func pushCouponOffer(_ offer: CouponOffer, previous: CouponOffer?) async -> AppError? {
         // Без владельца запись уйдёт с `ownerID: ""`, и правила её отклонят —
         // как у заведений и акций, ждём входа (sync дозальёт).
-        guard !ownerID.isEmpty else { return }
+        guard !ownerID.isEmpty else { return nil }
         let owner = ownerID
-        Task { [weak self, repo] in
-            do { try await repo.saveCouponOffer(offer, ownerID: owner) }
-            catch { self?.reportRemoteFailure(error) }
-        }
+        let repo = self.repo
+        return await trackCouponWrite({ try await repo.saveCouponOffer(offer, ownerID: owner) },
+                                      onFailure: { [weak self] app in
+            guard let self else { return }
+            if app == .permissionDenied,
+               let i = self.couponOffers.firstIndex(where: { $0.id == offer.id }),
+               self.couponOffers[i] == offer {
+                if let previous { self.couponOffers[i] = previous } else { self.couponOffers.remove(at: i) }
+                self.persistCouponOffers()
+            }
+            self.reportCouponFailure(app, deleting: false)
+        })
     }
+
+    /// Плашка кабинета для купонов. Отказ правил по купону — это не «нет прав
+    /// на заведение» (так плашка читает `permissionDenied`), поэтому свой код.
+    private func reportCouponFailure(_ error: AppError, deleting: Bool) {
+        state.sync = .failed(error == .permissionDenied
+                             ? .server(code: deleting ? Self.couponDeleteDenied : Self.couponSaveDenied)
+                             : error)
+        print("⚠️ host coupon write failed: \(error.code)")
+    }
+
+    /// Коды `AppError.server` для плашки `HostSyncFailureBanner`.
+    public static let couponSaveDenied = "coupon_save_denied"
+    public static let couponDeleteDenied = "coupon_delete_denied"
+    /// Правка заведения, которое на сервере уже удалено.
+    public static let venueDeletedOnServer = "venue_deleted"
 
     private func persistCouponOffers() { persist(key(Key.couponOffers), couponOffers) }
 
@@ -664,12 +810,17 @@ public final class HostStore: ObservableObject {
 
     // MARK: Кампании (Promote)
 
-    /// Включает буст заведения в ленте до даты (пишется в Firestore → видит юзер).
+    /// Буст заведения в ленте — НЕ с клиента.
+    ///
+    /// `boostedUntil` поднимает заведение над всеми в ленте, то есть стоит
+    /// денег; `firestore.rules` запрещают владельцу писать его, а
+    /// `HostVenueDTO.firestoreData` не отправляет его при обновлении. Раньше
+    /// стор ставил поле локально и слал на сервер: запись отклонялась, а кабинет
+    /// показывал «буст включён», которого гости не видят. Поэтому здесь ничего
+    /// не пишется — ни в кэш, ни на сервер. Включать буст должна серверная
+    /// функция после оплаты (её пока нет; `ReleaseFlags.promote` выключен).
     private func boostVenue(id: String, until: Date) {
-        guard let i = venueDTOs.firstIndex(where: { $0.id == id }) else { return }
-        venueDTOs[i].boostedUntil = until
-        persistVenues()
-        remoteSaveVenue(venueDTOs[i])
+        print("ℹ️ boostVenue(\(id)) ignored: boosting must go through a server function after payment")
     }
 
     private func addCampaign(_ c: AdCampaign) {
@@ -741,5 +892,25 @@ private struct Lossy<T: Decodable>: Decodable {
     let value: T?
     init(from decoder: Decoder) throws {
         value = try? T(from: decoder)
+    }
+}
+
+/// Возобновляет продолжение ровно один раз: побеждает первый из «ответ
+/// сервера» / «таймаут». Второй вызов — молча ничего. `install` вызывается
+/// синхронно в теле `withCheckedContinuation`, до запуска обеих задач.
+private final class CouponWriteGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var cont: CheckedContinuation<AppError??, Never>?
+
+    func install(_ c: CheckedContinuation<AppError??, Never>) {
+        lock.lock(); cont = c; lock.unlock()
+    }
+
+    func resume(_ value: AppError??) {
+        lock.lock()
+        let c = cont
+        cont = nil
+        lock.unlock()
+        c?.resume(returning: value)
     }
 }

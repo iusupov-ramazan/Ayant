@@ -58,10 +58,10 @@ private enum CouponLook {
     /// Подпись под названием: откуда взялся купон.
     static func kindLabel(_ kind: String) -> LocalizedStringKey {
         switch kind {
-        case "loyalty": return "Награда за карту лояльности"
+        case "loyalty": return "Награда за карту штампов"
         case "deal":    return "Купон на акцию"
         case "gift":    return "Подарок от друга"
-        default:        return "Бонусный купон"
+        default:        return "Купон за бонусы"
         }
     }
 
@@ -89,10 +89,11 @@ private enum CouponLook {
         if used { usedGradient } else { LinearGradient.sanAccentGradient }
     }
 
-    /// «3 активных купона» — склонение по последним цифрам.
+    /// «3 активных купона» — склонение берёт plural-вариант ключа в каталоге
+    /// (ru one/few/many, en one/other), а не ручной код.
     static func activeText(_ n: Int) -> String {
         if n == 0 { return LS("Активных купонов нет") }
-        return LF(LPlural(n, "%lld активный купон", "%lld активных купона", "%lld активных купонов"), n)
+        return LF("%lld активных купонов", n)
     }
 }
 
@@ -105,8 +106,9 @@ struct MyCouponsView: View {
     @EnvironmentObject private var coupons: CouponStore
     @Environment(\.dismiss) private var dismiss
 
-    private var available: [Coupon] { coupons.coupons.filter { !$0.used } }
-    private var used: [Coupon] { coupons.coupons.filter { $0.used } }
+    // Истёкший купон уже не гасится — он среди неактивных, а не «Активных».
+    private var available: [Coupon] { coupons.coupons.filter { !$0.used && !$0.isExpired(at: .now) } }
+    private var used: [Coupon] { coupons.coupons.filter { $0.used || $0.isExpired(at: .now) } }
 
     var body: some View {
         ScrollView {
@@ -120,7 +122,7 @@ struct MyCouponsView: View {
                         couponSection("Активные", available, startIndex: 0)
                     }
                     if !used.isEmpty {
-                        couponSection("Использованные", used, startIndex: available.count)
+                        couponSection("Неактивные", used, startIndex: available.count)
                     }
                 }
             }
@@ -136,7 +138,7 @@ struct MyCouponsView: View {
 
     private var subtitle: String {
         var text = CouponLook.activeText(available.count)
-        if !used.isEmpty { text += LF(" · использованных: %lld", used.count) }
+        if !used.isEmpty { text += LF(" · неактивных: %lld", used.count) }
         return text
     }
 
@@ -174,7 +176,7 @@ struct MyCouponsView: View {
                     CouponTicketCard(coupon: coupon)
                 }
                 .buttonStyle(.sanPress(0.98))
-                .opacity(coupon.used ? 0.6 : 1)
+                .opacity(coupon.used || coupon.isExpired(at: .now) ? 0.6 : 1)
                 .sanRise(startIndex + index,
                          stagger: SanTiming.dealRowRise.stagger,
                          duration: SanTiming.dealRowRise.duration)
@@ -191,7 +193,7 @@ struct MyCouponsView: View {
             Text("Купонов пока нет")
                 .font(.golos(20, .bold))
                 .foregroundStyle(Color.sanInk)
-            Text("Купоны появляются с акций — нажмите «Получить купон» на странице предложения — и за заполненную карту штампов в заведении.")
+            Text("Купоны покупаются за бонусы — в «Бонусах» и на страницах заведений — и выдаются за заполненную карту штампов.")
                 .sanText(14, .regular, lineHeight: 1.42)
                 .foregroundStyle(Color.sanInkSoft)
                 .multilineTextAlignment(.center)
@@ -240,7 +242,7 @@ struct CouponTicketCard: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                     Spacer(minLength: 4)
-                    CouponStatusPill(used: coupon.used)
+                    CouponStatusPill(used: coupon.used, expiresAt: coupon.expiresAt)
                 }
                 .padding(.top, 4)
             }
@@ -263,7 +265,8 @@ struct CouponTicketCard: View {
 
     private var stub: some View {
         ZStack {
-            CouponLook.gradient(used: coupon.used)
+            // Истёкший купон гасить нельзя — корешок серый, как у использованного.
+            CouponLook.gradient(used: coupon.used || coupon.isExpired(at: .now))
             SanRisoHatch(opacity: 0.14)
             // Эмодзи цвет игнорируют, инициал становится белым — один стиль на оба.
             Text(CouponLook.glyph(for: coupon))
@@ -283,16 +286,30 @@ struct CouponTicketCard: View {
 /// Пилюля статуса купона (активен / использован).
 struct CouponStatusPill: View {
     let used: Bool
+    /// Срок купона: после него сервер купон не гасит (`coupon_expired`).
+    var expiresAt: Date? = nil
+
+    private var expired: Bool { !used && (expiresAt.map { $0 < .now } ?? false) }
+    private var inactive: Bool { used || expired }
+    private var label: String {
+        if used { return LS("Использован") }
+        if expired { return LS("Истёк") }
+        if let expiresAt {
+            return LF("до %@", expiresAt.formatted(Date.FormatStyle(locale: AppLanguage.locale).day().month(.abbreviated)))
+        }
+        return LS("Активен")
+    }
+
     var body: some View {
         HStack(spacing: 4) {
-            Image(systemName: used ? "checkmark.seal.fill" : "checkmark.circle.fill")
+            Image(systemName: used ? "checkmark.seal.fill" : expired ? "clock.badge.xmark" : "checkmark.circle.fill")
                 .font(.system(size: 9.5, weight: .bold))
-            Text(used ? "Использован" : "Активен")
+            Text(label)
                 .font(.golos(10.5, .heavy)).tracking(0.2)
         }
-        .foregroundStyle(used ? Color.sanInkSoft : Color.sanOpen)
+        .foregroundStyle(inactive ? Color.sanInkSoft : Color.sanOpen)
         .padding(.horizontal, 9).padding(.vertical, 4)
-        .background(used ? Color.sanSurfaceMuted : Color.sanOpen.opacity(0.12), in: Capsule())
+        .background(inactive ? Color.sanSurfaceMuted : Color.sanOpen.opacity(0.12), in: Capsule())
         .fixedSize()
     }
 }
@@ -307,7 +324,7 @@ struct GiftCardImage: View {
             Text("🎁").font(.system(size: 72))
             Text("ПОДАРОК · AYANT").font(.headline.weight(.heavy)).tracking(2)
             Text(title).font(.title.weight(.bold)).multilineTextAlignment(.center)
-            Text("Открой ссылку в приложении Ayant\nи забери купон").font(.subheadline)
+            Text("Откройте ссылку в приложении Ayant\nи заберите купон").font(.subheadline)
                 .multilineTextAlignment(.center).opacity(0.95)
         }
         .padding(40)
@@ -329,7 +346,13 @@ func renderGiftImage(title: String) -> UIImage? {
 struct ActivityShareSheet: UIViewControllerRepresentable {
     let items: [Any]
     func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: items, applicationActivities: nil)
+        let vc = UIActivityViewController(activityItems: items, applicationActivities: nil)
+        // Подарок — для друга, не для принтера/контактов. «Сохранить в Фото»
+        // оставляем: на него есть NSPhotoLibraryAddUsageDescription в Info.plist
+        // (без ключа система убивала приложение при выборе этого пункта).
+        vc.excludedActivityTypes = [.assignToContact, .print, .addToReadingList,
+                                    .openInIBooks, .markupAsPDF]
+        return vc
     }
     func updateUIViewController(_ vc: UIActivityViewController, context: Context) {}
 }
@@ -342,7 +365,7 @@ struct GiftShareSheet: View {
     @State private var showActivity = false
 
     private var caption: String {
-        LF("🎁 Тебе подарок — купон «%@» в Ayant! Забери по ссылке: %@", title, url.absoluteString)
+        LF("🎁 Вам подарок — купон «%@» в Ayant! Заберите по ссылке: %@", title, url.absoluteString)
     }
 
     var body: some View {
@@ -354,7 +377,7 @@ struct GiftShareSheet: View {
                     .shadow(color: .black.opacity(0.12), radius: 8, y: 4)
             }
             Text("Подарок готов!").font(.title2.weight(.bold))
-            Text("Отправь другу картинку со ссылкой — он заберёт купон в приложении.")
+            Text("Отправьте другу картинку со ссылкой — он заберёт купон в приложении.")
                 .font(.subheadline).foregroundStyle(.secondary)
                 .multilineTextAlignment(.center).padding(.horizontal)
             Button { showActivity = true } label: {
@@ -401,6 +424,19 @@ struct CouponDetailView: View {
         coupons.coupons.first(where: { $0.code == coupon.code })?.used ?? coupon.used
     }
 
+    /// Срок вышел, а купон не погашен: сервер его уже не примет
+    /// (`coupon_expired`), поэтому QR не показываем и экран не высвечиваем —
+    /// иначе гость идёт к кассе с купоном, который там откажут.
+    private var isExpired: Bool { !isUsed && coupon.isExpired(at: .now) }
+
+    /// Неактивный купон (погашен или истёк) — серый билет.
+    private var isInactive: Bool { isUsed || isExpired }
+
+    private var expiredText: String {
+        guard let at = coupon.expiresAt else { return "" }
+        return at.formatted(Date.FormatStyle(locale: AppLanguage.locale).day().month(.wide))
+    }
+
     /// «11 сентября» — родительный падеж даёт сам формат `d MMMM` в ru_RU.
     private var receivedText: String {
         coupon.createdAt.formatted(Date.FormatStyle(locale: AppLanguage.locale).day().month(.wide))
@@ -423,7 +459,7 @@ struct CouponDetailView: View {
         .toolbar(.hidden, for: .tabBar)
         .onAppear {
             prevBrightness = UIScreen.main.brightness
-            if !isUsed { UIScreen.main.brightness = 1.0 }   // ярче — легче сканировать
+            if !isInactive { UIScreen.main.brightness = 1.0 }   // ярче — легче сканировать
         }
         .onDisappear { UIScreen.main.brightness = prevBrightness }
         .alert("Использовать купон?", isPresented: $showUseConfirm) {
@@ -434,7 +470,7 @@ struct CouponDetailView: View {
             }
             Button("Отмена", role: .cancel) {}
         } message: {
-            Text("Подтверждай только при сотруднике — купон одноразовый.")
+            Text("Подтверждайте только при сотруднике — купон одноразовый.")
         }
     }
 
@@ -443,6 +479,8 @@ struct CouponDetailView: View {
     @ViewBuilder private var actions: some View {
         if isUsed {
             usedState
+        } else if isExpired {
+            expiredState
         } else if coupon.isVenueBound {
             infoRow("qrcode.viewfinder",
                     "Покажите QR сотруднику — он отсканирует его, и предложение применится.")
@@ -475,6 +513,23 @@ struct CouponDetailView: View {
         .padding(18)
         .frame(maxWidth: .infinity)
         .background(Color.sanOpen.opacity(0.12),
+                    in: RoundedRectangle(cornerRadius: SanRadius.card, style: .continuous))
+    }
+
+    private var expiredState: some View {
+        HStack(spacing: 14) {
+            Image(systemName: "clock.badge.xmark")
+                .font(.system(size: 26, weight: .semibold))
+                .foregroundStyle(Color.sanInkSoft)
+            Text("Срок купона истёк \(expiredText) — погасить его уже нельзя")
+                .font(.golos(14, .semibold))
+                .foregroundStyle(Color.sanInkSoft)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity)
+        .background(Color.sanSurfaceMuted,
                     in: RoundedRectangle(cornerRadius: SanRadius.card, style: .continuous))
     }
 
@@ -524,7 +579,7 @@ struct CouponDetailView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .center) {
-                Text(coupon.venueName.isEmpty ? "Купон" : coupon.venueName)
+                Text(coupon.venueName.isEmpty ? LS("Купон") : coupon.venueName)
                     .textCase(.uppercase)
                     .sanEyebrowText()
                     .foregroundStyle(.white.opacity(0.85))
@@ -551,7 +606,7 @@ struct CouponDetailView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
             ZStack {
-                CouponLook.gradient(used: isUsed)
+                CouponLook.gradient(used: isInactive)
                 SanRisoHatch(opacity: 0.12)
             }
         }
@@ -574,13 +629,14 @@ struct CouponDetailView: View {
     // код текстом и кнопка «Использовать купон» ниже.
     private var ticketBody: some View {
         VStack(spacing: 18) {
-            if coupon.isVenueBound {
+            if coupon.isVenueBound && !isExpired {
                 ZStack {
                     RoundedRectangle(cornerRadius: 22, style: .continuous)
                         .fill(.white)
                         .frame(width: 236, height: 236)
                         .sanShadow(.qrCard)
                     QRCodeView(text: coupon.code, size: 200).opacity(isUsed ? 0.35 : 1)
+                        .accessibilityLabel("QR-код для сотрудника")
                     if isUsed { usedStamp }
                 }
                 .padding(.top, 6)
@@ -609,7 +665,7 @@ struct CouponDetailView: View {
                     .font(.golos(12.5, .medium))
                     .foregroundStyle(Color.sanInkSoft)
                 Spacer(minLength: 8)
-                CouponStatusPill(used: isUsed)
+                CouponStatusPill(used: isUsed, expiresAt: coupon.expiresAt)
             }
         }
         .padding(.horizontal, 20)

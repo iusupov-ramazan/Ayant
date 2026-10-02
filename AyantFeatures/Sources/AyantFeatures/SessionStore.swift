@@ -8,7 +8,12 @@ import AyantDomain
 @MainActor
 public final class SessionStore: ObservableObject {
 
-    @Published public private(set) var user: SANUser?
+    @Published public private(set) var user: SANUser? {
+        didSet { refreshEmailVerification() }
+    }
+    /// Почтовому аккаунту нужно подтвердить адрес, чтобы копить и тратить
+    /// бонусы (сервер отвечает `email_not_verified`). Показывает баннер.
+    @Published public private(set) var needsEmailVerification = false
     @Published public var isWorking = false
     @Published public var errorMessage: String?
     /// Не-ошибка, о которой всё же надо сказать («письмо отправлено»).
@@ -36,6 +41,7 @@ public final class SessionStore: ObservableObject {
     public init(service: AuthService) {
         self.service = service
         self.user = service.currentUser()
+        self.needsEmailVerification = service.needsEmailVerification()
         // Firebase поднимает сессию из связки ключей асинхронно: на холодном
         // старте `currentUser()` выше может быть ещё пустым, и без подписки
         // вошедший пользователь видел экран входа или пустой каталог.
@@ -65,11 +71,34 @@ public final class SessionStore: ObservableObject {
     // MARK: Email
 
     public func signInEmail(_ email: String, _ password: String) {
-        run { try await self.service.signInWithEmail(email, password: password) }
+        run(event: .login, method: "email") { try await self.service.signInWithEmail(email, password: password) }
     }
 
     public func registerEmail(name: String, email: String, password: String) {
-        run { try await self.service.registerWithEmail(name: name, email: email, password: password) }
+        run(event: .signUp, method: "email") { try await self.service.registerWithEmail(name: name, email: email, password: password) }
+    }
+
+    // MARK: Подтверждение почты
+
+    /// Перечитывает флаг у провайдера (без сети).
+    public func refreshEmailVerification() {
+        let needs = service.needsEmailVerification()
+        if needsEmailVerification != needs { needsEmailVerification = needs }
+    }
+
+    /// «Отправить письмо ещё раз». `true` — письмо ушло.
+    public func resendVerificationEmail() async -> Bool {
+        do { try await service.sendEmailVerification(); return true }
+        catch { return false }
+    }
+
+    /// «Я подтвердил»: перечитываем пользователя и обновляем ID-токен, чтобы
+    /// сервер увидел `email_verified`. `true` — почта подтверждена.
+    public func confirmEmailVerified() async -> Bool {
+        let verified = (try? await service.reloadEmailVerification()) ?? false
+        refreshEmailVerification()
+        if verified, needsEmailVerification { needsEmailVerification = false }
+        return verified
     }
 
     /// «Забыли пароль?». Сессию не меняет — только сообщает, что письмо ушло.
@@ -87,7 +116,7 @@ public final class SessionStore: ObservableObject {
     // MARK: Google
 
     public func signInGoogle() {
-        run { try await self.service.signInWithGoogle() }
+        run(event: .login, method: "google") { try await self.service.signInWithGoogle() }
     }
 
     // MARK: Apple (нативно + nonce для Firebase)
@@ -145,14 +174,14 @@ public final class SessionStore: ObservableObject {
                 name: fullName.isEmpty ? nil : fullName,
                 email: cred.email
             )
-            run { try await self.service.signInWithApple(apple) }
+            run(event: .login, method: "apple") { try await self.service.signInWithApple(apple) }
         }
     }
 
     // MARK: Гость / выход
 
     public func continueAsGuest() {
-        run { try await self.service.continueAsGuest() }
+        run(event: .signUp, method: "guest") { try await self.service.continueAsGuest() }
     }
 
     /// Выход. Гостевую запись при этом УДАЛЯЕМ: войти в анонимный аккаунт
@@ -180,19 +209,20 @@ public final class SessionStore: ObservableObject {
     /// Полное удаление аккаунта: Firestore-данные и запись в Firebase Auth.
     /// `onFinish(nil)` — успех; иначе текст ошибки для алерта.
     ///
-    /// Порядок: (1) отзыв гранта Apple, если пользователь входил через Apple и
-    /// экран принёс свежий `authorizationCode` (App Review 5.1.1(v)); (2) само
-    /// удаление; (3) `willSignOut` — уже best-effort и с пределом по времени;
-    /// (4) чистка локального состояния.
+    /// Порядок: (1) само удаление на сервере; (2) только после успеха — отзыв
+    /// гранта Apple, если пользователь входил через Apple и экран принёс свежий
+    /// `authorizationCode` (App Review 5.1.1(v)); (3) `willSignOut` —
+    /// best-effort и с пределом по времени; (4) локальный выход.
     ///
-    /// Раньше `willSignOut` шёл ПЕРВЫМ: если облачная функция затем отвечала
-    /// 409 («владеет заведениями»), 401 или 500, пользователь оставался в
-    /// аккаунте, но устройство уже было отписано от push. Push-токены удаляет
-    /// та же функция каскадом по `uid`, так что после успешного удаления хук
-    /// нужен только ради локальной отписки от топиков.
+    /// Раньше отзыв шёл ПЕРВЫМ: если сервер затем отказывал (401, 409, 500,
+    /// нет сети), человек оставался с живым аккаунтом, но уже без гранта Apple —
+    /// и не мог войти в него снова тем же способом. Теперь отказ сервера ничего
+    /// не ломает: аккаунт, сессия и грант остаются как были.
     ///
-    /// Если отзыв Apple не удался — НЕ удаляем: остался бы Firebase-аккаунт
-    /// без записи, но с живым грантом в настройках iOS у пользователя.
+    /// Отзыв после удаления — best-effort: аккаунта уже нет, и его сбой не
+    /// превращает успешное удаление в ошибку (грант можно снять в настройках
+    /// Apple ID). Реализация сервиса оставляет локальную сессию до нашего
+    /// `signOut()` именно ради этого вызова.
     public func deleteAccount(appleAuthorizationCode: String? = nil,
                               onFinish: @escaping (String?) -> Void = { _ in }) {
         let needsAppleRevoke = user?.provider == .apple
@@ -201,20 +231,22 @@ public final class SessionStore: ObservableObject {
         Task {
             defer { publishServiceUserIfChanged() }
             do {
-                if needsAppleRevoke, let code = appleAuthorizationCode {
-                    try await service.revokeAppleToken(authorizationCode: code)
-                }
                 try await service.deleteAccount()
-                await runWillSignOutBounded()
-                self.user = nil
-                self.isWorking = false
-                onFinish(nil)
             } catch {
                 let text = (error as? AuthError)?.errorDescription ?? error.localizedDescription
                 self.errorMessage = text
                 self.isWorking = false
                 onFinish(text)
+                return
             }
+            if needsAppleRevoke, let code = appleAuthorizationCode {
+                try? await service.revokeAppleToken(authorizationCode: code)
+            }
+            await runWillSignOutBounded()
+            service.signOut()
+            self.user = nil
+            self.isWorking = false
+            onFinish(nil)
         }
     }
 
@@ -245,8 +277,14 @@ public final class SessionStore: ObservableObject {
     private static let authTimeout: Duration = .seconds(30)
 
     /// Операция, меняющая сессию: результат становится текущим пользователем.
-    private func run(_ op: @escaping () async throws -> SANUser) {
-        perform { self.user = try await op() }
+    /// `event`/`method` — событие воронки (`sign_up`/`login`) после успеха;
+    /// без uid и почты — только способ входа.
+    private func run(event: AnalyticsEvent? = nil, method: String? = nil,
+                     _ op: @escaping () async throws -> SANUser) {
+        perform {
+            self.user = try await op()
+            if let event { AnalyticsLog.log(event, method.map { ["method": $0] } ?? [:]) }
+        }
     }
 
     /// Общая обвязка любой операции провайдера: спиннер, сторожевой таймер,

@@ -21,10 +21,15 @@ public enum Game2048 {
     /// 256, 512. Дневного потолка у мини-игр больше нет, поэтому порог и
     /// удвоение — единственный тормоз, который у этой игры есть.
     ///
-    /// Ступенька важнее порога: за счёт удвоения каждый следующий бонус стоит
-    /// вдвое дороже предыдущего, поэтому лимит нельзя выбрать перезапусками —
-    /// три партии «до 128» дольше, чем одна до 512. Начни отсчёт с 64 — и игра
-    /// превратилась бы в ферму на минуту.
+    /// Ступенька — не анти-фарм от перезапусков, как считалось раньше. Плитки
+    /// рождаются в основном двойками, поэтому 128 — это ~58 ходов, 512 — ~233:
+    /// три партии «до 128» (~174 хода) БЫСТРЕЕ одной до 512, и выгоднее всего
+    /// перезапускать после 128–256 (аудит 2026-10-01). Это не дыра: первый
+    /// бонус и так стоит около минуты, то есть в общем курсе (`GameEconomy`).
+    /// Удвоение лишь делает длинную партию хуже оплачиваемой — до 2048 платит
+    /// ~втрое хуже курса. Защищает от фарма здесь сам порог: начни с 64 — и
+    /// бонус стоил бы секунды. Порог настраивается из Remote Config
+    /// (`GameRates.game2048FirstTile`), дневной лимит игры — `BonusCaps`.
     public static let bonusFromValue = 128
 
     public enum Direction: Sendable, CaseIterable {
@@ -95,17 +100,23 @@ public enum Game2048 {
 
         /// Заработанные бонусы (до дневного лимита — его считает `BonusEngine`).
         /// 128 → 1, 256 → 2, 512 → 3, дальше по одному за каждое удвоение.
-        public var bonuses: Int {
-            guard bestTile >= Game2048.bonusFromValue else { return 0 }
+        public var bonuses: Int { bonuses(from: Game2048.bonusFromValue) }
+
+        /// То же с порогом из Remote Config (`GameRates.game2048FirstTile`).
+        public func bonuses(from firstTile: Int) -> Int {
+            let first = max(2, firstTile)
+            guard bestTile >= first else { return 0 }
             var count = 0
-            var step = Game2048.bonusFromValue
+            var step = first
             while step <= bestTile { count += 1; step *= 2 }
             return count
         }
 
         /// Плитка, за которую дадут следующий бонус, — её и показывает экран.
-        public var nextBonusValue: Int {
-            max(Game2048.bonusFromValue, bestTile * 2)
+        public var nextBonusValue: Int { nextBonusValue(from: Game2048.bonusFromValue) }
+
+        public func nextBonusValue(from firstTile: Int) -> Int {
+            max(firstTile, bestTile * 2)
         }
     }
 

@@ -1,4 +1,5 @@
 import SwiftUI
+import Network
 import AyantDomain
 import AyantFeatures
 
@@ -60,9 +61,19 @@ enum StoreItem: Identifiable, Equatable {
         switch self {
         case .offer(let o):
             guard let date = o.expiresAt else { return LS("Бессрочно") }
-            return LF("до %@", date.formatted(.dateTime.day().month(.wide)))
+            return LF("до %@", date.formatted(Date.FormatStyle(locale: AppLanguage.locale).day().month(.wide)))
         case .reward: return LS("Бессрочно")
         }
+    }
+    /// У купона есть последний день — после него он не гасится.
+    var hasExpiry: Bool {
+        if case .offer(let o) = self { return o.expiresAt != nil }
+        return false
+    }
+    /// «Не больше 1 на гостя» — только когда у купона есть лимит в одни руки.
+    var perGuestText: String? {
+        if case .offer(let o) = self, o.perGuestLimit > 0 { return LF("Не больше %lld на гостя", o.perGuestLimit) }
+        return nil
     }
     /// «осталось 7» — только когда остаток ограничен.
     var remainingShort: String? {
@@ -92,9 +103,12 @@ struct CouponStoreView: View {
     @State private var pending: StoreItem?
     @State private var pendingGift: StoreItem?
     @State private var justBought: Coupon?
+    /// «Открыть купон» из алерта успеха — лист с самим купоном.
+    @State private var openedCoupon: Coupon?
     @State private var giftShare: ShareURL?
     @State private var showGuestAlert = false
     @State private var purchaseError: String?
+    @State private var showSyncInfo = false
     /// Пока сервер отвечает — кнопка не жмётся второй раз.
     @State private var busy = false
 
@@ -134,6 +148,7 @@ struct CouponStoreView: View {
         }
         .sheet(item: $detail) { item in
             StoreItemDetailSheet(item: item, canBuy: canBuy(item), buttonTitle: buttonTitle(item),
+                                 syncing: isSyncing(item),
                                  onBuy: { detail = nil; request(item) },
                                  onGift: item.canGift ? { detail = nil; requestGift(item) } : nil)
                 .presentationDetents([.medium, .large])
@@ -142,7 +157,9 @@ struct CouponStoreView: View {
         .alert("Обменять бонусы?", isPresented: Binding(
             get: { pending != nil }, set: { if !$0 { pending = nil } }),
             presenting: pending) { item in
-            Button("Обменять за \(item.cost)", role: .destructive) { buy(item) }
+            // Не `.destructive`: обмен — то, ради чего бонусы копят, а не
+            // опасное действие; красная кнопка пугала на самом нужном шаге.
+            Button("Обменять за \(item.cost)") { buy(item) }
             Button("Отмена", role: .cancel) {}
         } message: { item in
             Text(item.venueName.isEmpty
@@ -152,20 +169,52 @@ struct CouponStoreView: View {
         .alert("Подарить купон?", isPresented: Binding(
             get: { pendingGift != nil }, set: { if !$0 { pendingGift = nil } }),
             presenting: pendingGift) { item in
-            Button("Подарить за \(item.cost)", role: .destructive) { gift(item) }
+            Button("Подарить за \(item.cost)") { gift(item) }
             Button("Отмена", role: .cancel) {}
         } message: { item in
             Text("Спишется \(item.cost) бонусов. Отправьте ссылку другу — он заберёт «\(item.title)».")
         }
         .alert("Купон получен 🎉", isPresented: Binding(
-            get: { justBought != nil }, set: { if !$0 { justBought = nil } })) {
-            Button("Отлично") {}
-        } message: {
-            Text(justBought?.venueName.isEmpty == false
-                 ? "Найдите его в «Мои купоны» и покажите сотруднику «\(justBought?.venueName ?? "")»."
-                 : "Найдите его в «Мои купоны» и покажите сотруднику заведения.")
+            get: { justBought != nil }, set: { if !$0 { justBought = nil } }),
+            presenting: justBought) { coupon in
+            Button("Открыть купон") { openedCoupon = coupon }
+            Button("Отлично", role: .cancel) {}
+        } message: { coupon in
+            Text(coupon.venueName.isEmpty
+                 ? "Найдите его в «Мои купоны» и покажите сотруднику заведения."
+                 : "Найдите его в «Мои купоны» и покажите сотруднику «\(coupon.venueName)».")
         }
+        .sheet(item: $openedCoupon) { coupon in
+            NavigationStack { CouponDetailView(coupon: coupon) }
+        }
+        // Пока сервер оформляет покупку — видно, что что-то происходит, и
+        // второй раз не нажать.
+        .overlay {
+            if busy {
+                ZStack {
+                    RoundedRectangle(cornerRadius: SanRadius.card, style: .continuous)
+                        .fill(Color.sanCanvas.opacity(0.75))
+                    VStack(spacing: 10) {
+                        ProgressView().controlSize(.large)
+                        Text("Оформляем купон…")
+                            .font(.golos(14, .semibold)).foregroundStyle(Color.sanInk)
+                    }
+                    .padding(18)
+                    .background(Color.sanSurface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .shadow(color: .black.opacity(0.08), radius: 12, y: 6)
+                }
+                .transition(.opacity)
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(.updatesFrequently)
+            }
+        }
+        .animation(.easeOut(duration: 0.2), value: busy)
         .sheet(item: $giftShare) { GiftShareSheet(url: $0.url, title: $0.title) }
+        .alert("Бонусы отправляются", isPresented: $showSyncInfo) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Бонусы ещё не дошли до сервера — проверьте интернет")
+        }
         .alert("Не получилось", isPresented: Binding(
             get: { purchaseError != nil }, set: { if !$0 { purchaseError = nil } })) {
             Button("Понятно") {}
@@ -177,16 +226,32 @@ struct CouponStoreView: View {
     // MARK: Покупка
 
     private func canBuy(_ item: StoreItem) -> Bool {
-        ReleaseFlags.couponShopPurchase && bonus.balance >= item.cost && !busy
+        // Тратится только подтверждённое сервером: бонусы, которые ещё в пути,
+        // сервер не видит, и покупка получила бы «не хватает».
+        ReleaseFlags.couponShopPurchase && bonus.spendableBalance >= item.cost && !busy
     }
 
     private func buttonTitle(_ item: StoreItem) -> LocalizedStringKey {
         if !ReleaseFlags.couponShopPurchase { return "Скоро" }
-        return bonus.balance >= item.cost ? "Обменять" : "Не хватает"
+        // Гостю «Не хватает» врёт: бонусов у него нет потому, что он не вошёл.
+        if session.isGuest { return "Войдите, чтобы обменять" }
+        if bonus.spendableBalance >= item.cost { return "Обменять" }
+        // Хватает с учётом ещё не дошедших — значит, дело только в синхронизации.
+        return bonus.balance >= item.cost ? "Синхронизация…" : "Не хватает"
+    }
+
+    /// Бонусов хватает только вместе с ещё не дошедшими до сервера.
+    private func isSyncing(_ item: StoreItem) -> Bool {
+        ReleaseFlags.couponShopPurchase && !session.isGuest
+            && bonus.spendableBalance < item.cost && bonus.balance >= item.cost
     }
 
     private func request(_ item: StoreItem) {
-        if session.isGuest { showGuestAlert = true } else { pending = item }
+        if session.isGuest { showGuestAlert = true; return }
+        // «Синхронизация…» — не тупик: нажатие повторяет отправку и объясняет,
+        // почему купить пока нельзя.
+        if isSyncing(item) { bonus.retryPending(); showSyncInfo = true; return }
+        pending = item
     }
 
     private func requestGift(_ item: StoreItem) {
@@ -247,8 +312,10 @@ struct CouponStoreView: View {
                 .clipped()
                 .overlay(alignment: .topTrailing) {
                     if let left = item.remainingShort {
+                        // Бейдж на картинке — размер фиксированный, иначе на
+                        // крупном тексте он закрывает фото.
                         Text(left)
-                            .font(.golos(10.5, .bold)).foregroundStyle(.white)
+                            .font(.golosFixed(10.5, .bold)).foregroundStyle(.white)
                             .padding(.horizontal, 7).padding(.vertical, 3)
                             .background(.black.opacity(0.45), in: Capsule())
                             .padding(7)
@@ -266,8 +333,10 @@ struct CouponStoreView: View {
                 }
                 HStack(spacing: 4) {
                     Image(systemName: "star.circle.fill").font(.system(size: 13, weight: .semibold))
-                    Text("\(item.cost)").font(.golos(14, .heavy)).monospacedDigit()
+                    Text(verbatim: item.cost.sanThousands).font(.golos(14, .heavy)).monospacedDigit()
                 }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text("\(item.cost) бонусов"))
                 .foregroundStyle(affordable ? Color.white : Color.sanInkSoft)
                 .padding(.horizontal, 10).padding(.vertical, 6)
                 .background(affordable ? AnyShapeStyle(LinearGradient.sanAccentGradient)
@@ -300,13 +369,14 @@ struct CouponStoreView: View {
                 Text(([LF("%lld бонусов", item.cost)] + [item.remainingShort].compactMap { $0 })
                         .joined(separator: " · "))
                     .font(.golos(12.5)).foregroundStyle(Color.sanInkSoft)
-                    .lineLimit(1)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 8)
             Button { request(item) } label: {
                 Text(buttonTitle(item))
                     .font(.golos(13, .bold))
-                    .foregroundStyle(enabled ? Color.white : Color(hex: 0x9A9188))
+                    .foregroundStyle(enabled ? Color.white : Color.sanInkSoft)
                     .padding(.horizontal, 15).padding(.vertical, 10)
                     .background(enabled ? AnyShapeStyle(LinearGradient.sanAccentGradient)
                                         : AnyShapeStyle(Color.sanSurfaceMuted),
@@ -315,7 +385,7 @@ struct CouponStoreView: View {
             .buttonStyle(.sanPress(0.95))
             // Гость жмёт — и видит «войдите»; вошедшему без бонусов кнопка
             // просто неактивна.
-            .disabled(!session.isGuest && !enabled)
+            .disabled(!session.isGuest && !enabled && !isSyncing(item))
         }
         .padding(15)
         .contentShape(Rectangle())
@@ -352,6 +422,8 @@ struct StoreItemDetailSheet: View {
     let item: StoreItem
     let canBuy: Bool
     let buttonTitle: LocalizedStringKey
+    /// «Синхронизация…» — кнопка жмётся: повторяет отправку бонусов.
+    var syncing = false
     let onBuy: () -> Void
     /// Есть — под кнопкой обмена «Подарить другу».
     var onGift: (() -> Void)? = nil
@@ -391,12 +463,29 @@ struct StoreItemDetailSheet: View {
                         infoRow("shippingbox.fill", "Осталось", item.stockText)
                         SanHairline(leading: 44)
                         infoRow("calendar", "Действует", item.expiryText)
+                        if let perGuest = item.perGuestText {
+                            SanHairline(leading: 44)
+                            infoRow("person.fill", "Лимит", perGuest)
+                        }
                         if !session.isGuest {
                             SanHairline(leading: 44)
-                            infoRow("wallet.bifold.fill", "У вас", LF("%lld бонусов", bonus.balance))
+                            infoRow("wallet.bifold.fill", "У вас", bonus.syncingAmount > 0
+                                    ? LF("%lld бонусов (+%lld в пути)", bonus.spendableBalance, bonus.syncingAmount)
+                                    : LF("%lld бонусов", bonus.balance))
                         }
                     }
                     .sanCard(padding: 0, radius: SanRadius.card)
+
+                    if item.hasExpiry {
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: "exclamationmark.circle")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(Color.sanAccentText)
+                            Text("После этой даты купон не погасить, а бонусы не вернутся.")
+                                .font(.golos(12.5)).foregroundStyle(Color.sanInkSoft)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
 
                     HStack(alignment: .top, spacing: 10) {
                         Image(systemName: "qrcode")
@@ -414,14 +503,14 @@ struct StoreItemDetailSheet: View {
                     Button(action: onBuy) {
                         Text(canBuy ? LocalizedStringKey("Обменять за \(item.cost) бонусов") : buttonTitle)
                             .font(.golos(16, .bold))
-                            .foregroundStyle(canBuy || session.isGuest ? Color.white : Color(hex: 0x9A9188))
+                            .foregroundStyle(canBuy || session.isGuest ? Color.white : Color.sanInkSoft)
                             .frame(maxWidth: .infinity).padding(.vertical, 16)
                             .background(canBuy || session.isGuest ? AnyShapeStyle(LinearGradient.sanAccentGradient)
                                                                   : AnyShapeStyle(Color.sanSurfaceMuted),
                                         in: RoundedRectangle(cornerRadius: SanRadius.button, style: .continuous))
                     }
                     .buttonStyle(.sanPress(0.97))
-                    .disabled(!session.isGuest && !canBuy)
+                    .disabled(!session.isGuest && !canBuy && !syncing)
                     if let onGift {
                         Button(action: onGift) {
                             Label("Подарить другу", systemImage: "gift")
@@ -482,9 +571,13 @@ struct VenueCouponShop: View {
                         Spacer(minLength: 8)
                         // Баланс рядом с ценами — иначе «хватит ли мне» считать в уме.
                         if !session.isGuest {
-                            Label("\(bonus.balance)", systemImage: "star.circle.fill")
-                                .font(.golos(13, .bold)).monospacedDigit()
-                                .foregroundStyle(Color.sanAccentText)
+                            Label { Text(verbatim: bonus.balance.sanThousands) } icon: {
+                                Image(systemName: "star.circle.fill")
+                            }
+                            .font(.golos(13, .bold)).monospacedDigit()
+                            .foregroundStyle(Color.sanAccentText)
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel(Text("\(bonus.balance) бонусов"))
                         }
                     }
                     CouponStoreView(items: items) { await coupons.loadOffers(venueID: venue.id) }
@@ -511,6 +604,7 @@ extension CouponStore {
 /// прячется: гость должен знать, что бонусы здесь тратятся.
 struct BonusStoreSection: View {
     @EnvironmentObject private var coupons: CouponStore
+    @StateObject private var connectivity = ShopConnectivity()
 
     private var items: [StoreItem] { coupons.storeItems }
 
@@ -531,7 +625,15 @@ struct BonusStoreSection: View {
                     .buttonStyle(.sanPress(0.94))
                 }
             }
-            if items.isEmpty {
+            if items.isEmpty && (coupons.shopLoadFailed || connectivity.isOffline) {
+                // Пустой из-за сбоя загрузки — не то же, что «купонов нет»:
+                // иначе гость решит, что тратить бонусы негде.
+                Label("Не удалось загрузить магазин. Потяните вниз, чтобы обновить.",
+                      systemImage: "wifi.exclamationmark")
+                    .font(.golos(13.5)).foregroundStyle(Color.sanInkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.vertical, 2)
+            } else if items.isEmpty {
                 Text("Здесь появятся купоны, которые заведения продают за бонусы: кофе, десерт, скидка. Копите бонусы в играх — обменять будет на что.")
                     .font(.golos(13.5)).foregroundStyle(Color.sanInkSoft)
                     .fixedSize(horizontal: false, vertical: true)
@@ -546,7 +648,37 @@ struct BonusStoreSection: View {
             await coupons.loadShopOffers()
             await coupons.loadRewards()
         }
+        // Сеть вернулась, а витрина пустая — перечитываем сами, не дожидаясь
+        // жеста «потянуть вниз».
+        .onChange(of: connectivity.isOffline) { _, offline in
+            guard !offline, items.isEmpty else { return }
+            Task {
+                await coupons.loadShopOffers()
+                await coupons.loadRewards()
+            }
+        }
     }
+}
+
+/// Есть ли сеть. Причину пустоты магазина сообщает сам стор
+/// (`CouponStore.shopLoadFailed`); монитор нужен, чтобы перечитать витрину,
+/// как только сеть вернулась, не дожидаясь жеста «потянуть вниз».
+@MainActor
+final class ShopConnectivity: ObservableObject {
+    @Published private(set) var isOffline = false
+    private let monitor = NWPathMonitor()
+
+    init() {
+        monitor.pathUpdateHandler = { [weak self] path in
+            let offline = path.status != .satisfied
+            Task { @MainActor in
+                if self?.isOffline != offline { self?.isOffline = offline }
+            }
+        }
+        monitor.start(queue: DispatchQueue(label: "kg.ayant.shop.connectivity"))
+    }
+
+    deinit { monitor.cancel() }
 }
 
 /// «Все» купоны магазина — сеткой, на своём экране.
@@ -585,10 +717,17 @@ enum BonusPurchaseErrorText {
         switch code {
         case "insufficient": return LS("Не хватает бонусов. Играйте в «Бонусах», чтобы накопить.")
         case "sold_out": return LS("Эти купоны уже разобрали.")
+        case "limit_reached": return LS("Вы уже купили столько этих купонов, сколько можно одному гостю.")
+        case "email_not_verified": return LS("Подтвердите email, чтобы копить и тратить бонусы")
         case "unavailable", "not_found": return LS("Этот купон сейчас недоступен.")
         case "network": return LS("Нет связи. Попробуйте ещё раз — бонусы дважды не спишутся.")
         case "no_wallet": return LS("Кошелёк ещё настраивается. Попробуйте через минуту.")
         case "anonymous_not_allowed": return LS("Войдите в аккаунт, чтобы обменивать бонусы.")
+        case "unauthenticated", "no_token", "bad_token": return LS("Войдите заново")
+        case "app_check_failed": return LS("Обновите приложение — эта версия не прошла проверку")
+        // Ключ покупки уже занят другой покупкой — повтор с новым ключом безопасен.
+        case "key_reused": return LS("Покупка не прошла. Попробуйте ещё раз — бонусы дважды не спишутся.")
+        case "gift_not_allowed": return LS("Этот купон нельзя подарить — его можно только обменять для себя.")
         default: return LS("Не удалось обменять бонусы. Попробуйте позже.")
         }
     }

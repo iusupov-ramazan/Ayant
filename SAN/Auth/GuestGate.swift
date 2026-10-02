@@ -16,8 +16,8 @@ struct GuestGate {
     static let saveDeal: LocalizedStringKey = "Гостям доступен только просмотр. Войдите, чтобы сохранять предложения."
     static let like: LocalizedStringKey = "Войдите, чтобы отмечать предложения — они переедут с вами на другое устройство."
     static let qr: LocalizedStringKey = "Личный QR привязан к аккаунту: по нему заведение начисляет баллы. Войдите или создайте аккаунт."
-    static let bonuses: LocalizedStringKey = "Баллы, купоны и карты лояльности копятся в аккаунте. Войдите или создайте аккаунт."
-    static let game: LocalizedStringKey = "Награды за игру начисляются в аккаунт. Войдите или создайте аккаунт."
+    static let bonuses: LocalizedStringKey = "Бонусы и купоны хранятся в аккаунте. Войдите, чтобы обменивать бонусы."
+    static let game: LocalizedStringKey = "Бонусы за игры копятся в аккаунте. Войдите, чтобы играть и копить."
     static let coupon: LocalizedStringKey = "Войдите в аккаунт, чтобы получить купон."
     static let review: LocalizedStringKey = "Войдите в аккаунт, чтобы оставлять отзывы."
 }

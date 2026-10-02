@@ -4,9 +4,10 @@ import AyantFeatures
 
 /// «Ваш QR» — экран центральной кнопки таб-бара.
 ///
-/// Показывает личный код `AYANT-PTS:<userID>`: сотрудник заведения сканирует его,
-/// и Cloud Function `scanCoupon` (ветка C) начисляет баллы. Клиент здесь ничего
-/// не считает и не пишет — только рисует код.
+/// Показывает личный код `AYANT-PTS:<userID>` — один на все заведения
+/// (`GuestQR`): сотрудник сканирует его, и `scanCoupon` начисляет баллы или
+/// ставит штамп — смотря что у этого заведения. Клиент здесь ничего не
+/// считает и не пишет — только рисует код.
 struct MyQRView: View {
     @EnvironmentObject private var points: PointsStore
     @EnvironmentObject private var store: AppStore
@@ -18,13 +19,15 @@ struct MyQRView: View {
 
     @State private var sweep = false
     @State private var shimmer = false
+    @State private var showAuth = false
     private var userID: String { points.state.userID }
-    private var earnCode: String { "AYANT-PTS:\(userID)" }
+    private var earnCode: String { GuestQR.code(userID: userID) }
 
-    /// Сумма балансов по всем картам. Баллы живут по заведениям — это просто
-    /// «сколько у вас всего», разбивка ниже в ленте карточек.
-    private var totalBalance: Int {
-        (points.state.cards.value ?? []).reduce(0) { $0 + $1.balance }
+    /// В скольких заведениях у гостя есть баллы. Сумму балансов больше не
+    /// показываем: баллы одного заведения у другого не тратятся, и «Всего
+    /// 870 баллов» обещало общий счёт, которого нет.
+    private var venuesWithPoints: Int {
+        (points.state.cards.value ?? []).filter { $0.balance > 0 }.count
     }
 
     /// Заведения с включёнными баллами, ближайшие сверху.
@@ -47,7 +50,7 @@ struct MyQRView: View {
                     Text("Ваш QR").sanEditorialTitle(40)
                         .foregroundStyle(Color.sanInk)
 
-                    Text("Покажите код на кассе — баллы прилетят на карту заведения.")
+                    Text("Один код для всех заведений: покажите его на кассе — начислятся баллы или штамп.")
                         .sanText(14, .regular, lineHeight: 1.45)
                         .foregroundStyle(Color.sanInkSoft)
                         .frame(maxWidth: 280, alignment: .leading)
@@ -117,20 +120,20 @@ struct MyQRView: View {
                         .font(.golos(12, .regular)).foregroundStyle(Color.sanInkSoft)
                 }
                 Spacer(minLength: 8)
-                VStack(alignment: .trailing, spacing: 1) {
-                    Text("Всего баллов")
-                        .font(.golos(11, .semibold)).foregroundStyle(Color.sanInkSoft)
-                    Text("\(totalBalance)")
-                        .font(.golos(20, .heavy))
-                        // Мелкая акцентная цифра на белом — `sanAccentTextStrong`.
+                if venuesWithPoints > 0 {
+                    Text("Баллы в \(venuesWithPoints) заведениях")
+                        .font(.golos(12, .semibold))
+                        // Мелкий акцентный текст на белом — `sanAccentTextStrong`.
                         .foregroundStyle(Color.sanAccentTextStrong)
+                        .multilineTextAlignment(.trailing)
                         .contentTransition(.numericText())
-                        .animation(.snappy, value: totalBalance)
+                        .animation(.snappy, value: venuesWithPoints)
                 }
             }
 
             ZStack {
                 QRCodeView(text: earnCode, size: 196)
+                    .accessibilityLabel("QR-код для сотрудника")
                 // Луч сканирования: бежит сверху вниз по коду.
                 if !reduceMotion {
                     Rectangle()
@@ -145,7 +148,7 @@ struct MyQRView: View {
             .clipped()
             .padding(.top, 20)
 
-            Text("Покажите сотруднику — он начислит баллы")
+            Text("Покажите сотруднику — начислятся баллы или штамп")
                 .font(.golos(13.5, .semibold))
                 .foregroundStyle(Color.sanInkSoft)
                 .multilineTextAlignment(.center)
@@ -187,10 +190,15 @@ struct MyQRView: View {
             Text("Гостям код не выдаётся — начисление привязано к вашему профилю.")
                 .font(.golos(13, .regular)).foregroundStyle(Color.sanInkSoft)
                 .multilineTextAlignment(.center)
+            // Раньше здесь было только объяснение — гость упирался в тупик.
+            Button("Войти или создать аккаунт") { showAuth = true }
+                .buttonStyle(SanPrimaryButton())
+                .padding(.top, 6)
         }
         .padding(24)
         .frame(maxWidth: .infinity)
         .sanCard(padding: 0, radius: 32)
+        .authUpgradeCover(isPresented: $showAuth)
     }
 
     // MARK: Лента ближайших

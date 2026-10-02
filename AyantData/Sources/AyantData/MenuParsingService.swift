@@ -13,20 +13,29 @@ public final class OnDeviceMenuParsingService: MenuParsingService, @unchecked Se
     public func parseMenu(file: Data, kind: MenuFileKind,
                           progress: @escaping @Sendable (Double) -> Void) async throws -> [MenuDraftItem] {
         guard file.count <= MenuImport.maxFileBytes else { throw AppError.server(code: "file_too_large") }
-        // Распознавание — секунды на страницу: не на главном потоке.
-        return try await Task.detached(priority: .userInitiated) {
-            switch kind {
-            case .pdf:
-                let fragments = try MenuPDFTextExtractor.fragments(from: file) { page, total in
-                    progress(Double(page) / Double(max(total, 1)))
-                }
-                progress(1)
-                return MenuTextParser.parse(fragments)
-            case .csv:
-                return MenuTable.items(from: [MenuTable.Sheet(name: "", rows: MenuTable.csvRows(file))])
-            case .xlsx:
-                return MenuTable.items(from: try MenuXLSXReader.sheets(from: file))
+        // Распознавание — секунды на страницу: не на главном потоке. Дочерняя
+        // задача (`async let`), а не `Task.detached`: отмена из `MenuImportStore`
+        // (сброс, уход с экрана) доходит до разбора, и распознавание
+        // останавливается между страницами, а не дожёвывает весь PDF впустую.
+        async let parsed = Self.parse(file: file, kind: kind, progress: progress)
+        return try await parsed
+    }
+
+    private static func parse(file: Data, kind: MenuFileKind,
+                              progress: @escaping @Sendable (Double) -> Void) throws -> [MenuDraftItem] {
+        try Task.checkCancellation()
+        switch kind {
+        case .pdf:
+            let fragments = try MenuPDFTextExtractor.fragments(from: file) { page, total in
+                progress(Double(page) / Double(max(total, 1)))
             }
-        }.value
+            try Task.checkCancellation()
+            progress(1)
+            return MenuTextParser.parse(fragments)
+        case .csv:
+            return MenuTable.items(from: [MenuTable.Sheet(name: "", rows: MenuTable.csvRows(file))])
+        case .xlsx:
+            return MenuTable.items(from: try MenuXLSXReader.sheets(from: file))
+        }
     }
 }

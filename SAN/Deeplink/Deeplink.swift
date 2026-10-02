@@ -82,8 +82,55 @@ final class DeepLinkRouter: ObservableObject {
         let d = UserDefaults.standard
         if (d.string(forKey: pendingReferrerKey) ?? "").isEmpty {
             d.set(code, forKey: pendingReferrerKey)
-            AnalyticsLog.log(.referralJoin, ["referrer_id": code])
+            AnalyticsLog.log(.referralJoin, ["stage": "link"])   // без кода пригласившего — это его идентификатор
         }
+    }
+}
+
+// MARK: - Рекламные push: только с согласия (App Review 4.5.4)
+
+/// Топики `all_users`/`city_*` — это рассылки заведений, то есть маркетинг.
+/// Раньше на них подписывалось каждое устройство при запуске, даже без
+/// разрешения на уведомления. Теперь подписка — только когда (1) система
+/// разрешила уведомления и (2) включена настройка «Новости и акции заведений»
+/// (Профиль). По умолчанию настройка включена: согласие человек дал в
+/// системном диалоге онбординга. Адресные пуши по токену это не трогает.
+enum MarketingPush {
+    /// Ключ load-bearing: хранит выбор пользователя между запусками.
+    static let defaultsKey = "san.push.marketing"
+
+    static var isEnabled: Bool {
+        get { UserDefaults.standard.object(forKey: defaultsKey) as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: defaultsKey) }
+    }
+
+    static func topics(city: String) -> [String] { ["all_users", "city_\(city)"] }
+
+    /// Город — тот же ключ, что у `AppStore` (`san.city`).
+    static var currentCity: String {
+        UserDefaults.standard.string(forKey: "san.city") ?? City.bishkek.id
+    }
+
+    /// Разрешены ли уведомления системой.
+    static func isAuthorized() async -> Bool {
+        let status = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
+        return status == .authorized || status == .provisional || status == .ephemeral
+    }
+
+    /// Приводит подписку на топики в соответствие с разрешением и настройкой.
+    /// Идемпотентно — зовётся на старте, при возврате в приложение, после
+    /// входа и при переключении настройки.
+    static func sync(push: PushService = AppConfig.makePushService(),
+                     city: String = currentCity) async {
+        let subscribe = isEnabled ? await isAuthorized() : false
+        for topic in topics(city: city) {
+            if subscribe { push.subscribe(topic: topic) } else { push.unsubscribe(topic: topic) }
+        }
+    }
+
+    /// Снимает счётчик на иконке, когда приложение открыто.
+    static func clearBadge() {
+        UNUserNotificationCenter.current().setBadgeCount(0)
     }
 }
 

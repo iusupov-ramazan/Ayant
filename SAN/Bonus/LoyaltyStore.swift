@@ -21,9 +21,9 @@ struct LoyaltyView: View {
         Group {
             if cards.isEmpty {
                 ContentUnavailableView(
-                    "Пока нет карт лояльности",
+                    "Пока нет карт штампов",
                     systemImage: "creditcard",
-                    description: Text("Откройте страницу заведения с картой лояльности и покажите её QR сотруднику — за каждый визит штамп, а на финише награда."))
+                    description: Text("Покажите «Мой QR» на кассе заведения с картой штампов — за каждый визит штамп, а на финише награда."))
             } else {
                 ScrollView {
                     VStack(spacing: 16) {
@@ -34,7 +34,7 @@ struct LoyaltyView: View {
                 .sanScreenBackground()
             }
         }
-        .navigationTitle("Карты лояльности")
+        .navigationTitle("Карты штампов")
         .navigationBarTitleDisplayMode(.inline)
         .task { loyalty.observe(userID: loyalty.userID) }   // живой поток, опроса нет
     }
@@ -48,7 +48,10 @@ struct LoyaltyCardView: View {
     @State private var walletError: String?
     @State private var showQR = false
 
-    private var loyaltyCode: String { "AYANT-CARD:\(userID):\(card.venueID)" }
+    /// Тот же код, что «Мой QR»: сервер сам направит его в штамп, если у
+    /// заведения карта штампов (`GuestQR`). Один код вместо двух — гостю не
+    /// нужно выбирать, какой показать.
+    private var loyaltyCode: String { GuestQR.code(userID: userID) }
     private var canScan: Bool { !userID.isEmpty }
 
     var body: some View {
@@ -69,10 +72,12 @@ struct LoyaltyCardView: View {
                         .lineLimit(1).minimumScaleFactor(0.8)
                 }
                 Spacer(minLength: 4)
-                Text("\(card.stamps)/\(card.goal)")
+                Text(verbatim: "\(card.stamps)/\(card.goal)")
                     .font(.golos(14, .bold)).foregroundStyle(.white)
                     .padding(.horizontal, 11).padding(.vertical, 5)
                     .background(.black.opacity(0.22), in: Capsule())
+                    .fixedSize()
+                    .accessibilityLabel(LF("%lld из %lld штампов", card.stamps, card.goal))
             }
             stampGrid
             if card.completedRounds > 0 {
@@ -82,8 +87,9 @@ struct LoyaltyCardView: View {
             if showQR && canScan {
                 VStack(spacing: 8) {
                     QRCodeView(text: loyaltyCode, size: 168)
+                        .accessibilityLabel("QR-код для сотрудника")
                         .padding(12).background(.white, in: RoundedRectangle(cornerRadius: 16))
-                    Text("Покажите сотруднику — он отсканирует для штампа")
+                    Text("Покажите сотруднику — он отсканирует код и поставит штамп")
                         .font(.golos(12, .medium)).foregroundStyle(.white.opacity(0.92))
                         .multilineTextAlignment(.center)
                 }
@@ -128,11 +134,14 @@ struct LoyaltyCardView: View {
     }
 
     private var stampGrid: some View {
-        let cols = min(max(card.goal, 1), 6)
+        // Цель может прийти любой (Android/админка) — кружков не больше
+        // `StampLayout.maxShown`, а отрицательная не роняет `0..<goal`.
+        let shown = StampLayout.shown(card.goal)
+        let cols = min(max(shown, 1), 6)
         return LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: cols), spacing: 10) {
-            ForEach(0..<card.goal, id: \.self) { i in
+            ForEach(0..<shown, id: \.self) { i in
                 let filled = i < card.stamps
-                let isLast = i == card.goal - 1
+                let isLast = i == shown - 1
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(filled ? Color.white : Color.white.opacity(0.12))
                     .aspectRatio(1, contentMode: .fit)
@@ -167,7 +176,7 @@ struct VenueLoyaltyScreen: View {
                 HStack {
                     SanCircleButton(systemName: "chevron.left") { dismiss() }
                     Spacer()
-                    Text("Карта лояльности").font(.golos(20, .bold)).foregroundStyle(Color.sanInk)
+                    Text("Карта штампов").font(.golos(20, .bold)).foregroundStyle(Color.sanInk)
                     Spacer()
                     Color.clear.frame(width: 44, height: 44)
                 }
@@ -187,7 +196,7 @@ struct VenueLoyaltyScreen: View {
                         .font(.golos(17, .bold)).foregroundStyle(Color.sanInk)
                     Text(stampCards.count > 1
                          ? "Показывайте QR сотруднику при каждом визите — он сканирует его и выбирает, какой карте засчитать штамп. На каждой карте своя награда."
-                         : "Показывайте QR карты сотруднику при каждом визите — он сканирует его, и вам засчитывается штамп. Соберите \(venue.loyaltyGoal) штампов и получите «\(venue.loyaltyReward)».")
+                         : "Показывайте свой QR сотруднику при каждом визите — он сканирует его, и вам засчитывается штамп. Соберите \(venue.loyaltyGoal) штампов и получите «\(venue.loyaltyReward)».")
                         .font(.golos(15, .regular)).foregroundStyle(Color.sanInkSoft)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -235,6 +244,7 @@ enum WalletService {
             }
             var req = URLRequest(url: url)
             req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            await req.attachAppCheck()
             URLSession.shared.dataTask(with: req) { data, _, err in
                 DispatchQueue.main.async {
                     guard let data, err == nil, let pass = try? PKPass(data: data),

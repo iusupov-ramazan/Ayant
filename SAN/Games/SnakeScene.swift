@@ -11,7 +11,7 @@ final class SnakeScene: SKScene {
     var onGameOver: ((Int) -> Void)?
 
     /// Текст водяного знака по центру поля. Приходит из настроек админ-панели
-    /// (`AppSettings.adPlaceholderText`); пусто → локализованный дефолт.
+    /// (`AppSettings.adPlaceholderText`); пусто → знака нет.
     /// Смена текста на уже показанной сцене перестраивает поле.
     var watermarkText: String = "" {
         didSet {
@@ -37,6 +37,20 @@ final class SnakeScene: SKScene {
     private let moveInterval: TimeInterval = 0.16
     private var accumulator: TimeInterval = 0
     private var lastUpdate: TimeInterval = 0
+    /// Распознаватели свайпов уже на `SKView` (didMove приходит снова после
+    /// возврата сцены на экран — без флага свайпы удваивались).
+    private var swipesInstalled = false
+
+    /// Самый большой шаг времени за кадр. После фона/паузы/перезапуска
+    /// `currentTime` прыгает на секунды вперёд, и без потолка цикл догонял
+    /// их десятками шагов подряд — змейка мгновенно врезалась в стену.
+    static let maxFrameDelta: TimeInterval = 0.25
+
+    /// Шаг времени с потолком; `last == 0` — первый кадр партии (шаг 0).
+    static func frameDelta(current: TimeInterval, last: TimeInterval) -> TimeInterval {
+        guard last > 0, current > last else { return 0 }
+        return min(current - last, maxFrameDelta)
+    }
 
     // Узлы
     private let gridLayer = SKNode()
@@ -54,11 +68,16 @@ final class SnakeScene: SKScene {
 
     override func didMove(to view: SKView) {
         backgroundColor = .clear
-        addChild(gridLayer)
-        addChild(snakeLayer)
-        addChild(foodNode)
+        // didMove приходит повторно, если сцену снова показали: узел с
+        // родителем addChild не принимает (исключение SpriteKit = падение).
+        for node in [gridLayer, snakeLayer, foodNode] where node.parent == nil {
+            addChild(node)
+        }
         computeGrid()
-        addSwipeRecognizers(to: view)
+        if !swipesInstalled {
+            addSwipeRecognizers(to: view)
+            swipesInstalled = true
+        }
         startGame()
     }
 
@@ -128,9 +147,11 @@ final class SnakeScene: SKScene {
         // ширину поля, затем — если одно слово всё равно шире — уменьшаем кегль.
         // Раньше кегль был фиксированным (11% поля) и длинная строка вылезала
         // за край экрана.
-        let text = watermarkText.isEmpty
-            ? LS("Здесь может быть ваша реклама")
-            : watermarkText
+        //
+        // Пусто в настройках → знака нет. Дефолт «Здесь может быть ваша
+        // реклама» читался как заглушка (App Store, 2.1), а не как реклама.
+        let text = watermarkText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
         let watermark = SKLabelNode(text: text)
         watermark.fontName = "AvenirNext-Bold"
         watermark.fontColor = SKColor.gray.withAlphaComponent(0.18)
@@ -173,6 +194,7 @@ final class SnakeScene: SKScene {
         onScoreChange?(0)
         placeFood()
         accumulator = 0
+        lastUpdate = 0   // первый кадр новой партии — шаг 0, а не «время с прошлой игры»
         stateMachine.enter(PlayingState.self)
         redraw()
     }
@@ -186,8 +208,7 @@ final class SnakeScene: SKScene {
 
     override func update(_ currentTime: TimeInterval) {
         guard stateMachine.currentState is PlayingState else { return }
-        if lastUpdate == 0 { lastUpdate = currentTime }
-        let delta = currentTime - lastUpdate
+        let delta = Self.frameDelta(current: currentTime, last: lastUpdate)
         lastUpdate = currentTime
 
         accumulator += delta

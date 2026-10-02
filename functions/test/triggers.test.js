@@ -17,11 +17,21 @@ function analyticsDay(h, venue) {
 
 test("countRedemption инкрементит аналитику и помечает документ", async () => {
   const h = makeHarness();
+  h.seed("deals/d1", { venueID: VENUE, title: "−20%" });
   const event = createdEvent(h, "redemptions/r1", { venueID: VENUE, dealID: "d1" }, { id: "r1" });
   await h.mod.countRedemption.run(event);
 
   assert.equal(analyticsDay(h, VENUE).redemptions, 1);
   assert.equal(h.read("redemptions/r1").status, "counted");
+});
+
+test("countRedemption: чужая или несуществующая акция не накручивает счётчик", async () => {
+  const h = makeHarness();
+  h.seed("deals/d1", { venueID: "other-venue" });
+  await h.mod.countRedemption.run(createdEvent(h, "redemptions/r3", { venueID: VENUE, dealID: "d1" }, { id: "r3" }));
+  await h.mod.countRedemption.run(createdEvent(h, "redemptions/r4", { venueID: VENUE, dealID: "nope" }, { id: "r4" }));
+  assert.equal(analyticsDay(h, VENUE), undefined);
+  assert.equal(h.read("redemptions/r3").status, "rejected");
 });
 
 test("countRedemption без venueID — ничего не пишет", async () => {
@@ -57,9 +67,23 @@ test("countAnalyticsEvent НЕ даёт подделать redemptions (не в 
 
 /* ── rewardReferral: бонус пригласившему + идемпотентность ───────────────── */
 
+// Приглашённый — новый аккаунт: по умолчанию харнесс считает аккаунты давними.
+const NOW_HTTP = () => new Date().toUTCString();
+function referralHarness(invitees, opts = {}) {
+  const createdAt = {};
+  for (const uid of invitees) createdAt[uid] = NOW_HTTP();
+  return makeHarness({ createdAt, ...opts });
+}
+// Триггер срабатывает на уже записанный документ: засеиваем его, как сделал бы клиент.
+function referralEvent(h, path, data, params) {
+  h.seed(path, data);
+  return createdEvent(h, path, data, params);
+}
+const grantsOf = (h) => [...h.db.store.entries()].filter(([p]) => p.startsWith("bonusGrants/")).map(([, g]) => g);
+
 test("rewardReferral начисляет бонус пригласившему и помечает rewarded", async () => {
-  const h = makeHarness();
-  const event = createdEvent(
+  const h = referralHarness(["invitee-1"]);
+  const event = referralEvent(
     h,
     "referrals/invitee-1",
     { referrerID: "referrer-1" },
@@ -67,9 +91,9 @@ test("rewardReferral начисляет бонус пригласившему и
   );
   await h.mod.rewardReferral.run(event);
 
-  const grants = [...h.db.store.entries()].filter(([p]) => p.startsWith("bonusGrants/"));
+  const grants = grantsOf(h);
   assert.equal(grants.length, 2);
-  const grant = grants.map(([, g]) => g).find((g) => g.reason === "referral");
+  const grant = grants.find((g) => g.reason === "referral");
   assert.equal(grant.userID, "referrer-1");
   assert.equal(grant.amount, 100);
   assert.equal(grant.claimed, false);
@@ -80,65 +104,106 @@ test("rewardReferral начисляет бонус пригласившему и
   assert.equal(welcome.reason, "welcome");
   assert.equal(welcome.claimed, false);
   assert.equal(h.read("referrals/invitee-1").rewarded, true);
+  assert.equal(h.read("referralCounts/referrer-1").rewarded, 1);
 });
 
 test("rewardReferral игнорирует самоприглашение", async () => {
-  const h = makeHarness();
-  const event = createdEvent(
+  const h = referralHarness(["u1"]);
+  const event = referralEvent(
     h,
     "referrals/u1",
     { referrerID: "u1" },
     { inviteeID: "u1" }
   );
   await h.mod.rewardReferral.run(event);
-
-  const grants = [...h.db.store.entries()].filter(([p]) => p.startsWith("bonusGrants/"));
-  assert.equal(grants.length, 0);
+  assert.equal(grantsOf(h).length, 0);
 });
 
 test("rewardReferral идемпотентен (rewarded уже true)", async () => {
-  const h = makeHarness();
-  const event = createdEvent(
+  const h = referralHarness(["invitee-2"]);
+  const event = referralEvent(
     h,
     "referrals/invitee-2",
     { referrerID: "referrer-2", rewarded: true },
     { inviteeID: "invitee-2" }
   );
   await h.mod.rewardReferral.run(event);
-
-  const grants = [...h.db.store.entries()].filter(([p]) => p.startsWith("bonusGrants/"));
-  assert.equal(grants.length, 0); // повторный триггер не начисляет второй бонус
+  assert.equal(grantsOf(h).length, 0); // повторный триггер не начисляет второй бонус
 });
 
-/* ── rewardReferral: анти-фарм (потолок наград на пригласившего) ─────────── */
+test("rewardReferral: повторный запуск триггера по тому же событию не удваивает награду", async () => {
+  const h = referralHarness(["invitee-3"]);
+  const event = referralEvent(h, "referrals/invitee-3", { referrerID: "referrer-3" }, { inviteeID: "invitee-3" });
+  await h.mod.rewardReferral.run(event);
+  await h.mod.rewardReferral.run(event);
+  assert.equal(grantsOf(h).length, 2);
+  assert.equal(h.read("referralCounts/referrer-3").rewarded, 1);
+});
+
+/* ── rewardReferral: анти-фарм ─────────────────────────────────────────── */
 
 test("rewardReferral: сверх потолка новый грант не выдаётся (capped)", async () => {
-  const h = makeHarness();
+  const h = referralHarness(["inv-capped"]);
   // Дефолтный лимит = 20; засеваем ровно 20 уже выданных реферальных грантов.
   for (let i = 1; i <= 20; i++) {
     h.seed(`bonusGrants/g${i}`, { userID: "farmer", reason: "referral", amount: 100, claimed: false });
   }
-  const event = createdEvent(h, "referrals/inv-capped", { referrerID: "farmer" }, { inviteeID: "inv-capped" });
+  const event = referralEvent(h, "referrals/inv-capped", { referrerID: "farmer" }, { inviteeID: "inv-capped" });
   await h.mod.rewardReferral.run(event);
 
-  const grants = [...h.db.store.entries()].filter(([p]) => p.startsWith("bonusGrants/"));
-  assert.equal(grants.length, 20, "новый грант сверх лимита не создаётся");
+  assert.equal(grantsOf(h).length, 20, "новый грант сверх лимита не создаётся");
   assert.equal(h.read("referrals/inv-capped").rewarded, true);
   assert.equal(h.read("referrals/inv-capped").capped, true);
 });
 
+// Параллельность фейк не моделирует (его транзакции не конфликтуют) — здесь
+// закреплено, что потолок считает счётчик, который живёт в транзакции; от
+// одновременных триггеров его защищает сериализация транзакций Firestore.
+test("rewardReferral: потолок держит счётчик referralCounts", async () => {
+  const invitees = Array.from({ length: 30 }, (_, i) => `burst-${i}`);
+  const h = referralHarness(invitees);
+  for (const id of invitees) {
+    await h.mod.rewardReferral.run(referralEvent(h, `referrals/${id}`, { referrerID: "burst-farmer" }, { inviteeID: id }));
+  }
+  const referralGrants = grantsOf(h).filter((g) => g.reason === "referral" && g.userID === "burst-farmer");
+  assert.equal(referralGrants.length, 20);
+  assert.equal(h.read("referralCounts/burst-farmer").rewarded, 20);
+});
+
 test("rewardReferral: к лимиту считаются только гранты reason=referral", async () => {
-  const h = makeHarness();
+  const h = referralHarness(["inv-mixed"]);
   // 20 НЕ-реферальных грантов (welcome) не должны блокировать реферальную награду.
   for (let i = 1; i <= 20; i++) {
     h.seed(`bonusGrants/w${i}`, { userID: "mixed", reason: "welcome", amount: 50, claimed: false });
   }
-  const event = createdEvent(h, "referrals/inv-mixed", { referrerID: "mixed" }, { inviteeID: "inv-mixed" });
+  const event = referralEvent(h, "referrals/inv-mixed", { referrerID: "mixed" }, { inviteeID: "inv-mixed" });
   await h.mod.rewardReferral.run(event);
 
-  const referralGrants = [...h.db.store.entries()]
-    .filter(([p, d]) => p.startsWith("bonusGrants/") && d.reason === "referral");
+  const referralGrants = grantsOf(h).filter((g) => g.reason === "referral");
   assert.equal(referralGrants.length, 1, "welcome-гранты не считаются к реферальному лимиту");
+});
+
+test("rewardReferral: анонимный приглашённый ничего не приносит", async () => {
+  const h = referralHarness(["anon-inv"], { anonymousUsers: ["anon-inv"] });
+  await h.mod.rewardReferral.run(referralEvent(h, "referrals/anon-inv", { referrerID: "r1" }, { inviteeID: "anon-inv" }));
+  assert.equal(grantsOf(h).length, 0);
+  assert.equal(h.read("referrals/anon-inv").rejected, "invitee_anonymous");
+});
+
+test("rewardReferral: несуществующий или анонимный пригласивший — без награды", async () => {
+  const h = referralHarness(["i1", "i2"], { missingUsers: ["ghost"], anonymousUsers: ["anon-ref"] });
+  await h.mod.rewardReferral.run(referralEvent(h, "referrals/i1", { referrerID: "ghost" }, { inviteeID: "i1" }));
+  await h.mod.rewardReferral.run(referralEvent(h, "referrals/i2", { referrerID: "anon-ref" }, { inviteeID: "i2" }));
+  assert.equal(grantsOf(h).length, 0);
+  assert.equal(h.read("referrals/i1").rejected, "referrer_invalid");
+  assert.equal(h.read("referrals/i2").rejected, "referrer_invalid");
+});
+
+test("rewardReferral: старый аккаунт «пригласить» задним числом нельзя", async () => {
+  const h = makeHarness();   // аккаунт создан в 2024-м
+  await h.mod.rewardReferral.run(referralEvent(h, "referrals/old-acc", { referrerID: "r1" }, { inviteeID: "old-acc" }));
+  assert.equal(grantsOf(h).length, 0);
+  assert.equal(h.read("referrals/old-acc").rejected, "invitee_not_new");
 });
 
 /* ── notifyHostOnReview: push владельцу заведения о новом отзыве ─────────── */

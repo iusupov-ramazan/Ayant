@@ -105,11 +105,79 @@ test("баллы включены → штамп не начисляется (о
   const h = makeHarness({ tokens: { [TOKEN]: HOST } });
   // Оба флага сразу: так выглядит заведение, где штампы остались с прошлой
   // настройки, а потом включили баллы САН. Штамп начисляться не должен —
-  // иначе один визит оплачивается дважды.
-  seedVenue(h, { loyaltyEnabled: true, pointsEnabled: true });
+  // иначе один визит оплачивается дважды. QR карты уходит в баллы.
+  seedVenue(h, { loyaltyEnabled: true, pointsEnabled: true, pointsMode: "flat", pointsFlat: 7 });
   const res = await call(h, post({ code: `AYANT-CARD:u1:${VENUE}`, venueID: VENUE }));
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.points, true);
+  assert.equal(res.body.awarded, 7);
+  assert.equal(h.read(`loyaltyCards/u1_${VENUE}`), undefined);
+});
+
+/* ── Один QR гостя: сервер сам выбирает механику заведения ──────────────── */
+
+test("«Мой QR» (AYANT-PTS) у заведения со штампами → штамп", async () => {
+  const h = makeHarness({ tokens: { [TOKEN]: HOST } });
+  seedVenue(h, { loyaltyEnabled: true });
+  const res = await call(h, post({ code: "AYANT-PTS:u1", venueID: VENUE, idempotencyKey: "k1" }));
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.loyalty, true);
+  assert.equal(res.body.stamps, 1);
+  assert.equal(h.read(`loyaltyCards/u1_${VENUE}`).stamps, 1);
+  // Ретрай с тем же ключом и тем же исходным QR — повтор, не второй штамп.
+  const again = await call(h, post({ code: "AYANT-PTS:u1", venueID: VENUE, idempotencyKey: "k1" }));
+  assert.equal(again.body.replayed, true);
+  assert.equal(h.read(`loyaltyCards/u1_${VENUE}`).stamps, 1);
+});
+
+test("«Мой QR» у заведения без лояльности → points_off, как раньше", async () => {
+  const h = makeHarness({ tokens: { [TOKEN]: HOST } });
+  seedVenue(h, { loyaltyEnabled: false });
+  const res = await call(h, post({ code: "AYANT-PTS:u1", venueID: VENUE }));
   assert.equal(res.statusCode, 409);
-  assert.equal(res.body.error, "loyalty_is_points");
+  assert.equal(res.body.error, "points_off");
+});
+
+test("QR карты чужого заведения у заведения с баллами в баллы не превращается", async () => {
+  const h = makeHarness({ tokens: { [TOKEN]: HOST } });
+  seedVenue(h, { pointsEnabled: true, pointsMode: "flat", pointsFlat: 7 });
+  const res = await call(h, post({ code: "AYANT-CARD:u1:OTHER", venueID: VENUE }));
+  assert.equal(res.statusCode, 409);
+  assert.equal(h.read(`venuePoints/u1_${VENUE}`), undefined);
+});
+
+test("подложенный чужой купон с тем же кодом не мешает погасить настоящий", async () => {
+  const h = makeHarness({ tokens: { [TOKEN]: HOST } });
+  seedVenue(h);
+  // Злоумышленник создал непривязанный купон с кодом гостя (правила это позволяют).
+  h.seed("coupons/a-decoy", { code: "AYANT-REAL", venueID: "", userID: "evil", used: false });
+  h.seed("coupons/z-real", { code: "AYANT-REAL", venueID: VENUE, userID: "u1", used: false, title: "Капучино" });
+  const res = await call(h, post({ code: "AYANT-REAL", venueID: VENUE }));
+  assert.equal(res.statusCode, 200);
+  assert.equal(h.read("coupons/z-real").used, true);
+});
+
+/* ── Срок купона ─────────────────────────────────────────────────────────── */
+
+test("купон с истёкшим сроком не гасится → 409 coupon_expired", async () => {
+  const h = makeHarness({ tokens: { [TOKEN]: HOST } });
+  seedVenue(h);
+  h.seed("coupons/c1", { code: "AYANT-OLD", venueID: VENUE, userID: "u1", used: false, title: "Капучино",
+    expiresAt: new Date(Date.now() - 60000) });
+  const res = await call(h, post({ code: "AYANT-OLD", venueID: VENUE }));
+  assert.equal(res.statusCode, 409);
+  assert.equal(res.body.error, "coupon_expired");
+  assert.equal(h.read("coupons/c1").used, false);
+});
+
+test("купон со сроком в будущем гасится", async () => {
+  const h = makeHarness({ tokens: { [TOKEN]: HOST } });
+  seedVenue(h);
+  h.seed("coupons/c2", { code: "AYANT-NEW", venueID: VENUE, userID: "u1", used: false, title: "Капучино",
+    expiresAt: new Date(Date.now() + 86400000) });
+  const res = await call(h, post({ code: "AYANT-NEW", venueID: VENUE }));
+  assert.equal(res.statusCode, 200);
+  assert.equal(h.read("coupons/c2").used, true);
 });
 
 test("карта другого заведения → 409 wrong_venue", async () => {

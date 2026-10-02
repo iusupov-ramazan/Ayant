@@ -33,8 +33,16 @@ public struct CouponOffer: Identifiable, Codable, Equatable, Sendable {
     public var stock: Int?
     /// Сколько уже куплено. Пишет только сервер.
     public var soldCount: Int
-    /// Купон нельзя купить после этой даты. `nil` — бессрочно.
+    /// Срок купона: после этой даты его нельзя ни купить, ни погасить
+    /// (дата переходит на купон гостя при покупке, `scanCoupon` отвечает
+    /// `coupon_expired`). Раньше дата закрывала только продажу, а экраны
+    /// подписывали её «Действует до» — и проданный купон не сгорал никогда.
+    /// `nil` — бессрочно.
     public var expiresAt: Date?
+    /// Сколько штук продаётся одному гостю. 0 — без лимита. Без лимита один
+    /// игрок с большим балансом выкупал весь остаток; сервер считает покупки
+    /// гостя сам (`bonusWallets/{uid}/offerBuys/{offerID}`).
+    public var perGuestLimit: Int
     public var statusRaw: String
     /// Временно снят с продажи самим заведением (в отличие от модерации).
     public var isPaused: Bool
@@ -44,6 +52,7 @@ public struct CouponOffer: Identifiable, Codable, Equatable, Sendable {
                 title: String, details: String = "", emoji: String = "🎁",
                 imageURL: String = "", cost: Int, stock: Int? = nil, soldCount: Int = 0,
                 expiresAt: Date? = nil,
+                perGuestLimit: Int = 0,
                 statusRaw: String = ModerationStatus.pending.rawValue,
                 isPaused: Bool = false,
                 citySlug: String = City.bishkek.id) {
@@ -51,6 +60,7 @@ public struct CouponOffer: Identifiable, Codable, Equatable, Sendable {
         self.title = title; self.details = details; self.emoji = emoji
         self.imageURL = imageURL; self.cost = cost; self.stock = stock
         self.soldCount = soldCount; self.expiresAt = expiresAt
+        self.perGuestLimit = max(0, perGuestLimit)
         self.statusRaw = statusRaw; self.isPaused = isPaused; self.citySlug = citySlug
     }
 
@@ -69,6 +79,7 @@ public struct CouponOffer: Identifiable, Codable, Equatable, Sendable {
         stock = try c.decodeIfPresent(Int.self, forKey: .stock)
         soldCount = try c.decodeIfPresent(Int.self, forKey: .soldCount) ?? 0
         expiresAt = try c.decodeIfPresent(Date.self, forKey: .expiresAt)
+        perGuestLimit = try c.decodeIfPresent(Int.self, forKey: .perGuestLimit) ?? 0
         statusRaw = try c.decodeIfPresent(String.self, forKey: .statusRaw)
             ?? ModerationStatus.pending.rawValue
         isPaused = try c.decodeIfPresent(Bool.self, forKey: .isPaused) ?? false

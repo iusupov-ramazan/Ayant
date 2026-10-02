@@ -509,3 +509,55 @@ test("redeem: списание считает баллы и выданную н�
   await redeem(h, TOKEN, { venueID: VENUE, userID: GUEST, rewardId: "r1", idempotencyKey: "rd-1" });
   assert.equal(analyticsDayOf(h, VENUE).pointsRedeemed, 100, "replay не считается второй раз");
 });
+
+/* ═══════════ Погашение: повтор после смены награды, курс, код чека ═══════════ */
+
+async function redeemAs(h, body) {
+  const res = makeRes();
+  await h.mod.redeemVenuePoints(makeReq({ method: "POST", headers: bearer(TOKEN), body }), res);
+  return res;
+}
+
+test("RDM: ретрай после того, как награду сняли, отдаёт исходный ответ", async () => {
+  const h = harness();
+  seedVenue(h, { pointsEnabled: true, pointsRewards: [{ id: "r1", type: "item", title: "Кофе", cost: 100, active: true }] });
+  h.seed(`venuePoints/u1_${VENUE}`, { userID: "u1", venueID: VENUE, balance: 150 });
+  const first = await redeemAs(h, { venueID: VENUE, userID: "u1", rewardId: "r1", idempotencyKey: "rk" });
+  assert.equal(first.statusCode, 200);
+  assert.match(first.body.receiptCode, /^\d{4}$/);
+  // Заведение выключило награду — ответ на первую попытку потерялся, клиент повторяет.
+  seedVenue(h, { pointsEnabled: true, pointsRewards: [{ id: "r1", type: "item", title: "Кофе", cost: 100, active: false }] });
+  const retry = await redeemAs(h, { venueID: VENUE, userID: "u1", rewardId: "r1", idempotencyKey: "rk" });
+  assert.equal(retry.statusCode, 200);
+  assert.equal(retry.body.replayed, true);
+  assert.equal(retry.body.redeemed, 100);
+  assert.equal(retry.body.rewardTitle, "Кофе");
+  assert.equal(retry.body.receiptCode, first.body.receiptCode);
+  assert.equal(h.read(`venuePoints/u1_${VENUE}`).balance, 50);
+});
+
+test("RDM: курс денежной награды не обходит потолок кэшбэка 20%", async () => {
+  const h = harness();
+  // 20% баллами и «1 балл = 5 сом» — было бы 100% скидки; курс режется до 1.
+  seedVenue(h, { pointsEnabled: true, pointsMode: "cashback", cashbackPercent: 20,
+    pointsRewards: [{ id: "m", type: "money", title: "Скидка", cost: 10, ratio: 5, active: true }] });
+  h.seed(`venuePoints/u1_${VENUE}`, { userID: "u1", venueID: VENUE, balance: 500 });
+  const res = await redeemAs(h, { venueID: VENUE, userID: "u1", rewardId: "m", pointsToSpend: 100 });
+  assert.equal(res.body.somOff, 100);
+});
+
+test("RDM: при 5% кэшбэка курс до 4 сом за балл, flat не режется", async () => {
+  const h = harness();
+  seedVenue(h, { pointsEnabled: true, pointsMode: "cashback", cashbackPercent: 5,
+    pointsRewards: [{ id: "m", type: "money", title: "Скидка", cost: 10, ratio: 10, active: true }] });
+  h.seed(`venuePoints/u1_${VENUE}`, { userID: "u1", venueID: VENUE, balance: 500 });
+  const res = await redeemAs(h, { venueID: VENUE, userID: "u1", rewardId: "m", pointsToSpend: 100 });
+  assert.equal(res.body.somOff, 400);
+
+  const h2 = harness();
+  seedVenue(h2, { pointsEnabled: true, pointsMode: "flat", pointsFlat: 5,
+    pointsRewards: [{ id: "m", type: "money", title: "Скидка", cost: 10, ratio: 10, active: true }] });
+  h2.seed(`venuePoints/u1_${VENUE}`, { userID: "u1", venueID: VENUE, balance: 500 });
+  const flat = await redeemAs(h2, { venueID: VENUE, userID: "u1", rewardId: "m", pointsToSpend: 100 });
+  assert.equal(flat.body.somOff, 1000);
+});

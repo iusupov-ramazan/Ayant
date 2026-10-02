@@ -53,7 +53,10 @@ public final class FirebaseBonusWalletService: BonusWalletService {
         return BonusEarnOutcome(ok: ok,
                                 granted: j.int(FS.WalletAPI.granted) ?? 0,
                                 balance: j.int(FS.WalletAPI.balance) ?? 0,
-                                errorCode: ok ? nil : (j.string(FS.WalletAPI.error) ?? "earn_failed"))
+                                errorCode: ok ? nil : (j.string(FS.WalletAPI.error) ?? "earn_failed"),
+                                capReason: j.string(FS.WalletAPI.capReason).flatMap(BonusEarnCapReason.init(rawValue:)),
+                                dailyLeft: j.int(FS.WalletAPI.dailyLeft),
+                                sourceLeft: j.int(FS.WalletAPI.sourceLeft))
     }
 
     public func buy(_ purchase: BonusPurchase, idempotencyKey: String) async throws -> BonusPurchaseOutcome {
@@ -80,7 +83,9 @@ public final class FirebaseBonusWalletService: BonusWalletService {
                             code: code, createdAt: .now, used: false,
                             venueID: j.string(FS.WalletAPI.venueID) ?? "",
                             venueName: j.string(FS.WalletAPI.venueName) ?? "",
-                            kind: { if case .offer = purchase { return "offer" } else { return "reward" } }())
+                            kind: { if case .offer = purchase { return "offer" } else { return "reward" } }(),
+                            expiresAt: j.int(FS.WalletAPI.expiresAt).map {
+                                Date(timeIntervalSince1970: TimeInterval($0) / 1000) })
         }
         return BonusPurchaseOutcome(ok: true, coupon: coupon,
                                     giftCode: j.string(FS.WalletAPI.giftCode),
@@ -119,11 +124,14 @@ public final class FirebaseBonusWalletService: BonusWalletService {
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        await req.attachAppCheck()
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, response) = try await URLSession.shared.data(for: req)
         let j = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
-        // 5xx без тела — как обрыв сети: вызывающий повторит с тем же ключом.
-        if let http = response as? HTTPURLResponse, http.statusCode >= 500, j.isEmpty {
+        // Любой 5xx — с телом (`buy_failed`, `earn_failed`) или без — как обрыв
+        // сети: транзакция могла пройти до сбоя, вызывающий повторит с тем же
+        // ключом. Окончательный ответ — только 2xx/4xx.
+        if let http = response as? HTTPURLResponse, http.statusCode >= 500 {
             throw URLError(.badServerResponse)
         }
         return j

@@ -24,6 +24,16 @@ struct BonusHubView: View {
     @State private var show2048 = false
     @State private var openedCard: VenuePointsCard?
     @State private var openedStampCard: LoyaltyCard?
+    /// Показать итог захода в игру после её закрытия. Само число — живое
+    /// `bonus.sessionEarned`: то, что зачислил СЕРВЕР за эту партию, а не то,
+    /// что насчитала игра, — урезанный ответ, пришедший уже после закрытия,
+    /// уменьшает его на экране.
+    @State private var sessionToast = false
+    @State private var showSyncInfo = false
+
+    /// Открыта ли какая-нибудь игра: пока да, тосты хаба молчат — игра
+    /// показывает начисления сама.
+    private var gameOpen: Bool { showSnake || showTetris || showMatch3 || show2048 }
 
     /// Заведения по id — картам нужны градиент, категория и конфиг наград.
     private var venuesByID: [String: Venue] {
@@ -68,6 +78,9 @@ struct BonusHubView: View {
                 VStack(alignment: .leading, spacing: 26) {
                     headerRow
                     if ReleaseFlags.globalBonusWallet {
+                        // Новый email-аккаунт без подтверждения: сервер не начисляет и не
+                        // продаёт (email_not_verified) — говорим об этом над балансом.
+                        EmailVerificationBanner()
                         balanceCard { withAnimation { proxy.scrollTo(Self.gamesAnchor, anchor: .top) } }
                         BonusStoreSection()
                         gamesSection.id(Self.gamesAnchor)
@@ -89,6 +102,13 @@ struct BonusHubView: View {
         .sanStatusBarCap()
         .toolbar(.hidden, for: .navigationBar)
         .task { if ReleaseFlags.globalBonusWallet { await coupons.loadRewards() } }
+        // Вчерашний «лимит на сегодня» снимаем сразу, а приветственный бонус
+        // приглашённого забираем при входе на экран (не чаще раза в минуту).
+        .onAppear {
+            guard ReleaseFlags.globalBonusWallet else { return }
+            bonus.refreshDay()
+            bonus.refreshGrantsIfStale()
+        }
         // Потянуть вниз — свежая витрина: заведение могло выпустить купон,
         // модерация — одобрить, остаток — кончиться.
         .refreshable {
@@ -128,7 +148,29 @@ struct BonusHubView: View {
     private func walletModals<Content: View>(_ content: Content) -> some View {
         content
             .overlay(alignment: .top) { rewardToast }
+            .animation(.snappy, value: toastKey)
             .guestAlert(isPresented: $showGuestAlert, message: GuestGate.game)
+            .onChange(of: gameOpen) { _, open in gameSession(open: open) }
+            .alert("Бонусы отправляются", isPresented: $showSyncInfo) {
+                Button("Повторить") { bonus.retryPending() }
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(syncInfoMessage)
+            }
+    }
+
+    /// Почему «+N отправляются». Без паники: бонусы не пропадают, повтор —
+    /// наша забота. Только если сервер не принимает сборку, помочь может
+    /// лишь обновление — так и говорим.
+    private var syncInfoMessage: LocalizedStringKey {
+        switch bonus.syncProblem {
+        case .appUpdateNeeded:
+            return "Обновите приложение, чтобы бонусы дошли. Заработанное не пропадёт."
+        case .signInRequired:
+            return "Войдите в аккаунт, чтобы бонусы дошли. Заработанное не пропадёт."
+        case .network, nil:
+            return "Бонусы ещё не дошли до сервера. Мы повторим отправку сами — заработанное не пропадёт."
+        }
     }
 
     // MARK: Шапка
@@ -156,28 +198,37 @@ struct BonusHubView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Ваши бонусы")
                         .font(.golos(13.5, .semibold)).foregroundStyle(.white.opacity(0.9))
-                    Text("\(bonus.balance)")
+                    Text(verbatim: bonus.balance.sanThousands)
                         .sanText(46, .heavy, tracking: -2)
                         .foregroundStyle(.white)
                         .contentTransition(.numericText())
                         .animation(.snappy, value: bonus.balance)
+                    if bonus.syncingAmount > 0 {
+                        // Заработанное без сети — видно, но ещё не потратить.
+                        // Нажатие объясняет, что это, и повторяет отправку.
+                        Button {
+                            bonus.retryPending()
+                            showSyncInfo = true
+                        } label: {
+                            Label("+\(bonus.syncingAmount) отправляются", systemImage: "arrow.triangle.2.circlepath")
+                                .font(.golos(12, .semibold)).foregroundStyle(.white.opacity(0.85))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityHint(Text(syncInfoMessage))
+                    }
                 }
                 Spacer(minLength: 8)
                 Image(systemName: "star.circle.fill")
                     .font(.system(size: 30, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.9))
             }
-            Text("Общий счёт приложения: тратится на купоны в магазине ниже, в любом заведении-партнёре.")
+            Text("Общий счёт приложения: меняйте на купоны заведений-партнёров в магазине ниже.")
                 .font(.golos(12.5)).foregroundStyle(.white.opacity(0.9))
                 .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 8) {
-                NavigationLink { MyCouponsView() } label: {
-                    balanceChip(coupons.activeCount > 0 ? "Мои купоны · \(coupons.activeCount)" : "Мои купоны",
-                                icon: "ticket.fill")
-                }
-                .buttonStyle(.sanPress(0.95))
-                Button(action: onEarn) { balanceChip("Как заработать", icon: "gamecontroller.fill") }
-                    .buttonStyle(.sanPress(0.95))
+            // Крупный шрифт не помещает две плашки в строку — тогда столбиком.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) { balanceChips(onEarn: onEarn) }
+                VStack(alignment: .leading, spacing: 8) { balanceChips(onEarn: onEarn) }
             }
         }
         .padding(20)
@@ -187,7 +238,18 @@ struct BonusHubView: View {
         .sanShadow(.hero)
     }
 
-    private func balanceChip(_ title: String, icon: String) -> some View {
+    @ViewBuilder
+    private func balanceChips(onEarn: @escaping () -> Void) -> some View {
+        NavigationLink { MyCouponsView() } label: {
+            balanceChip(coupons.activeCount > 0 ? "Мои купоны · \(coupons.activeCount)" : "Мои купоны",
+                        icon: "ticket.fill")
+        }
+        .buttonStyle(.sanPress(0.95))
+        Button(action: onEarn) { balanceChip("Как заработать", icon: "gamecontroller.fill") }
+            .buttonStyle(.sanPress(0.95))
+    }
+
+    private func balanceChip(_ title: LocalizedStringKey, icon: String) -> some View {
         Label { Text(title) } icon: { Image(systemName: icon) }
             .font(.golos(13, .bold)).foregroundStyle(.white)
             .padding(.horizontal, 12).padding(.vertical, 8)
@@ -264,7 +326,7 @@ struct BonusHubView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Здесь появятся ваши баллы")
                 .font(.golos(16, .bold)).foregroundStyle(Color.sanInk)
-            Text("Показывайте свой QR на кассе в заведениях с баллами САН — карта заведения появится в кошельке после первого начисления.")
+            Text("Показывайте свой QR на кассе в заведениях с баллами САН — карта заведения появится здесь после первого начисления.")
                 .font(.golos(13)).foregroundStyle(Color.sanInkSoft)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -295,7 +357,7 @@ struct BonusHubView: View {
     private var gamesSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Text("Играй и копи бонусы")
+                Text("Играйте и копите бонусы")
                     .font(.golos(20, .heavy)).tracking(-0.5)
                     .foregroundStyle(Color.sanInk)
                 Spacer(minLength: 8)
@@ -303,7 +365,7 @@ struct BonusHubView: View {
                 // Показываем заработанное за день: это единственная цифра,
                 // которая здесь что-то значит, — и молчим, пока она нулевая.
                 if bonus.gameEarnedToday > 0 {
-                    Text("сегодня +\(bonus.gameEarnedToday)")
+                    Text("+\(bonus.gameEarnedToday) сегодня в играх")
                         .font(.golos(11.5, .semibold))
                         .foregroundStyle(Color.sanInkSoft)
                         .fixedSize()
@@ -315,15 +377,15 @@ struct BonusHubView: View {
                       spacing: 12) {
             Button { if session.isGuest { showGuestAlert = true } else { showSnake = true } } label: {
                 gameTile(emoji: "🐍", title: "Змейка",
-                         subtitle: "+1 / \(GameEconomy.applesPerBonus) яблок",
+                         subtitle: capped("\(bonus.gameRates.applesPerBonus) 🍎 = 1 бонус", .snake),
                          gradient: [Color(hex: 0x1FBF75), Color(hex: 0x0E9E86)])
             }
             .buttonStyle(.plain)
             .fullScreenCover(isPresented: $showSnake) { SnakeGameView() }
 
             Button { if session.isGuest { showGuestAlert = true } else { showTetris = true } } label: {
-                gameTile(emoji: "🧱", title: "Тетрис",
-                         subtitle: "+1 / \(Tetris.linesPerBonus) линий",
+                gameTile(emoji: "🧱", title: "Блоки",
+                         subtitle: capped("\(bonus.gameRates.linesPerBonus) линий = 1 бонус", .tetris),
                          gradient: [Color(hex: 0x7C6BE8), Color(hex: 0xB39CF0)])
             }
             .buttonStyle(.plain)
@@ -333,7 +395,7 @@ struct BonusHubView: View {
                 gameTile(icon: GemView(kind: .ruby, power: .none).padding(6),
                          title: "Diamond",
                          // Партия бесконечная — дневной потолок виден ещё до входа.
-                         subtitle: "+1 / \(Match3.matchesPerBonus) совпадений\nдо \(GameEconomy.endlessDailyBonusCap) в день",
+                         subtitle: capped("\(bonus.gameRates.matchesPerBonus) совпадений = 1 бонус", .diamond),
                          gradient: [Color(hex: 0xF2A03D), Color(hex: 0xE8556B)])
             }
             .buttonStyle(.plain)
@@ -342,10 +404,12 @@ struct BonusHubView: View {
             Button { if session.isGuest { showGuestAlert = true } else { show2048 = true } } label: {
                 // Иконка — само число: у игры нет ни эмодзи, ни фишки, по
                 // которой её узнают, узнают её именно по «2048».
-                gameTile(icon: Text("2048").font(.golos(12, .heavy)).tracking(-0.4)
+                // Фиксированный кегль: иконка — плашка 48×48, крупный шрифт
+                // выдавил бы «2048» за её края.
+                gameTile(icon: Text("2048").font(.golosFixed(12, .heavy)).tracking(-0.4)
                             .foregroundStyle(.white),
                          title: "2048",
-                         subtitle: "+1 / плитка от \(Game2048.bonusFromValue)",
+                         subtitle: capped("Плитка от \(bonus.gameRates.game2048FirstTile) = 1 бонус", .game2048),
                          gradient: [Color(hex: 0xC92E76), Color(hex: 0x8B3BC9)])
             }
             .buttonStyle(.plain)
@@ -354,7 +418,20 @@ struct BonusHubView: View {
         }
     }
 
-    private func gameTile(emoji: String, title: LocalizedStringKey, subtitle: LocalizedStringKey,
+    /// Курс игры и, если есть, дневной лимит (Remote Config) — второй
+    /// строкой: упереться в невидимый лимит значит решить, что игра сломалась.
+    private func capped(_ rate: LocalizedStringKey, _ game: BonusGame) -> Text {
+        guard bonus.earnsBonus(game) else { return Text(rate) + Text(verbatim: "\n") + Text("сейчас без бонусов") }
+        // Сервер сегодня эту игру больше не зачисляет (её потолок или общий) —
+        // «до 30 в день» обещало бы то, чего не будет.
+        if bonus.remainingToday(game) == 0 {
+            return Text(rate) + Text(verbatim: "\n") + Text("бонусы на сегодня собраны")
+        }
+        guard let cap = bonus.bonusDailyCaps[game] else { return Text(rate) }
+        return Text(rate) + Text(verbatim: "\n") + Text("до \(cap) в день")
+    }
+
+    private func gameTile(emoji: String, title: LocalizedStringKey, subtitle: Text,
                           gradient: [Color]) -> some View {
         gameTile(icon: Text(emoji).font(.system(size: 22)),
                  title: title, subtitle: subtitle, gradient: gradient)
@@ -363,7 +440,7 @@ struct BonusHubView: View {
     /// Та же плитка, но со своей картинкой вместо эмодзи: «Три в ряд» показывает
     /// настоящий камень с поля, а не символ из шрифта.
     private func gameTile<Icon: View>(icon: Icon, title: LocalizedStringKey,
-                                      subtitle: LocalizedStringKey,
+                                      subtitle: Text,
                                       gradient: [Color]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -372,8 +449,9 @@ struct BonusHubView: View {
                 .overlay(icon)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.golos(15.5, .bold)).foregroundStyle(Color.sanInk)
-                Text(subtitle).font(.golos(12, .medium)).foregroundStyle(Color.sanInkSoft)
-                    .lineLimit(2, reservesSpace: true)
+                // Без потолка строк: «до 30 в день» второй строкой на крупном
+                // шрифте обрезалось — а это и есть то, что надо прочитать.
+                subtitle.font(.golos(12, .medium)).foregroundStyle(Color.sanInkSoft)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -386,19 +464,70 @@ struct BonusHubView: View {
 
     // MARK: Тост «+N»
 
+    /// Что сейчас показывает тост — для анимации появления/смены.
+    private var toastKey: String {
+        if gameOpen { return "" }
+        if let n = bonus.earnNotice { return "cap-\(n.id)" }
+        if sessionToast, bonus.sessionEarned > 0 { return "session-\(bonus.sessionEarned)" }
+        if let r = bonus.lastReward { return "reward-\(r)" }
+        return ""
+    }
+
+    /// Порядок важности: урезанное сервером начисление (честно сказать, что
+    /// упёрлись в лимит) → итог захода в игру → разовая награда (время в
+    /// приложении). Пока открыта игра, хаб молчит: начисления видны в ней.
     @ViewBuilder private var rewardToast: some View {
-        if let reward = bonus.lastReward {
-            Text("+\(reward) бонусов 🎉")
-                .font(.golos(15, .bold))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 18).padding(.vertical, 10)
-                .background(Color.sanOpen, in: Capsule())
-                .padding(.top, 8)
-                .transition(.move(edge: .top).combined(with: .opacity))
+        if gameOpen {
+            EmptyView()
+        } else if let notice = bonus.earnNotice {
+            toastPill(Text("Начислено \(notice.granted) из \(notice.requested) — дневной лимит бонусов"),
+                      color: Color(hex: 0xC26A00))
+                .task(id: notice.id) {
+                    AccessibilityNotification.Announcement(
+                        LF("Начислено %lld из %lld — дневной лимит бонусов", notice.granted, notice.requested)).post()
+                    try? await Task.sleep(nanoseconds: 2_600_000_000)
+                    bonus.clearEarnNotice()
+                }
+        } else if sessionToast, bonus.sessionEarned > 0 {
+            toastPill(Text("+\(bonus.sessionEarned) бонусов") + Text(verbatim: " 🎉"), color: .sanOpen)
                 .task {
+                    announceBonus(bonus.sessionEarned)
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    sessionToast = false
+                }
+        } else if let reward = bonus.lastReward {
+            toastPill(Text("+\(reward) бонусов") + Text(verbatim: " 🎉"), color: .sanOpen)
+                .task(id: reward) {
+                    announceBonus(reward)
                     try? await Task.sleep(nanoseconds: 1_800_000_000)
                     bonus.clearRewardFlag()
                 }
+        }
+    }
+
+    private func toastPill(_ text: Text, color: Color) -> some View {
+        text
+            .font(.golos(15, .bold))
+            .foregroundStyle(.white)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 18).padding(.vertical, 10)
+            .background(color, in: Capsule())
+            .padding(.horizontal, SanMetrics.screenPadding)
+            .padding(.top, 8)
+            .transition(.move(edge: .top).combined(with: .opacity))
+    }
+
+    /// Открыли игру — новый отсчёт в движке; закрыли — показываем итог
+    /// захода. Итог считает движок по ответам сервера (`sessionEarned`), а не
+    /// по разнице счётчиков: после «Начислено 3 из 10» тост «+10 🎉» был бы
+    /// неправдой, а смена суток посреди игры больше не теряет итог.
+    private func gameSession(open: Bool) {
+        bonus.clearRewardFlag()
+        if open {
+            bonus.beginGameSession()
+            sessionToast = false
+        } else {
+            sessionToast = bonus.sessionEarned > 0
         }
     }
 
